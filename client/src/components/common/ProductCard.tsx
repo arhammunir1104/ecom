@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { Product } from "@shared/schema";
 import { useCart } from "@/hooks/useCart";
 import { Button } from "@/components/ui/button";
@@ -40,11 +40,13 @@ const ProductCard = ({ product }: ProductCardProps) => {
     addToCart(id);
   };
   
+  const [, setLocation] = useLocation();
+  
   const handleQuickView = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    // Navigate to product page
-    window.location.href = `/product/${id}`;
+    // Navigate to product page using wouter
+    setLocation(`/product/${id}`);
   };
 
   return (

@@ -1,12 +1,13 @@
 import { useState } from "react";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Card,
+} from "@/components/ui/card";
 import {
   Carousel,
   CarouselContent,
   CarouselItem,
 } from "@/components/ui/carousel";
-import { Card } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
-import { ChevronLeft, ChevronRight, ZoomIn } from "lucide-react";
 
 interface ProductImagesProps {
   images: string[];
@@ -93,34 +94,57 @@ const ProductImages = ({ images }: ProductImagesProps) => {
             ))}
           </div>
 
-          <button
-            className="absolute left-2 top-1/2 -translate-y-1/2 bg-white/80 hover:bg-white rounded-full p-1 shadow-sm"
-            onClick={(e) => {
-              e.stopPropagation();
-              handlePrevImage();
-            }}
-          >
-            <ChevronLeft className="h-6 w-6" />
-          </button>
-          <button
-            className="absolute right-2 top-1/2 -translate-y-1/2 bg-white/80 hover:bg-white rounded-full p-1 shadow-sm"
-            onClick={(e) => {
-              e.stopPropagation();
-              handleNextImage();
-            }}
-          >
-            <ChevronRight className="h-6 w-6" />
-          </button>
-
-          <button
-            className="absolute bottom-2 right-2 bg-white/80 hover:bg-white rounded-full p-1 shadow-sm"
-            onClick={(e) => {
-              e.stopPropagation();
-              handleZoomToggle();
-            }}
-          >
-            <ZoomIn className="h-5 w-5" />
-          </button>
+          {/* Navigation buttons */}
+          {images.length > 1 && (
+            <>
+              <button
+                className="absolute left-2 top-1/2 -translate-y-1/2 bg-white/80 hover:bg-white p-2 rounded-full shadow"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handlePrevImage();
+                }}
+                aria-label="Previous image"
+              >
+                <svg 
+                  xmlns="http://www.w3.org/2000/svg" 
+                  width="24" 
+                  height="24" 
+                  viewBox="0 0 24 24" 
+                  fill="none" 
+                  stroke="currentColor" 
+                  strokeWidth="2" 
+                  strokeLinecap="round" 
+                  strokeLinejoin="round"
+                  className="h-5 w-5 text-gray-700"
+                >
+                  <path d="m15 18-6-6 6-6"/>
+                </svg>
+              </button>
+              <button
+                className="absolute right-2 top-1/2 -translate-y-1/2 bg-white/80 hover:bg-white p-2 rounded-full shadow"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleNextImage();
+                }}
+                aria-label="Next image"
+              >
+                <svg 
+                  xmlns="http://www.w3.org/2000/svg" 
+                  width="24" 
+                  height="24" 
+                  viewBox="0 0 24 24" 
+                  fill="none" 
+                  stroke="currentColor" 
+                  strokeWidth="2" 
+                  strokeLinecap="round" 
+                  strokeLinejoin="round"
+                  className="h-5 w-5 text-gray-700"
+                >
+                  <path d="m9 18 6-6-6-6"/>
+                </svg>
+              </button>
+            </>
+          )}
         </Card>
       </div>
 
