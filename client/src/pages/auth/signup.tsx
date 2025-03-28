@@ -63,28 +63,47 @@ export default function Signup() {
     setIsLoading(true);
     try {
       // Verify reCAPTCHA on server first
-      const verifyResponse = await apiRequest("POST", "/api/verify-recaptcha", {
-        token: recaptchaToken
-      });
-      const verifyData = await verifyResponse.json();
-      
-      if (!verifyData.success) {
+      try {
+        const verifyResponse = await apiRequest("POST", "/api/verify-recaptcha", {
+          token: recaptchaToken
+        });
+        const verifyData = await verifyResponse.json();
+        
+        if (!verifyData.success) {
+          toast({
+            title: "ReCAPTCHA Failed",
+            description: "ReCAPTCHA verification failed. Please try again.",
+            variant: "destructive",
+          });
+          recaptchaRef.current?.reset();
+          setRecaptchaToken(null);
+          setIsLoading(false);
+          return;
+        }
+      } catch (recaptchaError: any) {
+        console.error("ReCAPTCHA verification error:", recaptchaError);
         toast({
-          title: "ReCAPTCHA Failed",
-          description: "ReCAPTCHA verification failed. Please try again.",
+          title: "ReCAPTCHA Verification Error",
+          description: recaptchaError.message || "Could not verify reCAPTCHA. Please try again.",
           variant: "destructive",
         });
         recaptchaRef.current?.reset();
         setRecaptchaToken(null);
+        setIsLoading(false);
         return;
       }
       
       // Continue with signup
       await signup(data.username, data.email, data.password);
       navigate("/");
-    } catch (error) {
-      // Error is handled by the toast in the auth context
+    } catch (error: any) {
+      // Display a more user-friendly error message
       console.error("Signup error:", error);
+      toast({
+        title: "Signup Failed",
+        description: error.message || "Unable to create your account. Please try again later.",
+        variant: "destructive",
+      });
       recaptchaRef.current?.reset();
       setRecaptchaToken(null);
     } finally {
@@ -97,9 +116,16 @@ export default function Signup() {
     try {
       await loginWithGoogle();
       navigate("/");
-    } catch (error) {
-      // Error is handled by the toast in the auth context
+    } catch (error: any) {
+      // Additional error handling here as a fallback
       console.error("Google signup error:", error);
+      
+      // If the error wasn't already handled by the auth context
+      toast({
+        title: "Google Login Failed",
+        description: error.message || "Unable to sign in with Google. Make sure your domain is authorized in Firebase.",
+        variant: "destructive",
+      });
     } finally {
       setGoogleLoading(false);
     }
@@ -169,7 +195,7 @@ export default function Signup() {
                 <div className="flex justify-center">
                   <ReCAPTCHA
                     ref={recaptchaRef}
-                    sitekey={import.meta.env.RECAPTCHA_SITE_KEY || "6LeQEQMrAAAAAGFw1y116d7_SeYlsmm_cOn3keBG"}
+                    sitekey={import.meta.env.VITE_RECAPTCHA_SITE_KEY || "6LeQEQMrAAAAAGFw1y116d7_SeYlsmm_cOn3keBG"}
                     onChange={handleRecaptchaChange}
                   />
                 </div>
