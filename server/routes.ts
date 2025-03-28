@@ -1,13 +1,27 @@
-import type { Express, Request, Response } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { loginSchema, userSchema, insertProductSchema, insertCategorySchema, insertReviewSchema, insertOrderSchema, insertHeroBannerSchema, insertTestimonialSchema } from "@shared/schema";
+import { loginSchema, userSchema, twoFactorVerifySchema, insertProductSchema, insertCategorySchema, insertReviewSchema, insertOrderSchema, insertHeroBannerSchema, insertTestimonialSchema } from "@shared/schema";
 import { z } from "zod";
 import Stripe from "stripe";
+import { verifyRecaptcha } from "./utils/recaptcha";
+import { generateSecret, generateQRCode, verifyToken } from "./utils/twoFactor";
+
+// Augment the Express Request type to include the user property
+declare global {
+  namespace Express {
+    interface Request {
+      user?: {
+        id: number;
+        [key: string]: any;
+      };
+    }
+  }
+}
 
 // Initialize Stripe
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "sk_test_placeholder", {
-  apiVersion: "2023-10-16",
+  apiVersion: "2023-10-16" as any,
 });
 
 // Middleware for checking if user is authenticated
@@ -320,7 +334,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const validation = insertReviewSchema.safeParse({
         ...req.body,
-        userId: req.user.id
+        userId: req.user?.id
       });
       
       if (!validation.success) {
@@ -338,7 +352,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Order routes
   app.get("/api/orders", isAuthenticated, async (req, res) => {
     try {
-      const orders = await storage.getUserOrders(req.user.id);
+      const orders = await storage.getUserOrders(req.user?.id);
       res.json(orders);
     } catch (error) {
       console.error("Get user orders error:", error);
@@ -360,7 +374,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const validation = insertOrderSchema.safeParse({
         ...req.body,
-        userId: req.user.id
+        userId: req.user?.id
       });
       
       if (!validation.success) {
@@ -540,6 +554,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // User profile route
   app.get("/api/profile", isAuthenticated, async (req, res) => {
     try {
+      if (!req.user?.id) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
       const user = await storage.getUser(req.user.id);
       if (!user) {
         return res.status(404).json({ message: "User not found" });
@@ -556,6 +573,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.put("/api/profile", isAuthenticated, async (req, res) => {
     try {
+      if (!req.user?.id) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
       const validation = userSchema.partial().safeParse(req.body);
       if (!validation.success) {
         return res.status(400).json({ message: "Invalid data", errors: validation.error.flatten().fieldErrors });
@@ -627,6 +648,151 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Get admin dashboard data error:", error);
       res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  // reCAPTCHA verification route
+  app.post("/api/verify-recaptcha", async (req, res) => {
+    try {
+      const { token } = req.body;
+      if (!token) {
+        return res.status(400).json({ success: false, message: "reCAPTCHA token is required" });
+      }
+
+      const isValid = await verifyRecaptcha(token);
+      if (!isValid) {
+        return res.status(400).json({ success: false, message: "reCAPTCHA verification failed" });
+      }
+
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("reCAPTCHA verification error:", error);
+      res.status(500).json({ success: false, message: "Server error" });
+    }
+  });
+
+  // Two-factor authentication routes
+  app.post("/api/auth/2fa/setup", isAuthenticated, async (req, res) => {
+    try {
+      if (!req.user?.id) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      const user = await storage.getUser(req.user.id);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      // Generate a new secret for the user
+      const { secret, otpAuthUrl } = generateSecret(user.email);
+      
+      // Update the user's secret in the database
+      await storage.updateUserTwoFactorSecret(user.id, secret);
+      
+      // Generate a QR code for the user to scan
+      const qrCodeUrl = await generateQRCode(otpAuthUrl);
+      
+      res.json({ 
+        secret,
+        qrCode: qrCodeUrl
+      });
+    } catch (error: any) {
+      console.error("2FA setup error:", error);
+      res.status(500).json({ message: "Error setting up 2FA: " + error.message });
+    }
+  });
+
+  app.post("/api/auth/2fa/verify", isAuthenticated, async (req, res) => {
+    try {
+      if (!req.user?.id) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const validation = twoFactorVerifySchema.safeParse(req.body);
+      if (!validation.success) {
+        return res.status(400).json({ 
+          message: "Invalid token", 
+          errors: validation.error.flatten().fieldErrors 
+        });
+      }
+      
+      const { token } = validation.data;
+      const user = await storage.getUser(req.user.id);
+      
+      if (!user || !user.twoFactorSecret) {
+        return res.status(400).json({ message: "2FA not set up for this user" });
+      }
+      
+      const isValid = verifyToken(token, user.twoFactorSecret);
+      
+      if (!isValid) {
+        return res.status(401).json({ message: "Invalid verification code" });
+      }
+      
+      // Enable 2FA for the user
+      await storage.enableTwoFactor(user.id);
+      
+      res.json({ message: "Two-factor authentication enabled successfully" });
+    } catch (error: any) {
+      console.error("2FA verification error:", error);
+      res.status(500).json({ message: "Error verifying 2FA token: " + error.message });
+    }
+  });
+
+  app.post("/api/auth/2fa/disable", isAuthenticated, async (req, res) => {
+    try {
+      if (!req.user?.id) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      const user = await storage.getUser(req.user.id);
+      
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      if (!user.twoFactorEnabled) {
+        return res.status(400).json({ message: "Two-factor authentication is not enabled" });
+      }
+      
+      await storage.disableTwoFactor(user.id);
+      
+      res.json({ message: "Two-factor authentication disabled successfully" });
+    } catch (error: any) {
+      console.error("2FA disable error:", error);
+      res.status(500).json({ message: "Error disabling 2FA: " + error.message });
+    }
+  });
+
+  app.post("/api/auth/2fa/validate", async (req, res) => {
+    try {
+      const { email, token } = req.body;
+      
+      if (!email || !token) {
+        return res.status(400).json({ message: "Email and token are required" });
+      }
+      
+      const user = await storage.getUserByEmail(email);
+      
+      if (!user || !user.twoFactorEnabled || !user.twoFactorSecret) {
+        return res.status(401).json({ message: "Invalid authentication attempt" });
+      }
+      
+      const isValid = verifyToken(token, user.twoFactorSecret);
+      
+      if (!isValid) {
+        return res.status(401).json({ message: "Invalid verification code" });
+      }
+      
+      // In a real app, you might generate a JWT or session here
+      res.json({
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        fullName: user.fullName,
+        role: user.role
+      });
+    } catch (error: any) {
+      console.error("2FA validation error:", error);
+      res.status(500).json({ message: "Error validating 2FA token: " + error.message });
     }
   });
 

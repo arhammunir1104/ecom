@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useStripe, useElements, PaymentElement } from "@stripe/react-stripe-js";
+import { apiRequest } from "@/lib/queryClient";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -285,7 +286,7 @@ const PaymentForm = ({ address, amount, onPaymentSuccess }: PaymentFormProps) =>
     
     try {
       // Confirm payment
-      const { error } = await stripe.confirmPayment({
+      const { error, paymentIntent } = await stripe.confirmPayment({
         elements,
         confirmParams: {
           // Payment completion page
@@ -317,6 +318,42 @@ const PaymentForm = ({ address, amount, onPaymentSuccess }: PaymentFormProps) =>
           variant: "destructive",
         });
       } else {
+        // Create order in database
+        try {
+          // Get items from local cart
+          const cart = JSON.parse(localStorage.getItem('cart') || '{}');
+          const cartItems = Object.entries(cart).map(([productId, quantity]) => ({
+            productId: Number(productId),
+            quantity: Number(quantity)
+          }));
+          
+          // Create order
+          const orderData = {
+            items: cartItems,
+            totalAmount: amount,
+            status: "paid",
+            paymentStatus: "completed",
+            paymentIntent: paymentIntent?.id,
+            shippingAddress: {
+              fullName: address.fullName,
+              address: address.address,
+              city: address.city,
+              state: address.state,
+              postalCode: address.postalCode,
+              country: address.country,
+              phone: address.phone
+            }
+          };
+          
+          const response = await apiRequest("POST", "/api/orders", orderData);
+          
+          if (!response.ok) {
+            console.error('Failed to create order:', await response.text());
+          }
+        } catch (orderError) {
+          console.error('Error creating order:', orderError);
+        }
+        
         // Payment successful
         toast({
           title: "Payment Successful",

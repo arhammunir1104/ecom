@@ -16,6 +16,9 @@ export interface IStorage {
   createUser(user: InsertUser): Promise<User>;
   updateUser(id: number, userData: Partial<User>): Promise<User | undefined>;
   updateUserStripeInfo(id: number, stripeInfo: { customerId: string }): Promise<User | undefined>;
+  updateUserTwoFactorSecret(id: number, secret: string): Promise<User | undefined>;
+  enableTwoFactor(id: number): Promise<User | undefined>;
+  disableTwoFactor(id: number): Promise<User | undefined>;
   getAllUsers(): Promise<User[]>;
 
   // Category methods
@@ -271,7 +274,15 @@ export class MemStorage implements IStorage {
   async createUser(userData: InsertUser): Promise<User> {
     const id = this.currentUserId++;
     const createdAt = new Date();
-    const user: User = { ...userData, id, createdAt, wishlistItems: [] };
+    const user: User = { 
+      ...userData, 
+      id, 
+      createdAt, 
+      wishlistItems: [],
+      stripeCustomerId: null,
+      twoFactorSecret: null,
+      twoFactorEnabled: false
+    };
     this.users.set(id, user);
     return user;
   }
@@ -290,6 +301,33 @@ export class MemStorage implements IStorage {
     if (!user) return undefined;
     
     const updatedUser = { ...user, stripeCustomerId: stripeInfo.customerId };
+    this.users.set(id, updatedUser);
+    return updatedUser;
+  }
+
+  async updateUserTwoFactorSecret(id: number, secret: string): Promise<User | undefined> {
+    const user = await this.getUser(id);
+    if (!user) return undefined;
+    
+    const updatedUser = { ...user, twoFactorSecret: secret };
+    this.users.set(id, updatedUser);
+    return updatedUser;
+  }
+
+  async enableTwoFactor(id: number): Promise<User | undefined> {
+    const user = await this.getUser(id);
+    if (!user) return undefined;
+    
+    const updatedUser = { ...user, twoFactorEnabled: true };
+    this.users.set(id, updatedUser);
+    return updatedUser;
+  }
+
+  async disableTwoFactor(id: number): Promise<User | undefined> {
+    const user = await this.getUser(id);
+    if (!user) return undefined;
+    
+    const updatedUser = { ...user, twoFactorEnabled: false, twoFactorSecret: null };
     this.users.set(id, updatedUser);
     return updatedUser;
   }

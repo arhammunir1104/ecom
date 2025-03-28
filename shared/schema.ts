@@ -15,6 +15,8 @@ export const users = pgTable("users", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   wishlistItems: jsonb("wishlist_items").default([]),
   stripeCustomerId: text("stripe_customer_id"),
+  twoFactorSecret: text("two_factor_secret"),
+  twoFactorEnabled: boolean("two_factor_enabled").default(false),
 });
 
 // Categories Table
@@ -92,7 +94,14 @@ export const testimonials = pgTable("testimonials", {
 });
 
 // Insert Schemas
-export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true, wishlistItems: true, stripeCustomerId: true });
+export const insertUserSchema = createInsertSchema(users).omit({ 
+  id: true, 
+  createdAt: true, 
+  wishlistItems: true, 
+  stripeCustomerId: true,
+  twoFactorSecret: true,
+  twoFactorEnabled: true 
+});
 export const insertCategorySchema = createInsertSchema(categories).omit({ id: true });
 export const insertProductSchema = createInsertSchema(products).omit({ id: true, createdAt: true });
 export const insertReviewSchema = createInsertSchema(reviews).omit({ id: true, createdAt: true });
@@ -111,6 +120,10 @@ export const loginSchema = z.object({
   password: z.string().min(1, "Password is required"),
 });
 
+export const twoFactorVerifySchema = z.object({
+  token: z.string().min(6, "Token must be at least 6 digits"),
+});
+
 export const productSchema = insertProductSchema.extend({
   name: z.string().min(3, "Product name must be at least 3 characters"),
   price: z.number().positive("Price must be a positive number"),
@@ -122,6 +135,7 @@ export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type UserWithValidation = z.infer<typeof userSchema>;
 export type LoginCredentials = z.infer<typeof loginSchema>;
+export type TwoFactorVerification = z.infer<typeof twoFactorVerifySchema>;
 
 export type Category = typeof categories.$inferSelect;
 export type InsertCategory = z.infer<typeof insertCategorySchema>;
