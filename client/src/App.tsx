@@ -46,11 +46,14 @@ function Router() {
           <Shop />
         </MainLayout>
       )} />
-      <Route path="/product/:id" component={(params) => (
-        <MainLayout>
-          <ProductDetails id={Number(params.id)} />
-        </MainLayout>
-      )} />
+      <Route path="/product/:id" component={(params) => {
+        const id = Number(params.params.id);
+        return (
+          <MainLayout>
+            <ProductDetails id={id} />
+          </MainLayout>
+        );
+      }} />
       <Route path="/cart" component={() => (
         <MainLayout>
           <Cart />
@@ -61,21 +64,16 @@ function Router() {
           <Checkout />
         </MainLayout>
       )} />
-      <Route path="/categories/:id?" component={(params) => (
-        <MainLayout>
-          <Categories id={params.id ? Number(params.id) : undefined} />
-        </MainLayout>
-      )} />
-      <Route path="/login" component={() => (
-        <MainLayout>
-          <Login />
-        </MainLayout>
-      )} />
-      <Route path="/signup" component={() => (
-        <MainLayout>
-          <Signup />
-        </MainLayout>
-      )} />
+      <Route path="/categories/:id?" component={(params) => {
+        const id = params.params.id ? Number(params.params.id) : undefined;
+        return (
+          <MainLayout>
+            <Categories id={id} />
+          </MainLayout>
+        );
+      }} />
+      <Route path="/auth/login" component={Login} />
+      <Route path="/auth/signup" component={Signup} />
 
       {/* User Authenticated Routes */}
       <Route path="/profile" component={() => (

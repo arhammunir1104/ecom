@@ -10,7 +10,7 @@ const OTP_EXPIRY_MINUTES = 10;
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST || 'smtp.ethereal.email', // Default to ethereal for development
   port: parseInt(process.env.SMTP_PORT || '587'),
-  secure: process.env.SMTP_SECURE === 'true',
+  secure: false, // true for 465, false for other ports
   auth: {
     user: process.env.SMTP_USER || '',
     pass: process.env.SMTP_PASSWORD || '',
@@ -47,7 +47,7 @@ export const sendOTPEmail = async (email: string, otp: string): Promise<boolean>
     
     // Send email with OTP
     const info = await transporter.sendMail({
-      from: `"${storeName}" <${process.env.SMTP_FROM || 'noreply@feminineelegance.com'}>`,
+      from: `"${storeName}" <${process.env.SMTP_FROM_EMAIL || 'noreply@feminineelegance.com'}>`,
       to: email,
       subject: 'Your Verification Code',
       text: `Your verification code is: ${otp}. This code will expire in ${OTP_EXPIRY_MINUTES} minutes.`,

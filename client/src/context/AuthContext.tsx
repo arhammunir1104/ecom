@@ -10,6 +10,7 @@ interface AuthUser {
   email: string;
   fullName?: string;
   role: string;
+  twoFactorEnabled?: boolean;
 }
 
 interface AuthContextType {
@@ -17,10 +18,15 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isAdmin: boolean;
   isLoading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<{ requiresTwoFactor: boolean; email?: string }>;
   loginWithGoogle: () => Promise<void>;
   signup: (username: string, email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
+  verifyTwoFactor: (email: string, token: string) => Promise<void>;
+  setupTwoFactor: () => Promise<{ success: boolean }>;
+  verifyTwoFactorSetup: (token: string) => Promise<{ success: boolean }>;
+  disableTwoFactor: () => Promise<{ success: boolean }>;
+  resendTwoFactorCode: () => Promise<{ success: boolean }>;
 }
 
 export const AuthContext = createContext<AuthContextType>({
@@ -28,10 +34,15 @@ export const AuthContext = createContext<AuthContextType>({
   isAuthenticated: false,
   isAdmin: false,
   isLoading: true,
-  login: async () => {},
+  login: async () => ({ requiresTwoFactor: false }),
   loginWithGoogle: async () => {},
   signup: async () => {},
   logout: async () => {},
+  verifyTwoFactor: async () => {},
+  setupTwoFactor: async () => ({ success: false }),
+  verifyTwoFactorSetup: async () => ({ success: false }),
+  disableTwoFactor: async () => ({ success: false }),
+  resendTwoFactorCode: async () => ({ success: false }),
 });
 
 interface AuthProviderProps {
@@ -71,20 +82,36 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     return () => unsubscribe();
   }, []);
 
-  const login = async (email: string, password: string) => {
+  const login = async (email: string, password: string): Promise<{ requiresTwoFactor: boolean; email?: string }> => {
     try {
       const res = await apiRequest("POST", "/api/auth/login", { email, password });
-      const userData = await res.json();
-      setUser(userData);
-      localStorage.setItem('user', JSON.stringify(userData));
       
-      // Invalidate queries that depend on authentication
-      queryClient.invalidateQueries({ queryKey: ["/api/profile"] });
-      
-      toast({
-        title: "Login Successful",
-        description: `Welcome back, ${userData.username}!`,
-      });
+      // Check the response status to see if it's a 2FA redirect
+      if (res.status === 200) {
+        const userData = await res.json();
+        
+        // Check if the user has 2FA enabled
+        if (userData.twoFactorEnabled) {
+          // Return that 2FA is required and the email for verification
+          return { requiresTwoFactor: true, email: userData.email };
+        }
+        
+        // Normal login - no 2FA required
+        setUser(userData);
+        localStorage.setItem('user', JSON.stringify(userData));
+        
+        // Invalidate queries that depend on authentication
+        queryClient.invalidateQueries({ queryKey: ["/api/profile"] });
+        
+        toast({
+          title: "Login Successful",
+          description: `Welcome back, ${userData.username}!`,
+        });
+        
+        return { requiresTwoFactor: false };
+      } else {
+        throw new Error("Login failed");
+      }
     } catch (error: any) {
       console.error("Login error:", error);
       toast({
@@ -174,6 +201,152 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     }
   };
 
+  const verifyTwoFactor = async (email: string, token: string): Promise<void> => {
+    try {
+      const res = await apiRequest("POST", "/api/auth/2fa/validate", { email, token });
+      const userData = await res.json();
+      
+      setUser(userData);
+      localStorage.setItem('user', JSON.stringify(userData));
+      
+      // Invalidate queries that depend on authentication
+      queryClient.invalidateQueries({ queryKey: ["/api/profile"] });
+      
+      toast({
+        title: "Login Successful",
+        description: `Welcome back, ${userData.username}!`,
+      });
+    } catch (error: any) {
+      console.error("2FA verification error:", error);
+      toast({
+        title: "Verification Failed",
+        description: error.message || "Invalid verification code. Please try again.",
+        variant: "destructive",
+      });
+      throw error;
+    }
+  };
+  
+  const setupTwoFactor = async (): Promise<{ success: boolean }> => {
+    try {
+      if (!user) {
+        throw new Error("You must be logged in to setup two-factor authentication");
+      }
+      
+      const res = await apiRequest("POST", "/api/auth/2fa/setup", {});
+      const data = await res.json();
+      
+      if (data.emailSent) {
+        toast({
+          title: "Verification Code Sent",
+          description: "A verification code has been sent to your email. Enter it to enable two-factor authentication.",
+        });
+        return { success: true };
+      } else {
+        throw new Error(data.message || "Failed to send verification code");
+      }
+    } catch (error: any) {
+      console.error("2FA setup error:", error);
+      toast({
+        title: "2FA Setup Failed",
+        description: error.message || "Unable to setup two-factor authentication. Please try again.",
+        variant: "destructive",
+      });
+      return { success: false };
+    }
+  };
+  
+  const verifyTwoFactorSetup = async (token: string): Promise<{ success: boolean }> => {
+    try {
+      if (!user) {
+        throw new Error("You must be logged in to verify two-factor authentication");
+      }
+      
+      const res = await apiRequest("POST", "/api/auth/2fa/verify", { token });
+      const data = await res.json();
+      
+      // Update the local user data to reflect that 2FA is now enabled
+      const updatedUser = { ...user, twoFactorEnabled: true };
+      setUser(updatedUser);
+      localStorage.setItem('user', JSON.stringify(updatedUser));
+      
+      toast({
+        title: "2FA Enabled",
+        description: "Two-factor authentication has been successfully enabled for your account.",
+      });
+      
+      return { success: true };
+    } catch (error: any) {
+      console.error("2FA verification error:", error);
+      toast({
+        title: "Verification Failed",
+        description: error.message || "Invalid verification code. Please try again.",
+        variant: "destructive",
+      });
+      return { success: false };
+    }
+  };
+  
+  const disableTwoFactor = async (): Promise<{ success: boolean }> => {
+    try {
+      if (!user) {
+        throw new Error("You must be logged in to disable two-factor authentication");
+      }
+      
+      const res = await apiRequest("POST", "/api/auth/2fa/disable", {});
+      const data = await res.json();
+      
+      // Update the local user data to reflect that 2FA is now disabled
+      const updatedUser = { ...user, twoFactorEnabled: false };
+      setUser(updatedUser);
+      localStorage.setItem('user', JSON.stringify(updatedUser));
+      
+      toast({
+        title: "2FA Disabled",
+        description: "Two-factor authentication has been successfully disabled for your account.",
+      });
+      
+      return { success: true };
+    } catch (error: any) {
+      console.error("2FA disable error:", error);
+      toast({
+        title: "Disable Failed",
+        description: error.message || "Unable to disable two-factor authentication. Please try again.",
+        variant: "destructive",
+      });
+      return { success: false };
+    }
+  };
+  
+  const resendTwoFactorCode = async (): Promise<{ success: boolean }> => {
+    try {
+      if (!user) {
+        throw new Error("You must be logged in to resend verification code");
+      }
+      
+      const res = await apiRequest("POST", "/api/auth/2fa/resend", {});
+      const data = await res.json();
+      
+      if (data.emailSent) {
+        toast({
+          title: "Verification Code Resent",
+          description: "A new verification code has been sent to your email.",
+        });
+        return { success: true };
+      } else {
+        throw new Error(data.message || "Failed to resend verification code");
+      }
+    } catch (error: any) {
+      console.error("2FA resend error:", error);
+      toast({
+        title: "Resend Failed",
+        description: error.message || "Unable to resend verification code. Please try again.",
+        variant: "destructive",
+      });
+      return { success: false };
+    }
+  };
+
   const value = {
     user,
     isAuthenticated: !!user,
@@ -183,6 +356,11 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     loginWithGoogle,
     signup,
     logout,
+    verifyTwoFactor,
+    setupTwoFactor,
+    verifyTwoFactorSetup,
+    disableTwoFactor,
+    resendTwoFactorCode
   };
 
   return (

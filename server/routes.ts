@@ -66,13 +66,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ message: "Invalid credentials" });
       }
       
+      // Check if the user has two-factor authentication enabled
+      if (user.twoFactorEnabled) {
+        // If 2FA is enabled, send back limited information
+        // The frontend will prompt for a verification code
+        return res.json({
+          email: user.email,
+          twoFactorEnabled: true
+        });
+      }
+      
       // In a real app, we'd generate a JWT or session here
       return res.json({ 
         id: user.id,
         username: user.username,
         email: user.email,
         fullName: user.fullName,
-        role: user.role
+        role: user.role,
+        twoFactorEnabled: false
       });
     } catch (error) {
       console.error("Login error:", error);
@@ -102,7 +113,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         username: user.username,
         email: user.email,
         fullName: user.fullName,
-        role: user.role
+        role: user.role,
+        twoFactorEnabled: user.twoFactorEnabled || false
       });
     } catch (error) {
       console.error("Registration error:", error);
@@ -850,7 +862,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         username: user.username,
         email: user.email,
         fullName: user.fullName,
-        role: user.role
+        role: user.role,
+        twoFactorEnabled: true
       });
     } catch (error: any) {
       console.error("2FA validation error:", error);
