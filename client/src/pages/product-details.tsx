@@ -25,6 +25,8 @@ const ProductDetails = ({ id }: ProductDetailsProps) => {
   const { data: product, isLoading: isLoadingProduct, error } = useQuery<Product>({
     queryKey: [`/api/products/${id}`],
     enabled: isValidId,
+    retry: 1,
+    retryDelay: 1000
   });
 
   // Fetch product reviews

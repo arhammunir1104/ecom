@@ -15,8 +15,8 @@ import { apiRequest } from "@/lib/queryClient";
 import { Product } from "@shared/schema";
 import { Check, ChevronLeft, CreditCard, LockIcon, MapPin, Truck } from "lucide-react";
 
-// Initialize Stripe
-const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLIC_KEY || "pk_test_placeholder");
+// Initialize Stripe - using a default key if environment variable is not available
+const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLIC_KEY);
 
 const Checkout = () => {
   const [activeTab, setActiveTab] = useState("shipping");
