@@ -169,7 +169,7 @@ export default function Signup() {
                 <div className="flex justify-center">
                   <ReCAPTCHA
                     ref={recaptchaRef}
-                    sitekey={import.meta.env.VITE_RECAPTCHA_SITE_KEY}
+                    sitekey="6LeQEQMrAAAAAGFw1y116d7_SeYlsmm_cOn3keBG"
                     onChange={handleRecaptchaChange}
                   />
                 </div>
