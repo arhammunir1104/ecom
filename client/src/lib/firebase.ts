@@ -4,13 +4,21 @@ import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 
 // Firebase configuration
+const projectId = import.meta.env.VITE_FIREBASE_PROJECT_ID;
+
+// Check if we have the required Firebase environment variables
+if (!projectId || !import.meta.env.VITE_FIREBASE_API_KEY || !import.meta.env.VITE_FIREBASE_APP_ID) {
+  console.warn("Missing required Firebase configuration environment variables!");
+}
+
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyDummyKey-ThisIsAPlaceholder",
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "feminine-elegance.firebaseapp.com",
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "feminine-elegance",
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "feminine-elegance.appspot.com",
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "123456789012",
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:123456789012:web:0123456789abcdef012345"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  // Generate authDomain from projectId if not provided
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || `${projectId}.firebaseapp.com`,
+  projectId: projectId,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || `${projectId}.appspot.com`,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID
 };
 
 // Initialize Firebase
@@ -27,10 +35,25 @@ const googleProvider = new GoogleAuthProvider();
 // Sign in with Google
 export const signInWithGoogle = async () => {
   try {
+    // Configure additional scopes and parameters
+    googleProvider.setCustomParameters({
+      prompt: 'select_account',
+      // Add the current domain to make sure it matches Firebase console settings
+      login_hint: window.location.hostname
+    });
+    
     const result = await signInWithPopup(auth, googleProvider);
     return result.user;
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error signing in with Google: ", error);
+    
+    // Provide more helpful error messages
+    if (error.code === 'auth/configuration-not-found') {
+      console.error('Firebase Configuration Error: Make sure your domain is added to the authorized domains in Firebase console, and Google Sign-in method is enabled.');
+    } else if (error.code === 'auth/popup-blocked') {
+      console.error('Popup was blocked by the browser. Please enable popups for this site.');
+    }
+    
     throw error;
   }
 };
