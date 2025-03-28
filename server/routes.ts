@@ -5,7 +5,7 @@ import { loginSchema, userSchema, twoFactorVerifySchema, insertProductSchema, in
 import { z } from "zod";
 import Stripe from "stripe";
 import { verifyRecaptcha } from "./utils/recaptcha";
-import { generateSecret, generateQRCode, verifyToken } from "./utils/twoFactor";
+import { setupTwoFactor, verifyToken } from "./utils/twoFactor";
 
 // Augment the Express Request type to include the user property
 declare global {
@@ -352,7 +352,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Order routes
   app.get("/api/orders", isAuthenticated, async (req, res) => {
     try {
-      const orders = await storage.getUserOrders(req.user?.id);
+      if (!req.user?.id) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      const orders = await storage.getUserOrders(req.user.id);
       res.json(orders);
     } catch (error) {
       console.error("Get user orders error:", error);
@@ -682,18 +685,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "User not found" });
       }
 
-      // Generate a new secret for the user
-      const { secret, otpAuthUrl } = generateSecret(user.email);
+      // Generate a new OTP and send it via email
+      const result = await setupTwoFactor(user.email);
+      
+      if (!result.success) {
+        return res.status(500).json({ message: "Failed to send verification code to your email" });
+      }
       
       // Update the user's secret in the database
-      await storage.updateUserTwoFactorSecret(user.id, secret);
-      
-      // Generate a QR code for the user to scan
-      const qrCodeUrl = await generateQRCode(otpAuthUrl);
+      await storage.updateUserTwoFactorSecret(user.id, result.secret);
       
       res.json({ 
-        secret,
-        qrCode: qrCodeUrl
+        message: "Verification code sent to your email",
+        emailSent: true
       });
     } catch (error: any) {
       console.error("2FA setup error:", error);
@@ -759,6 +763,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       console.error("2FA disable error:", error);
       res.status(500).json({ message: "Error disabling 2FA: " + error.message });
+    }
+  });
+
+  app.post("/api/auth/2fa/resend", isAuthenticated, async (req, res) => {
+    try {
+      if (!req.user?.id) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      const user = await storage.getUser(req.user.id);
+      
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      // Generate a new OTP and send it via email
+      const result = await setupTwoFactor(user.email);
+      
+      if (!result.success) {
+        return res.status(500).json({ message: "Failed to send verification code to your email" });
+      }
+      
+      // Update the user's secret in the database
+      await storage.updateUserTwoFactorSecret(user.id, result.secret);
+      
+      res.json({ 
+        message: "Verification code resent to your email",
+        emailSent: true
+      });
+    } catch (error: any) {
+      console.error("2FA resend error:", error);
+      res.status(500).json({ message: "Error resending verification code: " + error.message });
     }
   });
 

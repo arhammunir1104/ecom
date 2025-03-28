@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Category, Product } from "@shared/schema";
@@ -5,7 +6,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import ProductCard from "@/components/common/ProductCard";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { AlertTriangle, ArrowLeft } from "lucide-react";
 
 interface CategoriesProps {
   id?: number;
@@ -14,19 +16,33 @@ interface CategoriesProps {
 const Categories = ({ id }: CategoriesProps) => {
   const [, setLocation] = useLocation();
   
+  // Validate category ID if provided
+  const isValidId = id === undefined || (!isNaN(id) && id > 0);
+  
   const { data: categories, isLoading: isLoadingCategories } = useQuery<Category[]>({
     queryKey: ["/api/categories"],
   });
   
-  const { data: activeCategory } = useQuery<Category>({
+  const { data: activeCategory, error: categoryError } = useQuery<Category>({
     queryKey: [`/api/categories/${id}`],
-    enabled: !!id,
+    enabled: !!id && isValidId,
   });
   
   const { data: products, isLoading: isLoadingProducts } = useQuery<Product[]>({
     queryKey: ["/api/products", { category: id }],
-    enabled: !!id,
+    enabled: !!id && isValidId,
   });
+  
+  // Redirect if category ID is invalid
+  useEffect(() => {
+    if (id !== undefined && !isValidId) {
+      const timeout = setTimeout(() => {
+        setLocation("/categories");
+      }, 2000);
+      
+      return () => clearTimeout(timeout);
+    }
+  }, [id, isValidId, setLocation]);
   
   // If category ID is provided, show products in that category
   if (id) {
@@ -41,14 +57,32 @@ const Categories = ({ id }: CategoriesProps) => {
           All Categories
         </Button>
         
-        <div className="mb-8">
-          <h1 className="text-3xl font-playfair font-bold mb-2">
-            {activeCategory ? activeCategory.name : "Loading..."}
-          </h1>
-          <p className="text-gray-600">{activeCategory?.description}</p>
-        </div>
+        {!isValidId ? (
+          <Alert variant="destructive" className="mb-6">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertTitle>Invalid Category</AlertTitle>
+            <AlertDescription>
+              The category ID is invalid. You will be redirected to the categories page.
+            </AlertDescription>
+          </Alert>
+        ) : categoryError ? (
+          <Alert variant="destructive" className="mb-6">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertTitle>Category Not Found</AlertTitle>
+            <AlertDescription>
+              Sorry, we couldn't find the category you're looking for.
+            </AlertDescription>
+          </Alert>
+        ) : (
+          <div className="mb-8">
+            <h1 className="text-3xl font-playfair font-bold mb-2">
+              {activeCategory ? activeCategory.name : "Loading..."}
+            </h1>
+            <p className="text-gray-600">{activeCategory?.description}</p>
+          </div>
+        )}
         
-        {isLoadingProducts ? (
+        {!isValidId || categoryError ? null : isLoadingProducts ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {Array.from({ length: 8 }).map((_, index) => (
               <div key={index} className="flex flex-col space-y-3">

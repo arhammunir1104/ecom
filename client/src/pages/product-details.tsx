@@ -8,6 +8,8 @@ import { Product } from "@shared/schema";
 import { Separator } from "@/components/ui/separator";
 import ProductCard from "@/components/common/ProductCard";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { AlertTriangle } from "lucide-react";
 
 interface ProductDetailsProps {
   id: number;
@@ -15,10 +17,14 @@ interface ProductDetailsProps {
 
 const ProductDetails = ({ id }: ProductDetailsProps) => {
   const [, setLocation] = useLocation();
-
-  // Fetch product details
+  
+  // Validate product ID
+  const isValidId = !isNaN(id) && id > 0;
+  
+  // Fetch product details only if ID is valid
   const { data: product, isLoading: isLoadingProduct, error } = useQuery<Product>({
     queryKey: [`/api/products/${id}`],
+    enabled: isValidId,
   });
 
   // Fetch product reviews
@@ -39,16 +45,37 @@ const ProductDetails = ({ id }: ProductDetailsProps) => {
     enabled: !!product?.categoryId,
   });
 
-  // Redirect if product not found
+  // Redirect if product not found or ID is invalid
   useEffect(() => {
-    if (error) {
-      setLocation("/shop");
+    if (!isValidId || error) {
+      // Redirect after a short delay to allow the user to see the error
+      const timeout = setTimeout(() => {
+        setLocation("/shop");
+      }, 2000);
+      
+      return () => clearTimeout(timeout);
     }
-  }, [error, setLocation]);
+  }, [error, setLocation, isValidId]);
 
   return (
     <div className="container mx-auto px-4 py-8">
-      {isLoadingProduct ? (
+      {!isValidId ? (
+        <Alert variant="destructive" className="mb-6">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>Invalid Product</AlertTitle>
+          <AlertDescription>
+            The product ID is invalid. You will be redirected to the shop page.
+          </AlertDescription>
+        </Alert>
+      ) : error ? (
+        <Alert variant="destructive" className="mb-6">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>Product Not Found</AlertTitle>
+          <AlertDescription>
+            Sorry, we couldn't find the product you're looking for. You will be redirected to the shop page.
+          </AlertDescription>
+        </Alert>
+      ) : isLoadingProduct ? (
         <div className="flex flex-col md:flex-row gap-8">
           <div className="md:w-1/2">
             <Skeleton className="h-[500px] w-full rounded-lg" />
