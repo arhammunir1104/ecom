@@ -29,7 +29,12 @@ const Categories = ({ id }: CategoriesProps) => {
   });
   
   const { data: products, isLoading: isLoadingProducts } = useQuery<Product[]>({
-    queryKey: ["/api/products", { category: id }],
+    queryKey: ["/api/products"],
+    queryFn: async () => {
+      const res = await fetch(`/api/products?category=${id}`);
+      if (!res.ok) throw new Error('Failed to fetch products');
+      return res.json();
+    },
     enabled: !!id && isValidId,
   });
   

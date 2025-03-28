@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
 import { useForm } from "react-hook-form";
@@ -17,7 +17,10 @@ import {
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { MailIcon, Lock, User, Loader2 } from "lucide-react";
+import { MailIcon, Lock, User, Loader2, AlertTriangle } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import ReCAPTCHA from "react-google-recaptcha";
+import { apiRequest } from "@/lib/queryClient";
 
 type SignupFormValues = z.infer<typeof userSchema>;
 
@@ -26,6 +29,10 @@ export default function Signup() {
   const { signup, loginWithGoogle } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [recaptchaToken, setRecaptchaToken] = useState<string | null>(null);
+  const [recaptchaError, setRecaptchaError] = useState(false);
+  const recaptchaRef = useRef<ReCAPTCHA>(null);
+  const { toast } = useToast();
 
   const form = useForm<SignupFormValues>({
     resolver: zodResolver(userSchema),
@@ -36,14 +43,50 @@ export default function Signup() {
     },
   });
 
+  const handleRecaptchaChange = (token: string | null) => {
+    setRecaptchaToken(token);
+    setRecaptchaError(false);
+  };
+
   async function onSubmit(data: SignupFormValues) {
+    // Validate reCAPTCHA first
+    if (!recaptchaToken) {
+      setRecaptchaError(true);
+      toast({
+        title: "ReCAPTCHA Required",
+        description: "Please complete the reCAPTCHA verification",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsLoading(true);
     try {
+      // Verify reCAPTCHA on server first
+      const verifyResponse = await apiRequest("POST", "/api/verify-recaptcha", {
+        token: recaptchaToken
+      });
+      const verifyData = await verifyResponse.json();
+      
+      if (!verifyData.success) {
+        toast({
+          title: "ReCAPTCHA Failed",
+          description: "ReCAPTCHA verification failed. Please try again.",
+          variant: "destructive",
+        });
+        recaptchaRef.current?.reset();
+        setRecaptchaToken(null);
+        return;
+      }
+      
+      // Continue with signup
       await signup(data.username, data.email, data.password);
       navigate("/");
     } catch (error) {
       // Error is handled by the toast in the auth context
       console.error("Signup error:", error);
+      recaptchaRef.current?.reset();
+      setRecaptchaToken(null);
     } finally {
       setIsLoading(false);
     }
@@ -122,6 +165,22 @@ export default function Signup() {
                   </FormItem>
                 )}
               />
+              <div className="my-4">
+                <div className="flex justify-center">
+                  <ReCAPTCHA
+                    ref={recaptchaRef}
+                    sitekey={import.meta.env.VITE_RECAPTCHA_SITE_KEY}
+                    onChange={handleRecaptchaChange}
+                  />
+                </div>
+                {recaptchaError && (
+                  <div className="flex items-center mt-2 text-destructive gap-1">
+                    <AlertTriangle className="h-4 w-4" />
+                    <p className="text-sm">Please complete the reCAPTCHA verification</p>
+                  </div>
+                )}
+              </div>
+              
               <p className="text-sm text-muted-foreground">
                 By creating an account, you agree to our{" "}
                 <a href="#" className="text-purple hover:underline">

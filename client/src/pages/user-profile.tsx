@@ -291,33 +291,28 @@ export default function UserProfile() {
                   )}
                 </TabsContent>
                 <TabsContent value="security">
-                  <div className="space-y-4">
+                  <div className="space-y-6">
                     <div>
-                      <h3 className="text-lg font-medium mb-2">Change Password</h3>
+                      <h3 className="text-lg font-medium mb-3">Change Password</h3>
                       <div className="space-y-4">
-                        <FormItem>
-                          <FormLabel>Current Password</FormLabel>
-                          <FormControl>
-                            <Input type="password" />
-                          </FormControl>
-                        </FormItem>
-                        <FormItem>
-                          <FormLabel>New Password</FormLabel>
-                          <FormControl>
-                            <Input type="password" />
-                          </FormControl>
-                        </FormItem>
-                        <FormItem>
-                          <FormLabel>Confirm New Password</FormLabel>
-                          <FormControl>
-                            <Input type="password" />
-                          </FormControl>
-                        </FormItem>
+                        <div className="grid gap-2">
+                          <label htmlFor="current-password" className="text-sm font-medium">Current Password</label>
+                          <Input id="current-password" type="password" />
+                        </div>
+                        <div className="grid gap-2">
+                          <label htmlFor="new-password" className="text-sm font-medium">New Password</label>
+                          <Input id="new-password" type="password" />
+                        </div>
+                        <div className="grid gap-2">
+                          <label htmlFor="confirm-password" className="text-sm font-medium">Confirm New Password</label>
+                          <Input id="confirm-password" type="password" />
+                        </div>
                         <Button className="bg-primary hover:bg-primary/90 text-white">
                           Update Password
                         </Button>
                       </div>
                     </div>
+                    
                     <div className="pt-6 border-t">
                       <h3 className="text-lg font-medium mb-2">Two-Factor Authentication</h3>
                       <p className="text-gray-500 mb-4">
