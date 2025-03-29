@@ -42,19 +42,8 @@ export default function Login() {
     try {
       setIsLoading(true);
       
-      // Verify reCAPTCHA token with backend
-      const recaptchaResponse = await apiRequest("POST", "/api/verify-recaptcha", {
-        token: recaptchaToken,
-      });
-      
-      const recaptchaData = await recaptchaResponse.json();
-      
-      if (!recaptchaData.success) {
-        throw new Error("reCAPTCHA verification failed. Please try again.");
-      }
-      
-      // Proceed with login
-      const result = await login(values.email, values.password);
+      // Proceed with login, passing the reCAPTCHA token
+      const result = await login(values.email, values.password, recaptchaToken);
       
       if (result.requiresTwoFactor && result.email) {
         setUserEmail(result.email);

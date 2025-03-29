@@ -18,7 +18,7 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isAdmin: boolean;
   isLoading: boolean;
-  login: (email: string, password: string) => Promise<{ requiresTwoFactor: boolean; email?: string }>;
+  login: (email: string, password: string, recaptchaToken?: string) => Promise<{ requiresTwoFactor: boolean; email?: string }>;
   loginWithGoogle: () => Promise<void>;
   signup: (username: string, email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
@@ -82,9 +82,9 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     return () => unsubscribe();
   }, []);
 
-  const login = async (email: string, password: string): Promise<{ requiresTwoFactor: boolean; email?: string }> => {
+  const login = async (email: string, password: string, recaptchaToken?: string): Promise<{ requiresTwoFactor: boolean; email?: string }> => {
     try {
-      const res = await apiRequest("POST", "/api/auth/login", { email, password });
+      const res = await apiRequest("POST", "/api/auth/login", { email, password, recaptchaToken });
       
       // Check the response status to see if it's a 2FA redirect
       if (res.status === 200) {
