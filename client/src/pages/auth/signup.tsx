@@ -61,16 +61,8 @@ export default function Signup() {
     try {
       setIsLoading(true);
       
-      // Verify reCAPTCHA token with backend
-      const recaptchaResponse = await apiRequest("POST", "/api/verify-recaptcha", {
-        token: recaptchaToken,
-      });
-      
-      const recaptchaData = await recaptchaResponse.json();
-      
-      if (!recaptchaData.success) {
-        throw new Error("reCAPTCHA verification failed. Please try again.");
-      }
+      // Skip the separate reCAPTCHA verification
+      // The backend will handle the reCAPTCHA verification directly
       
       // Submit registration with recaptcha token
       const registerResponse = await apiRequest("POST", "/api/auth/register", {

@@ -127,18 +127,25 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     try {
       const firebaseUser = await signInWithGoogle();
       
-      // In a real app, we would call our backend to create/verify the user
-      // and then return the user data
+      // Now call our backend to create/verify the user
+      const response = await apiRequest("POST", "/api/auth/google", {
+        displayName: firebaseUser.displayName,
+        email: firebaseUser.email,
+        uid: firebaseUser.uid
+      });
       
-      const userData = {
-        id: 1,
-        username: firebaseUser.displayName || "User",
-        email: firebaseUser.email || "",
-        role: "user"
-      };
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Failed to authenticate with Google");
+      }
+      
+      const userData = await response.json();
       
       setUser(userData);
       localStorage.setItem('user', JSON.stringify(userData));
+      
+      // Invalidate queries that depend on authentication
+      queryClient.invalidateQueries({ queryKey: ["/api/profile"] });
       
       toast({
         title: "Login Successful",

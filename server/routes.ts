@@ -236,6 +236,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: "Server error" });
     }
   });
+  
+  // Google authentication endpoint
+  app.post("/api/auth/google", async (req, res) => {
+    try {
+      const { displayName, email, uid } = req.body;
+      
+      if (!email) {
+        return res.status(400).json({ message: "Email is required" });
+      }
+      
+      // Check if user already exists
+      let user = await storage.getUserByEmail(email);
+      
+      if (!user) {
+        // Create a new user if they don't exist
+        const username = displayName?.split(' ')[0]?.toLowerCase() || email.split('@')[0];
+        user = await storage.createUser({
+          username: username,
+          email: email,
+          password: `google_${uid}`,  // Use a placeholder password as it won't be used
+          fullName: displayName,
+          role: "user"
+        });
+        
+        console.log(`Created new user from Google login: ${username} (${email})`);
+      } else {
+        console.log(`Existing user logged in with Google: ${user.username} (${email})`);
+      }
+      
+      // Don't send the password in the response
+      const { password, ...userWithoutPassword } = user;
+      
+      res.json(userWithoutPassword);
+    } catch (error) {
+      console.error("Google auth error:", error);
+      res.status(500).json({ message: "Error authenticating with Google" });
+    }
+  });
 
   // Category routes
   app.get("/api/categories", async (req, res) => {
