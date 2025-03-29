@@ -12,6 +12,8 @@ import { Separator } from "@/components/ui/separator";
 import { Eye, EyeOff, Mail, Lock } from "lucide-react";
 import TwoFactorVerification from "@/components/auth/TwoFactorVerification";
 import { Link } from "wouter";
+import ReCAPTCHA from "react-google-recaptcha";
+import { apiRequest } from "@/lib/queryClient";
 
 export default function Login() {
   const { login, loginWithGoogle } = useAuth();
@@ -20,6 +22,8 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [showTwoFactor, setShowTwoFactor] = useState(false);
   const [userEmail, setUserEmail] = useState("");
+  const [recaptchaToken, setRecaptchaToken] = useState<string | null>(null);
+  const [recaptchaError, setRecaptchaError] = useState<string | null>(null);
 
   const form = useForm({
     resolver: zodResolver(loginSchema),
@@ -30,8 +34,26 @@ export default function Login() {
   });
 
   const onSubmit = async (values: { email: string; password: string }) => {
+    if (!recaptchaToken) {
+      setRecaptchaError("Please verify you are not a robot.");
+      return;
+    }
+
     try {
       setIsLoading(true);
+      
+      // Verify reCAPTCHA token with backend
+      const recaptchaResponse = await apiRequest("POST", "/api/verify-recaptcha", {
+        token: recaptchaToken,
+      });
+      
+      const recaptchaData = await recaptchaResponse.json();
+      
+      if (!recaptchaData.success) {
+        throw new Error("reCAPTCHA verification failed. Please try again.");
+      }
+      
+      // Proceed with login
       const result = await login(values.email, values.password);
       
       if (result.requiresTwoFactor && result.email) {
@@ -79,6 +101,11 @@ export default function Login() {
 
   const handleTwoFactorCancel = () => {
     setShowTwoFactor(false);
+  };
+  
+  const handleRecaptchaChange = (token: string | null) => {
+    setRecaptchaToken(token);
+    setRecaptchaError(null);
   };
 
   if (showTwoFactor) {
@@ -160,6 +187,19 @@ export default function Login() {
                   </FormItem>
                 )}
               />
+              {/* reCAPTCHA verification */}
+              <div className="flex justify-center mb-2">
+                <ReCAPTCHA
+                  sitekey="6LfQ7K8nAAAAANwTrCK8K8OQcxHiDwgWMx2g8MPZ" // Test key for localhost and 127.0.0.1
+                  onChange={handleRecaptchaChange}
+                />
+              </div>
+              {recaptchaError && (
+                <p className="text-sm font-medium text-destructive text-center">
+                  {recaptchaError}
+                </p>
+              )}
+              
               <Button type="submit" className="w-full" disabled={isLoading}>
                 {isLoading ? "Logging in..." : "Log in"}
               </Button>

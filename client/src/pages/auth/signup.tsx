@@ -14,6 +14,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Separator } from "@/components/ui/separator";
 import { Eye, EyeOff, Mail, Lock, User } from "lucide-react";
 import { Link, useLocation } from "wouter";
+import EmailVerification from "@/components/auth/EmailVerification";
 
 // Extended schema for signup form which includes confirmation password
 const signupFormSchema = z.object({
@@ -37,6 +38,9 @@ export default function Signup() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [recaptchaToken, setRecaptchaToken] = useState<string | null>(null);
   const [recaptchaError, setRecaptchaError] = useState<string | null>(null);
+  const [showEmailVerification, setShowEmailVerification] = useState(false);
+  const [pendingUserData, setPendingUserData] = useState<SignupFormValues | null>(null);
+  const [verificationEmail, setVerificationEmail] = useState("");
   
   const form = useForm<SignupFormValues>({
     resolver: zodResolver(signupFormSchema),
@@ -49,18 +53,14 @@ export default function Signup() {
   });
 
   const onSubmit = async (values: SignupFormValues) => {
-    // Temporarily skip reCAPTCHA verification
-    /* 
     if (!recaptchaToken) {
       setRecaptchaError("Please verify you are not a robot.");
       return;
     }
-    */
 
     try {
       setIsLoading(true);
       
-      /* Temporarily skip reCAPTCHA verification
       // Verify reCAPTCHA token with backend
       const recaptchaResponse = await apiRequest("POST", "/api/verify-recaptcha", {
         token: recaptchaToken,
@@ -71,17 +71,33 @@ export default function Signup() {
       if (!recaptchaData.success) {
         throw new Error("reCAPTCHA verification failed. Please try again.");
       }
-      */
       
-      // Proceed with signup
-      await signup(values.username, values.email, values.password);
-      
-      toast({
-        title: "Account created successfully",
-        description: "Please log in with your new account.",
+      // Submit registration with recaptcha token
+      const registerResponse = await apiRequest("POST", "/api/auth/register", {
+        username: values.username,
+        email: values.email,
+        password: values.password,
+        recaptchaToken
       });
       
-      navigate("/login");
+      const registerData = await registerResponse.json();
+      
+      if (registerData.requiresEmailVerification) {
+        // Store the user data and show email verification screen
+        setPendingUserData(values);
+        setVerificationEmail(values.email);
+        setShowEmailVerification(true);
+      } else {
+        // No email verification required (fallback to old behavior)
+        await signup(values.username, values.email, values.password);
+        
+        toast({
+          title: "Account created successfully",
+          description: "Please log in with your new account.",
+        });
+        
+        navigate("/login");
+      }
     } catch (error: any) {
       toast({
         title: "Registration failed",
@@ -112,6 +128,31 @@ export default function Signup() {
     setRecaptchaToken(token);
     setRecaptchaError(null);
   };
+  
+  const handleEmailVerificationSuccess = async () => {
+    toast({
+      title: "Email verified successfully",
+      description: "Your account has been created. Please log in to continue.",
+    });
+    navigate("/login");
+  };
+  
+  const handleEmailVerificationCancel = () => {
+    setShowEmailVerification(false);
+    setPendingUserData(null);
+    setVerificationEmail("");
+  };
+
+  if (showEmailVerification) {
+    return (
+      <EmailVerification 
+        email={verificationEmail} 
+        onSuccess={handleEmailVerificationSuccess}
+        onCancel={handleEmailVerificationCancel}
+        userData={pendingUserData}
+      />
+    );
+  }
 
   return (
     <div className="container mx-auto flex items-center justify-center min-h-screen px-4">
@@ -240,15 +281,13 @@ export default function Signup() {
                 )}
               />
               
-              {/* Temporarily commenting out reCAPTCHA until VITE_RECAPTCHA_SITE_KEY is properly set */}
-              {/* 
+              {/* reCAPTCHA verification */}
               <div className="flex justify-center mb-2">
                 <ReCAPTCHA
-                  sitekey={import.meta.env.VITE_RECAPTCHA_SITE_KEY || ""}
+                  sitekey="6LfQ7K8nAAAAANwTrCK8K8OQcxHiDwgWMx2g8MPZ" // Test key for localhost and 127.0.0.1
                   onChange={handleRecaptchaChange}
                 />
               </div>
-              */}
               {recaptchaError && (
                 <p className="text-sm font-medium text-destructive text-center">
                   {recaptchaError}
