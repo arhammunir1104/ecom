@@ -693,26 +693,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // reCAPTCHA verification route
-  app.post("/api/verify-recaptcha", async (req, res) => {
-    try {
-      const { token } = req.body;
-      if (!token) {
-        return res.status(400).json({ success: false, message: "reCAPTCHA token is required" });
-      }
-
-      const isValid = await verifyRecaptcha(token);
-      if (!isValid) {
-        return res.status(400).json({ success: false, message: "reCAPTCHA verification failed" });
-      }
-
-      res.json({ success: true });
-    } catch (error: any) {
-      console.error("reCAPTCHA verification error:", error);
-      res.status(500).json({ success: false, message: "Server error" });
-    }
-  });
-
   // Two-factor authentication routes
   app.post("/api/auth/2fa/setup", isAuthenticated, async (req, res) => {
     try {
