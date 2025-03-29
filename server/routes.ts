@@ -180,7 +180,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Invalid verification code" });
       }
       
-      // Create user account (ideally with the userData saved from registration)
+      // Check if the user already exists before creating a new one
+      let existingUser = await storage.getUserByEmail(email);
+      
+      if (existingUser) {
+        return res.status(409).json({ 
+          message: "An account with this email already exists. Please log in instead." 
+        });
+      }
+      
+      // Create user account (with the userData saved from registration)
       const user = await storage.createUser({
         username: userData?.username || email.split('@')[0], // Use provided username or generate one
         email: email,

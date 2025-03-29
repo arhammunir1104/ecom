@@ -151,6 +151,12 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         title: "Login Successful",
         description: `Welcome, ${userData.username}!`,
       });
+      
+      // Redirect to home page after successful Google login
+      // Use setTimeout to ensure the toast is visible before redirect
+      setTimeout(() => {
+        window.location.href = '/';
+      }, 1000);
     } catch (error: any) {
       console.error("Google login error:", error);
       toast({

@@ -11,13 +11,14 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Separator } from "@/components/ui/separator";
 import { Eye, EyeOff, Mail, Lock } from "lucide-react";
 import TwoFactorVerification from "@/components/auth/TwoFactorVerification";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import ReCAPTCHA from "react-google-recaptcha";
 import { apiRequest } from "@/lib/queryClient";
 
 export default function Login() {
   const { login, loginWithGoogle } = useAuth();
   const { toast } = useToast();
+  const [_, setLocation] = useLocation();
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showTwoFactor, setShowTwoFactor] = useState(false);
@@ -53,6 +54,8 @@ export default function Login() {
           title: "Login successful",
           description: "Welcome back!",
         });
+        // Redirect to home page after successful login
+        setLocation("/");
       }
     } catch (error: any) {
       // Reset the reCAPTCHA so the user can try again
@@ -92,6 +95,8 @@ export default function Login() {
       title: "Login successful",
       description: "Welcome back!",
     });
+    // Redirect to home page after successful 2FA verification
+    setLocation("/");
   };
 
   const handleTwoFactorCancel = () => {
