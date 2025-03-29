@@ -33,9 +33,27 @@ export async function apiRequest(
   url: string,
   data?: unknown | undefined,
 ): Promise<Response> {
+  // Add user ID to headers for authenticated requests
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json"
+  };
+  
+  // Get the logged-in user from localStorage to add user ID to header
+  const storedUser = localStorage.getItem('user');
+  if (storedUser) {
+    try {
+      const userData = JSON.parse(storedUser);
+      if (userData && userData.id) {
+        headers["X-User-ID"] = userData.id.toString();
+      }
+    } catch (e) {
+      console.error("Error parsing user data from localStorage:", e);
+    }
+  }
+  
   const res = await fetch(url, {
     method,
-    headers: data ? { "Content-Type": "application/json" } : {},
+    headers,
     body: data ? JSON.stringify(data) : undefined,
     credentials: "include",
   });
@@ -50,8 +68,25 @@ export const getQueryFn: <T>(options: {
 }) => QueryFunction<T> =
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
+    // Add user ID to headers for authenticated requests
+    const headers: Record<string, string> = {};
+    
+    // Get the logged-in user from localStorage to add user ID to header
+    const storedUser = localStorage.getItem('user');
+    if (storedUser) {
+      try {
+        const userData = JSON.parse(storedUser);
+        if (userData && userData.id) {
+          headers["X-User-ID"] = userData.id.toString();
+        }
+      } catch (e) {
+        console.error("Error parsing user data from localStorage:", e);
+      }
+    }
+    
     const res = await fetch(queryKey[0] as string, {
       credentials: "include",
+      headers,
     });
 
     if (unauthorizedBehavior === "returnNull" && res.status === 401) {

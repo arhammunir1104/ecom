@@ -23,7 +23,7 @@ interface AuthContextType {
   signup: (username: string, email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   verifyTwoFactor: (email: string, token: string) => Promise<void>;
-  setupTwoFactor: () => Promise<{ success: boolean }>;
+  setupTwoFactor: () => Promise<{ success: boolean; otpAuthUrl?: string }>;
   verifyTwoFactorSetup: (token: string) => Promise<{ success: boolean }>;
   disableTwoFactor: () => Promise<{ success: boolean }>;
   resendTwoFactorCode: () => Promise<{ success: boolean }>;
@@ -240,7 +240,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     }
   };
   
-  const setupTwoFactor = async (): Promise<{ success: boolean }> => {
+  const setupTwoFactor = async (): Promise<{ success: boolean; otpAuthUrl?: string }> => {
     try {
       if (!user) {
         throw new Error("You must be logged in to setup two-factor authentication");
@@ -254,7 +254,10 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           title: "Verification Code Sent",
           description: "A verification code has been sent to your email. Enter it to enable two-factor authentication.",
         });
-        return { success: true };
+        return { 
+          success: true,
+          otpAuthUrl: data.otpAuthUrl || null
+        };
       } else {
         throw new Error(data.message || "Failed to send verification code");
       }

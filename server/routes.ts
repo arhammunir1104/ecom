@@ -26,12 +26,25 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "sk_test_placeholder"
 
 // Middleware for checking if user is authenticated
 const isAuthenticated = (req: Request, res: Response, next: Function) => {
-  // In a real application, this would check the session or token
-  // For now, we'll use a simple user ID in the request headers
-  const userId = req.headers["user-id"];
-  if (!userId) {
-    return res.status(401).json({ message: "Unauthorized" });
+  // Check for the user ID in various places
+  
+  // 1. Check headers first (for API calls that set it directly)
+  let userId = req.headers["user-id"];
+  
+  // 2. Check for the X-User-ID header that our frontend can set
+  if (!userId && req.headers["x-user-id"]) {
+    userId = req.headers["x-user-id"];
   }
+  
+  // 3. Check if a user object was sent in the request body (for client-side auth)
+  if (!userId && req.body && req.body.userId) {
+    userId = req.body.userId;
+  }
+  
+  if (!userId) {
+    return res.status(401).json({ message: "Unauthorized - No user ID found" });
+  }
+  
   req.user = { id: Number(userId) };
   next();
 };
@@ -876,9 +889,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Update the user's secret in the database
       await storage.updateUserTwoFactorSecret(user.id, result.secret);
       
+      // Extract the raw secret for the QR code
+      const secretData = JSON.parse(result.secret);
+      const otp = secretData.otp;
+      
+      // Create the otpauth URL for QR code generation
+      // This follows the standard format used by authenticator apps
+      const otpAuthUrl = `otpauth://totp/${encodeURIComponent(user.email)}?secret=${otp}&issuer=FeminineElegance`;
+      
       res.json({ 
         message: "Verification code sent to your email",
-        emailSent: true
+        emailSent: true,
+        otpAuthUrl
       });
     } catch (error: any) {
       console.error("2FA setup error:", error);

@@ -162,11 +162,11 @@ export default function UserProfile() {
       if (result.success) {
         // Generate QR code after dialog is shown
         setTimeout(() => {
-          if (qrCodeRef.current) {
+          if (qrCodeRef.current && result.otpAuthUrl) {
             qrCodeRef.current.innerHTML = '';
             QRCode.toCanvas(
               qrCodeRef.current,
-              `otpauth://totp/${user?.email}?secret=EXAMPLESECRETKEY&issuer=FeminineElegance`,
+              result.otpAuthUrl,  // Use the server-provided OTP auth URL
               {
                 width: 200,
                 color: {
