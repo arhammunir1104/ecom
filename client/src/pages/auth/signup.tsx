@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -91,6 +91,12 @@ export default function Signup() {
         navigate("/login");
       }
     } catch (error: any) {
+      // Reset the reCAPTCHA so the user can try again
+      if (recaptchaRef.current) {
+        recaptchaRef.current.reset();
+        setRecaptchaToken(null);
+      }
+
       toast({
         title: "Registration failed",
         description: error.message || "An unexpected error occurred",
@@ -120,6 +126,9 @@ export default function Signup() {
     setRecaptchaToken(token);
     setRecaptchaError(null);
   };
+  
+  // Reference to reCAPTCHA component
+  const recaptchaRef = useRef<ReCAPTCHA>(null);
   
   const handleEmailVerificationSuccess = async () => {
     toast({
@@ -276,6 +285,7 @@ export default function Signup() {
               {/* reCAPTCHA verification */}
               <div className="flex justify-center mb-2">
                 <ReCAPTCHA
+                  ref={recaptchaRef}
                   sitekey={import.meta.env.VITE_RECAPTCHA_SITE_KEY as string}
                   onChange={handleRecaptchaChange}
                 />

@@ -21,10 +21,19 @@ export const verifyRecaptcha = async (token: string): Promise<boolean> => {
       }
     );
 
-    // Check if the verification was successful
+    // Log the response details for debugging
+    if (!response.data.success) {
+      console.error('reCAPTCHA verification failed. Response:', response.data);
+      // Check for error codes
+      if (response.data['error-codes']) {
+        console.error('Error codes:', response.data['error-codes']);
+      }
+    }
+    
+    // Return the success status
     return response.data.success;
   } catch (error) {
-    console.error('reCAPTCHA verification failed:', error);
+    console.error('reCAPTCHA verification request failed:', error);
     return false;
   }
 };
