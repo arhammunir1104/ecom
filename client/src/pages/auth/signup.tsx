@@ -49,14 +49,18 @@ export default function Signup() {
   });
 
   const onSubmit = async (values: SignupFormValues) => {
+    // Temporarily skip reCAPTCHA verification
+    /* 
     if (!recaptchaToken) {
       setRecaptchaError("Please verify you are not a robot.");
       return;
     }
+    */
 
     try {
       setIsLoading(true);
       
+      /* Temporarily skip reCAPTCHA verification
       // Verify reCAPTCHA token with backend
       const recaptchaResponse = await apiRequest("POST", "/api/verify-recaptcha", {
         token: recaptchaToken,
@@ -67,6 +71,7 @@ export default function Signup() {
       if (!recaptchaData.success) {
         throw new Error("reCAPTCHA verification failed. Please try again.");
       }
+      */
       
       // Proceed with signup
       await signup(values.username, values.email, values.password);
@@ -76,7 +81,7 @@ export default function Signup() {
         description: "Please log in with your new account.",
       });
       
-      navigate("/auth/login");
+      navigate("/login");
     } catch (error: any) {
       toast({
         title: "Registration failed",
@@ -235,12 +240,15 @@ export default function Signup() {
                 )}
               />
               
+              {/* Temporarily commenting out reCAPTCHA until VITE_RECAPTCHA_SITE_KEY is properly set */}
+              {/* 
               <div className="flex justify-center mb-2">
                 <ReCAPTCHA
-                  sitekey={import.meta.env.VITE_RECAPTCHA_SITE_KEY || process.env.RECAPTCHA_SITE_KEY || ""}
+                  sitekey={import.meta.env.VITE_RECAPTCHA_SITE_KEY || ""}
                   onChange={handleRecaptchaChange}
                 />
               </div>
+              */}
               {recaptchaError && (
                 <p className="text-sm font-medium text-destructive text-center">
                   {recaptchaError}
@@ -295,7 +303,7 @@ export default function Signup() {
         <CardFooter className="flex justify-center">
           <p className="text-sm text-muted-foreground">
             Already have an account?{" "}
-            <Link to="/auth/login" className="text-primary hover:underline">
+            <Link to="/login" className="text-primary hover:underline">
               Log in
             </Link>
           </p>

@@ -74,6 +74,8 @@ function Router() {
       }} />
       <Route path="/auth/login" component={Login} />
       <Route path="/auth/signup" component={Signup} />
+      <Route path="/login" component={Login} />
+      <Route path="/signup" component={Signup} />
 
       {/* User Authenticated Routes */}
       <Route path="/profile" component={() => (
