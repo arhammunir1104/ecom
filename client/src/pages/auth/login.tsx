@@ -190,7 +190,7 @@ export default function Login() {
               {/* reCAPTCHA verification */}
               <div className="flex justify-center mb-2">
                 <ReCAPTCHA
-                  sitekey="6LfQ7K8nAAAAANwTrCK8K8OQcxHiDwgWMx2g8MPZ" // Test key for localhost and 127.0.0.1
+                  sitekey={import.meta.env.VITE_RECAPTCHA_SITE_KEY as string}
                   onChange={handleRecaptchaChange}
                 />
               </div>
