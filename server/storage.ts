@@ -281,10 +281,18 @@ export class MemStorage implements IStorage {
   async createUser(userData: InsertUser): Promise<User> {
     const id = this.currentUserId++;
     const createdAt = new Date();
+    
+    // Define default values for required fields if not provided
     const user: User = { 
-      ...userData, 
       id, 
-      createdAt, 
+      username: userData.username,
+      email: userData.email,
+      password: userData.password,
+      fullName: userData.fullName || null,
+      role: userData.role || "user", // Default to user role if not specified
+      address: userData.address || null,
+      phone: userData.phone || null,
+      createdAt,
       wishlistItems: [],
       stripeCustomerId: null,
       twoFactorSecret: null,
@@ -292,6 +300,7 @@ export class MemStorage implements IStorage {
       firebaseUid: userData.firebaseUid || null,
       photoURL: userData.photoURL || null
     };
+    
     this.users.set(id, user);
     return user;
   }
@@ -358,7 +367,13 @@ export class MemStorage implements IStorage {
 
   async createCategory(categoryData: InsertCategory): Promise<Category> {
     const id = this.currentCategoryId++;
-    const category: Category = { ...categoryData, id };
+    const category: Category = { 
+      id,
+      name: categoryData.name,
+      image: categoryData.image || null,
+      description: categoryData.description || null,
+      featured: categoryData.featured || null
+    };
     this.categories.set(id, category);
     return category;
   }
@@ -394,7 +409,21 @@ export class MemStorage implements IStorage {
   async createProduct(productData: InsertProduct): Promise<Product> {
     const id = this.currentProductId++;
     const createdAt = new Date();
-    const product: Product = { ...productData, id, createdAt };
+    const product: Product = { 
+      id,
+      name: productData.name,
+      description: productData.description,
+      price: productData.price,
+      createdAt,
+      categoryId: productData.categoryId || null,
+      discountPrice: productData.discountPrice || null,
+      featured: productData.featured || null,
+      trending: productData.trending || null,
+      images: productData.images || [],
+      sizes: productData.sizes || [],
+      colors: productData.colors || [],
+      stock: productData.stock || 0
+    };
     this.products.set(id, product);
     return product;
   }
@@ -451,7 +480,15 @@ export class MemStorage implements IStorage {
   async createReview(reviewData: InsertReview): Promise<Review> {
     const id = this.currentReviewId++;
     const createdAt = new Date();
-    const review: Review = { ...reviewData, id, createdAt };
+    const review: Review = {
+      id,
+      createdAt,
+      productId: reviewData.productId,
+      userId: reviewData.userId,
+      rating: reviewData.rating,
+      comment: reviewData.comment || null,
+      images: reviewData.images || []
+    };
     this.reviews.set(id, review);
     return review;
   }
@@ -476,7 +513,18 @@ export class MemStorage implements IStorage {
   async createOrder(orderData: InsertOrder): Promise<Order> {
     const id = this.currentOrderId++;
     const createdAt = new Date();
-    const order: Order = { ...orderData, id, createdAt };
+    const order: Order = {
+      id,
+      createdAt,
+      status: orderData.status || 'pending',
+      userId: orderData.userId || null,
+      items: orderData.items || [],
+      totalAmount: orderData.totalAmount,
+      shippingAddress: orderData.shippingAddress || {},
+      paymentStatus: orderData.paymentStatus || 'pending',
+      paymentIntent: orderData.paymentIntent || null,
+      trackingNumber: orderData.trackingNumber || null
+    };
     this.orders.set(id, order);
     return order;
   }
@@ -510,7 +558,17 @@ export class MemStorage implements IStorage {
 
   async createHeroBanner(bannerData: InsertHeroBanner): Promise<HeroBanner> {
     const id = this.currentHeroBannerId++;
-    const banner: HeroBanner = { ...bannerData, id };
+    const banner: HeroBanner = {
+      id,
+      title: bannerData.title,
+      image: bannerData.image,
+      subtitle: bannerData.subtitle || null,
+      buttonText: bannerData.buttonText || null,
+      buttonLink: bannerData.buttonLink || null,
+      active: bannerData.active || null,
+      startDate: bannerData.startDate || null,
+      endDate: bannerData.endDate || null
+    };
     this.heroBanners.set(id, banner);
     return banner;
   }
@@ -549,7 +607,14 @@ export class MemStorage implements IStorage {
 
   async createTestimonial(testimonialData: InsertTestimonial): Promise<Testimonial> {
     const id = this.currentTestimonialId++;
-    const testimonial: Testimonial = { ...testimonialData, id };
+    const testimonial: Testimonial = {
+      id,
+      name: testimonialData.name,
+      comment: testimonialData.comment,
+      rating: testimonialData.rating,
+      image: testimonialData.image || null,
+      featured: testimonialData.featured || null
+    };
     this.testimonials.set(id, testimonial);
     return testimonial;
   }

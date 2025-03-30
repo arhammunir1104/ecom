@@ -78,6 +78,31 @@ const isAuthenticated = (req: Request, res: Response, next: Function) => {
           return;
         } else {
           console.log("No user found with Firebase UID:", firebaseUid);
+          
+          // If the user is in Firebase but not in our database, try to register them automatically
+          if (req.body && req.body.email) {
+            try {
+              console.log("Attempting to auto-register Firebase user in database:", firebaseUid);
+              
+              // Create a new user entry with the Firebase UID
+              const newUser = await storage.createUser({
+                username: req.body.username || req.body.email.split('@')[0],
+                email: req.body.email,
+                password: 'firebase-auth', // Placeholder since Firebase handles auth
+                fullName: req.body.fullName || req.body.username || null,
+                role: 'user',
+                firebaseUid: firebaseUid.toString(),
+                photoURL: req.body.photoURL || null
+              });
+              
+              console.log("Auto-registered Firebase user in database:", newUser.id);
+              req.user = { id: newUser.id, firebaseUid: firebaseUid.toString() };
+              next();
+              return;
+            } catch (regError) {
+              console.error("Error auto-registering Firebase user:", regError);
+            }
+          }
         }
       } catch (error) {
         console.error("Error finding user by Firebase UID:", error);
@@ -1118,19 +1143,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Two-factor authentication routes
-  app.post("/api/auth/2fa/setup", isAuthenticated, async (req, res) => {
+  app.post("/api/auth/2fa/setup", async (req, res) => {
     try {
       // Log headers for debugging
       console.log("2FA setup request headers:", req.headers);
       console.log("2FA setup request body:", req.body);
       
-      if (!req.user?.id) {
-        return res.status(401).json({ message: "Unauthorized - No user ID" });
+      // Extract the Firebase UID from the header or body
+      const firebaseUid = req.headers["firebase-uid"]?.toString() || req.body?.uid;
+      const email = req.body?.email;
+      
+      if (!firebaseUid || !email) {
+        return res.status(400).json({ message: "Firebase UID and email are required" });
       }
       
-      const user = await storage.getUser(req.user.id);
+      // Try to find the user by Firebase UID
+      let user = await storage.getUserByFirebaseId(firebaseUid);
+      
+      // If no user is found, but we have email, try to create one
+      if (!user && email) {
+        console.log(`Creating new user for Firebase UID ${firebaseUid} with email ${email}`);
+        
+        try {
+          // Create a new user with the Firebase UID
+          user = await storage.createUser({
+            username: email.split('@')[0],
+            email: email,
+            password: 'firebase-auth', // Placeholder since Firebase handles auth
+            fullName: req.body.displayName || null,
+            role: 'user',
+            firebaseUid: firebaseUid,
+            photoURL: req.body.photoURL || null
+          });
+          
+          console.log(`Created new user with ID ${user.id} for Firebase UID ${firebaseUid}`);
+        } catch (createError) {
+          console.error("Error creating user:", createError);
+          return res.status(500).json({ message: "Error creating user" });
+        }
+      }
+      
       if (!user) {
-        return res.status(404).json({ message: "User not found with ID: " + req.user.id });
+        return res.status(404).json({ message: "User not found with Firebase UID and no userId provided" });
       }
 
       // Generate a new OTP and send it via email
@@ -1149,7 +1203,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Create the otpauth URL for QR code generation
       // This follows the standard format used by authenticator apps
-      const otpAuthUrl = `otpauth://totp/${encodeURIComponent(user.email)}?secret=${otp}&issuer=FeminineElegance`;
+      const otpAuthUrl = `otpauth://totp/${encodeURIComponent(user.email)}?secret=${otp}&issuer=SoftGirlFashion`;
       
       res.json({ 
         message: "Verification code sent to your email",
@@ -1162,14 +1216,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/auth/2fa/verify", isAuthenticated, async (req, res) => {
+  app.post("/api/auth/2fa/verify", async (req, res) => {
     try {
       // Log headers for debugging
       console.log("2FA verify request headers:", req.headers);
       console.log("2FA verify request body:", req.body);
+
+      // Extract the Firebase UID from the header or body
+      const firebaseUid = req.headers["firebase-uid"]?.toString() || req.body?.uid;
+      const email = req.body?.email;
       
-      if (!req.user?.id) {
-        return res.status(401).json({ message: "Unauthorized - No user ID" });
+      // Try to find the user by Firebase UID
+      let user;
+      
+      if (firebaseUid) {
+        user = await storage.getUserByFirebaseId(firebaseUid);
+      } else if (req.user?.id) {
+        user = await storage.getUser(req.user.id);
+      } else if (email) {
+        user = await storage.getUserByEmail(email);
+      }
+      
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
       }
 
       const validation = twoFactorVerifySchema.safeParse(req.body);
@@ -1181,9 +1250,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       const { token } = validation.data;
-      const user = await storage.getUser(req.user.id);
       
-      if (!user || !user.twoFactorSecret) {
+      if (!user.twoFactorSecret) {
         return res.status(400).json({ message: "2FA not set up for this user" });
       }
       
@@ -1196,23 +1264,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Enable 2FA for the user
       await storage.enableTwoFactor(user.id);
       
-      res.json({ message: "Two-factor authentication enabled successfully" });
+      res.json({ 
+        message: "Two-factor authentication enabled successfully",
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        fullName: user.fullName,
+        role: user.role,
+        twoFactorEnabled: true
+      });
     } catch (error: any) {
       console.error("2FA verification error:", error);
       res.status(500).json({ message: "Error verifying 2FA token: " + error.message });
     }
   });
 
-  app.post("/api/auth/2fa/disable", isAuthenticated, async (req, res) => {
+  app.post("/api/auth/2fa/disable", async (req, res) => {
     try {
       // Log headers for debugging
       console.log("2FA disable request headers:", req.headers);
       console.log("2FA disable request body:", req.body);
       
-      if (!req.user?.id) {
-        return res.status(401).json({ message: "Unauthorized - No user ID" });
+      // Extract the Firebase UID from the header or body
+      const firebaseUid = req.headers["firebase-uid"]?.toString() || req.body?.uid;
+      const email = req.body?.email;
+      
+      // Try to find the user by Firebase UID
+      let user;
+      
+      if (firebaseUid) {
+        user = await storage.getUserByFirebaseId(firebaseUid);
+      } else if (req.user?.id) {
+        user = await storage.getUser(req.user.id);
+      } else if (email) {
+        user = await storage.getUserByEmail(email);
       }
-      const user = await storage.getUser(req.user.id);
       
       if (!user) {
         return res.status(404).json({ message: "User not found" });
@@ -1224,23 +1310,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       await storage.disableTwoFactor(user.id);
       
-      res.json({ message: "Two-factor authentication disabled successfully" });
+      res.json({ 
+        message: "Two-factor authentication disabled successfully",
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        fullName: user.fullName,
+        role: user.role,
+        twoFactorEnabled: false
+      });
     } catch (error: any) {
       console.error("2FA disable error:", error);
       res.status(500).json({ message: "Error disabling 2FA: " + error.message });
     }
   });
 
-  app.post("/api/auth/2fa/resend", isAuthenticated, async (req, res) => {
+  app.post("/api/auth/2fa/resend", async (req, res) => {
     try {
       // Log headers for debugging
       console.log("2FA resend request headers:", req.headers);
       console.log("2FA resend request body:", req.body);
       
-      if (!req.user?.id) {
-        return res.status(401).json({ message: "Unauthorized - No user ID" });
+      // Extract the Firebase UID from the header or body
+      const firebaseUid = req.headers["firebase-uid"]?.toString() || req.body?.uid;
+      const email = req.body?.email;
+      
+      // Try to find the user by Firebase UID
+      let user;
+      
+      if (firebaseUid) {
+        user = await storage.getUserByFirebaseId(firebaseUid);
+      } else if (req.user?.id) {
+        user = await storage.getUser(req.user.id);
+      } else if (email) {
+        user = await storage.getUserByEmail(email);
       }
-      const user = await storage.getUser(req.user.id);
       
       if (!user) {
         return res.status(404).json({ message: "User not found" });
@@ -1256,9 +1360,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Update the user's secret in the database
       await storage.updateUserTwoFactorSecret(user.id, result.secret);
       
+      // Extract the raw secret for the QR code
+      const secretData = JSON.parse(result.secret);
+      const otp = secretData.otp;
+      
+      // Create the otpauth URL for QR code generation
+      const otpAuthUrl = `otpauth://totp/${encodeURIComponent(user.email)}?secret=${otp}&issuer=SoftGirlFashion`;
+      
       res.json({ 
         message: "Verification code resent to your email",
-        emailSent: true
+        emailSent: true,
+        otpAuthUrl
       });
     } catch (error: any) {
       console.error("2FA resend error:", error);
@@ -1272,15 +1384,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log("2FA validate request headers:", req.headers);
       console.log("2FA validate request body:", req.body);
       
+      // Extract the Firebase UID from the header or body
+      const firebaseUid = req.headers["firebase-uid"]?.toString() || req.body?.uid;
       const { email, token } = req.body;
       
-      if (!email || !token) {
-        return res.status(400).json({ message: "Email and token are required" });
+      if (!token) {
+        return res.status(400).json({ message: "Verification token is required" });
       }
       
-      const user = await storage.getUserByEmail(email);
+      // Try to find the user by Firebase UID first, then by email
+      let user;
       
-      if (!user || !user.twoFactorEnabled || !user.twoFactorSecret) {
+      if (firebaseUid) {
+        user = await storage.getUserByFirebaseId(firebaseUid);
+      } else if (email) {
+        user = await storage.getUserByEmail(email);
+      } else if (req.user?.id) {
+        user = await storage.getUser(req.user.id);
+      }
+      
+      if (!user || !user.twoFactorSecret) {
         return res.status(401).json({ message: "Invalid authentication attempt" });
       }
       
@@ -1290,15 +1413,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ message: "Invalid verification code" });
       }
       
-      // In a real app, you might generate a JWT or session here
-      res.json({
+      const userResponse = {
         id: user.id,
         username: user.username,
         email: user.email,
         fullName: user.fullName,
         role: user.role,
-        twoFactorEnabled: true
-      });
+        twoFactorEnabled: true,
+        firebaseUid: user.firebaseUid,
+        photoURL: user.photoURL
+      };
+      
+      console.log(`Successful 2FA validation for ${user.email}`);
+      
+      // In a real app, you might generate a JWT or session here
+      res.json(userResponse);
     } catch (error: any) {
       console.error("2FA validation error:", error);
       res.status(500).json({ message: "Error validating 2FA token: " + error.message });
