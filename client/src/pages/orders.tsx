@@ -10,6 +10,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Download, Truck, CheckCircle, Clock, AlertTriangle } from "lucide-react";
 import { format } from "date-fns";
+import { generateInvoice } from "@/utils/invoiceGenerator";
+import type { InvoiceItem, ShippingAddress, OrderData } from "@/utils/invoiceGenerator";
 
 // Firebase imports
 import { collection, getDocs, query, orderBy } from "firebase/firestore";
@@ -166,7 +168,34 @@ const Orders = () => {
                             {(order.status || 'processing').charAt(0).toUpperCase() + (order.status || 'processing').slice(1)}
                           </span>
                         </Badge>
-                        <Button variant="outline" size="sm">
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => {
+                            const orderData: OrderData = {
+                              id: order.id,
+                              items: Array.isArray(order.items) ? order.items as InvoiceItem[] : [],
+                              shippingAddress: typeof order.shippingAddress === 'object' 
+                                ? order.shippingAddress as ShippingAddress 
+                                : {
+                                    fullName: 'Customer',
+                                    address: '123 Main St',
+                                    city: 'New York',
+                                    state: 'NY',
+                                    postalCode: '10001',
+                                    country: 'USA',
+                                    phone: '555-1234'
+                                  },
+                              totalAmount: order.totalAmount || 0,
+                              createdAt: order.createdAt,
+                              status: order.status || 'processing',
+                              paymentStatus: order.paymentStatus || 'paid',
+                              trackingNumber: order.trackingNumber || null
+                            };
+                            const { download } = generateInvoice(orderData);
+                            download();
+                          }}
+                        >
                           <Download className="h-4 w-4 mr-1" />
                           Invoice
                         </Button>

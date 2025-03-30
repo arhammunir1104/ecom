@@ -7,9 +7,9 @@ const Footer = () => {
       <div className="container mx-auto px-4">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-12">
           <div>
-            <h3 className="font-playfair text-xl font-bold mb-6">Feminine Elegance</h3>
+            <h3 className="font-playfair text-xl font-bold mb-6">SoftGirlFashion</h3>
             <p className="mb-6 text-gray-300">
-              Discover the perfect blend of elegance and style with our curated collection of fashion essentials for the modern woman.
+              Discover the perfect blend of comfort and cuteness with our curated collection of soft girl fashion essentials for the modern woman.
             </p>
             <div className="flex space-x-4">
               <a href="#" className="text-white hover:text-pink-light transition">
@@ -104,7 +104,7 @@ const Footer = () => {
               </li>
               <li className="flex items-center">
                 <Mail className="w-5 h-5 mr-3 flex-shrink-0" />
-                <span className="text-gray-300">contact@feminineelegance.com</span>
+                <span className="text-gray-300">support@softgirlfashion.com</span>
               </li>
               <li className="flex items-center">
                 <Clock className="w-5 h-5 mr-3 flex-shrink-0" />
@@ -117,7 +117,7 @@ const Footer = () => {
         <div className="border-t border-purple-light pt-8">
           <div className="flex flex-col md:flex-row md:justify-between items-center">
             <p className="text-gray-300 mb-4 md:mb-0">
-              &copy; {new Date().getFullYear()} Feminine Elegance. All rights reserved.
+              &copy; {new Date().getFullYear()} SoftGirlFashion. All rights reserved.
             </p>
             <div className="flex flex-wrap justify-center space-x-4">
               <a href="#" className="text-gray-300 hover:text-pink-light transition">

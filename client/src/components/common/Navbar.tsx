@@ -58,7 +58,7 @@ const Navbar = () => {
             </span>
             <span className="flex items-center">
               <Mail className="w-3 h-3 text-purple mr-1" />
-              contact@feminineelegance.com
+              support@softgirlfashion.com
             </span>
           </div>
           <div className="flex items-center space-x-4">
@@ -93,7 +93,7 @@ const Navbar = () => {
               <div className="flex flex-col h-full">
                 <div className="py-4 border-b">
                   <Link href="/" className="font-playfair text-2xl font-bold tracking-wider text-purple">
-                    Feminine <span className="text-pink-light">Elegance</span>
+                    Soft<span className="text-pink-light">Girl</span>Fashion
                   </Link>
                 </div>
                 <nav className="flex-1 py-4">
@@ -186,7 +186,7 @@ const Navbar = () => {
           
           {/* Logo */}
           <Link href="/" className="font-playfair text-2xl md:text-3xl font-bold tracking-wider text-purple">
-            Feminine <span className="text-pink-light">Elegance</span>
+            Soft<span className="text-pink-light">Girl</span>Fashion
           </Link>
           
           {/* Desktop navigation links */}
