@@ -1,0 +1,19 @@
+// These are the Firestore security rules that should be added to your Firebase console
+// Go to Firebase Console -> Firestore Database -> Rules and replace with these rules
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Allow users to read and write their own document
+    match /users/{userId} {
+      allow create: if request.auth != null;
+      allow read, update, delete: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // Allow admins to read all user documents
+    match /users/{userId} {
+      allow read: if request.auth != null && 
+                   get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+  }
+}

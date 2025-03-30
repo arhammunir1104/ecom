@@ -49,17 +49,22 @@ export const registerWithEmailAndPassword = async (
   fullName?: string
 ): Promise<FirebaseUser> => {
   try {
+    console.log("Creating new user in Firebase Authentication:", email);
     // Create the user in Firebase Authentication
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
     const user = userCredential.user;
+    
+    console.log("Firebase Auth user created successfully:", user.uid);
     
     // Update the user's display name in Auth
     await updateProfile(user, {
       displayName: username
     });
     
-    // Create user profile in Firestore
-    await createUserProfile(user.uid, {
+    console.log("Creating user profile in Firestore...");
+    
+    // Create user profile document structure
+    const userData = {
       uid: user.uid,
       email: email,
       username: username,
@@ -69,9 +74,13 @@ export const registerWithEmailAndPassword = async (
       photoURL: user.photoURL || undefined,
       createdAt: serverTimestamp() as Timestamp,
       updatedAt: serverTimestamp() as Timestamp
-    });
+    };
     
-    console.log("User created successfully:", user.uid);
+    // Create user profile in Firestore with explicit document ID
+    const userDocRef = getUserDocRef(user.uid);
+    await setDoc(userDocRef, userData);
+    
+    console.log("User profile created in Firestore:", user.uid);
     return user;
   } catch (error) {
     console.error("Error registering user:", error);
@@ -87,10 +96,53 @@ export const signInWithEmail = async (
   password: string
 ): Promise<FirebaseUser> => {
   try {
+    console.log("Attempting to sign in with email/password:", email);
     const userCredential = await signInWithEmailAndPassword(auth, email, password);
+    console.log("Sign in successful:", userCredential.user.uid);
+    
+    // Create a user profile in Firestore if it doesn't exist already
+    // This ensures we always have a Firestore profile for the user
+    const userExists = await checkIfUserExists(userCredential.user.uid);
+    if (!userExists) {
+      console.log("Creating missing Firestore profile for existing auth user");
+      // Get display name from Firebase Auth
+      const displayName = userCredential.user.displayName || email.split('@')[0];
+      
+      // Create a new user profile
+      await createUserProfile(userCredential.user.uid, {
+        uid: userCredential.user.uid,
+        email: email,
+        username: displayName,
+        fullName: displayName,
+        role: "user",
+        twoFactorEnabled: false,
+        photoURL: userCredential.user.photoURL || undefined,
+        createdAt: serverTimestamp() as Timestamp,
+        updatedAt: serverTimestamp() as Timestamp
+      });
+      console.log("Created missing Firestore profile for user:", userCredential.user.uid);
+    } else {
+      // Update last login time
+      await updateUserProfile(userCredential.user.uid, {
+        updatedAt: serverTimestamp() as Timestamp
+      });
+    }
+    
     return userCredential.user;
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error signing in:", error);
+    
+    // Provide user-friendly error messages
+    if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
+      console.error("Invalid credentials provided");
+    } else if (error.code === 'auth/too-many-requests') {
+      console.error("Too many login attempts. Account temporarily disabled");
+    } else if (error.code === 'auth/invalid-credential') {
+      console.error("Invalid login credentials");
+    } else if (error.code === 'auth/operation-not-allowed') {
+      console.error("Email/password sign-in is not enabled in Firebase console");
+    }
+    
     throw error;
   }
 };
@@ -100,24 +152,39 @@ export const signInWithEmail = async (
  */
 export const signInWithGoogle = async (): Promise<FirebaseUser> => {
   try {
+    console.log("Starting Google sign-in process...");
     const provider = new GoogleAuthProvider();
+    
+    // Add scopes for additional information
+    provider.addScope('email');
+    provider.addScope('profile');
+    
     provider.setCustomParameters({
       prompt: "select_account"
     });
     
+    console.log("Opening Google sign-in popup...");
+    // Get current domain for debugging
+    console.log("Current domain:", window.location.origin);
+    
     const result = await signInWithPopup(auth, provider);
     const user = result.user;
     
+    console.log("Google sign-in successful:", user.email);
+    
     // Check if this is a new user (first time sign in)
+    console.log("Checking if user exists in Firestore:", user.uid);
     const userExists = await checkIfUserExists(user.uid);
     
     if (!userExists) {
+      console.log("New Google user, creating Firestore profile");
       // Create a user profile for new Google sign-ins
       const username = user.displayName?.split(" ")[0]?.toLowerCase() || 
                        user.email?.split("@")[0] || 
                        "user" + Math.floor(Math.random() * 10000);
       
-      await createUserProfile(user.uid, {
+      // Create user profile document structure 
+      const userData = {
         uid: user.uid,
         email: user.email!,
         username: username,
@@ -127,8 +194,15 @@ export const signInWithGoogle = async (): Promise<FirebaseUser> => {
         photoURL: user.photoURL || undefined,
         createdAt: serverTimestamp() as Timestamp,
         updatedAt: serverTimestamp() as Timestamp
-      });
+      };
+      
+      // Create user profile in Firestore with explicit document ID
+      const userDocRef = getUserDocRef(user.uid);
+      await setDoc(userDocRef, userData);
+      
+      console.log("User profile created in Firestore for Google user:", user.uid);
     } else {
+      console.log("Existing Google user, updating login timestamp");
       // Update the last login time
       await updateUserProfile(user.uid, {
         updatedAt: serverTimestamp() as Timestamp
@@ -136,8 +210,21 @@ export const signInWithGoogle = async (): Promise<FirebaseUser> => {
     }
     
     return user;
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error signing in with Google:", error);
+    
+    // Provide specific error messages and troubleshooting steps
+    if (error.code === 'auth/popup-blocked') {
+      console.error("Google sign-in popup was blocked by your browser. Please allow popups for this site.");
+    } else if (error.code === 'auth/popup-closed-by-user') {
+      console.error("Google sign-in was cancelled. Please try again.");
+    } else if (error.code === 'auth/cancelled-popup-request') {
+      console.error("Google sign-in request was cancelled. Please try again.");
+    } else if (error.code === 'auth/unauthorized-domain') {
+      console.error("This domain is not authorized for Google authentication.");
+      console.error("IMPORTANT: Add this exact domain to Firebase console authorized domains: " + window.location.origin);
+    }
+    
     throw error;
   }
 };

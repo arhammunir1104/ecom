@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Firebase Firestore Test</title>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+      line-height: 1.6;
+    }
+    pre {
+      background-color: #f5f5f5;
+      padding: 10px;
+      border-radius: 5px;
+      overflow-x: auto;
+    }
+    button {
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      padding: 10px 15px;
+      text-align: center;
+      text-decoration: none;
+      display: inline-block;
+      font-size: 16px;
+      margin: 4px 2px;
+      cursor: pointer;
+      border-radius: 4px;
+    }
+    input {
+      padding: 8px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      margin: 5px 0;
+      width: 100%;
+      box-sizing: border-box;
+    }
+    .container {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+    .card {
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 15px;
+      margin-bottom: 15px;
+    }
+    .result {
+      margin-top: 10px;
+      padding: 10px;
+      background-color: #f9f9f9;
+      border-radius: 4px;
+      min-height: 20px;
+    }
+    h3 {
+      margin-bottom: 10px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Firebase Firestore Test</h1>
+  <p>This page helps diagnose issues with Firebase Authentication and Firestore. Fill in your Firebase config and try the actions below.</p>
+  
+  <div class="container">
+    <div class="card">
+      <h3>Firebase Configuration</h3>
+      <div>
+        <label for="apiKey">API Key:</label>
+        <input type="text" id="apiKey" placeholder="Enter your Firebase API Key">
+      </div>
+      <div>
+        <label for="projectId">Project ID:</label>
+        <input type="text" id="projectId" placeholder="Enter your Firebase Project ID">
+      </div>
+      <div>
+        <label for="appId">App ID:</label>
+        <input type="text" id="appId" placeholder="Enter your Firebase App ID">
+      </div>
+      <button id="initFirebase">Initialize Firebase</button>
+      <div id="initResult" class="result"></div>
+    </div>
+
+    <div class="card">
+      <h3>Test Anonymous Authentication</h3>
+      <button id="signInAnon">Sign In Anonymously</button>
+      <div id="anonResult" class="result"></div>
+    </div>
+
+    <div class="card">
+      <h3>Create Test Document</h3>
+      <button id="createDoc">Create Test Document in Firestore</button>
+      <div id="createResult" class="result"></div>
+    </div>
+
+    <div class="card">
+      <h3>Read Test Document</h3>
+      <button id="readDoc">Read Test Document from Firestore</button>
+      <div id="readResult" class="result"></div>
+    </div>
+
+    <div class="card">
+      <h3>Test Email/Password Sign Up</h3>
+      <div>
+        <label for="email">Email:</label>
+        <input type="email" id="email" placeholder="test@example.com">
+      </div>
+      <div>
+        <label for="password">Password:</label>
+        <input type="password" id="password" placeholder="Password (min 6 characters)">
+      </div>
+      <button id="createUser">Create User</button>
+      <div id="createUserResult" class="result"></div>
+    </div>
+
+    <div class="card">
+      <h3>Test Email/Password Sign In</h3>
+      <div>
+        <label for="loginEmail">Email:</label>
+        <input type="email" id="loginEmail" placeholder="test@example.com">
+      </div>
+      <div>
+        <label for="loginPassword">Password:</label>
+        <input type="password" id="loginPassword" placeholder="Password">
+      </div>
+      <button id="signIn">Sign In</button>
+      <div id="signInResult" class="result"></div>
+    </div>
+
+    <div class="card">
+      <h3>Get Current User</h3>
+      <button id="getCurrentUser">Get Current User</button>
+      <div id="currentUserResult" class="result"></div>
+    </div>
+
+    <div class="card">
+      <h3>Sign Out</h3>
+      <button id="signOut">Sign Out</button>
+      <div id="signOutResult" class="result"></div>
+    </div>
+  </div>
+
+  <script>
+    let firebaseApp;
+    let db;
+    let auth;
+
+    document.getElementById('initFirebase').addEventListener('click', function() {
+      const apiKey = document.getElementById('apiKey').value;
+      const projectId = document.getElementById('projectId').value;
+      const appId = document.getElementById('appId').value;
+
+      if (!apiKey || !projectId || !appId) {
+        document.getElementById('initResult').textContent = 'Please fill in all Firebase configuration fields';
+        return;
+      }
+
+      try {
+        // Initialize Firebase
+        const firebaseConfig = {
+          apiKey: apiKey,
+          authDomain: `${projectId}.firebaseapp.com`,
+          projectId: projectId,
+          storageBucket: `${projectId}.appspot.com`,
+          appId: appId
+        };
+
+        firebaseApp = firebase.initializeApp(firebaseConfig);
+        db = firebaseApp.firestore();
+        auth = firebaseApp.auth();
+
+        document.getElementById('initResult').textContent = 'Firebase initialized successfully!';
+      } catch (error) {
+        document.getElementById('initResult').textContent = `Error initializing Firebase: ${error.message}`;
+      }
+    });
+
+    document.getElementById('signInAnon').addEventListener('click', function() {
+      if (!auth) {
+        document.getElementById('anonResult').textContent = 'Please initialize Firebase first';
+        return;
+      }
+
+      auth.signInAnonymously()
+        .then(result => {
+          document.getElementById('anonResult').textContent = `Anonymous user signed in with UID: ${result.user.uid}`;
+        })
+        .catch(error => {
+          document.getElementById('anonResult').textContent = `Error signing in anonymously: ${error.message}`;
+        });
+    });
+
+    document.getElementById('createDoc').addEventListener('click', function() {
+      if (!db || !auth.currentUser) {
+        document.getElementById('createResult').textContent = 'Please initialize Firebase and sign in first';
+        return;
+      }
+
+      db.collection('test').doc('testDoc')
+        .set({
+          message: 'This is a test document',
+          timestamp: new Date(),
+          userId: auth.currentUser.uid
+        })
+        .then(() => {
+          document.getElementById('createResult').textContent = 'Test document created successfully!';
+        })
+        .catch(error => {
+          document.getElementById('createResult').textContent = `Error creating document: ${error.message}`;
+        });
+    });
+
+    document.getElementById('readDoc').addEventListener('click', function() {
+      if (!db) {
+        document.getElementById('readResult').textContent = 'Please initialize Firebase first';
+        return;
+      }
+
+      db.collection('test').doc('testDoc')
+        .get()
+        .then(doc => {
+          if (doc.exists) {
+            document.getElementById('readResult').textContent = `Document data: ${JSON.stringify(doc.data())}`;
+          } else {
+            document.getElementById('readResult').textContent = 'No such document!';
+          }
+        })
+        .catch(error => {
+          document.getElementById('readResult').textContent = `Error reading document: ${error.message}`;
+        });
+    });
+
+    document.getElementById('createUser').addEventListener('click', function() {
+      if (!auth) {
+        document.getElementById('createUserResult').textContent = 'Please initialize Firebase first';
+        return;
+      }
+
+      const email = document.getElementById('email').value;
+      const password = document.getElementById('password').value;
+
+      if (!email || !password) {
+        document.getElementById('createUserResult').textContent = 'Please enter email and password';
+        return;
+      }
+
+      auth.createUserWithEmailAndPassword(email, password)
+        .then(userCredential => {
+          document.getElementById('createUserResult').textContent = `User created with UID: ${userCredential.user.uid}`;
+        })
+        .catch(error => {
+          document.getElementById('createUserResult').textContent = `Error creating user: ${error.message}`;
+        });
+    });
+
+    document.getElementById('signIn').addEventListener('click', function() {
+      if (!auth) {
+        document.getElementById('signInResult').textContent = 'Please initialize Firebase first';
+        return;
+      }
+
+      const email = document.getElementById('loginEmail').value;
+      const password = document.getElementById('loginPassword').value;
+
+      if (!email || !password) {
+        document.getElementById('signInResult').textContent = 'Please enter email and password';
+        return;
+      }
+
+      auth.signInWithEmailAndPassword(email, password)
+        .then(userCredential => {
+          document.getElementById('signInResult').textContent = `User signed in with UID: ${userCredential.user.uid}`;
+        })
+        .catch(error => {
+          document.getElementById('signInResult').textContent = `Error signing in: ${error.message}`;
+        });
+    });
+
+    document.getElementById('getCurrentUser').addEventListener('click', function() {
+      if (!auth) {
+        document.getElementById('currentUserResult').textContent = 'Please initialize Firebase first';
+        return;
+      }
+
+      const user = auth.currentUser;
+      if (user) {
+        document.getElementById('currentUserResult').textContent = `Current user: ${JSON.stringify({
+          uid: user.uid,
+          email: user.email,
+          emailVerified: user.emailVerified,
+          isAnonymous: user.isAnonymous
+        })}`;
+      } else {
+        document.getElementById('currentUserResult').textContent = 'No user is currently signed in';
+      }
+    });
+
+    document.getElementById('signOut').addEventListener('click', function() {
+      if (!auth) {
+        document.getElementById('signOutResult').textContent = 'Please initialize Firebase first';
+        return;
+      }
+
+      auth.signOut()
+        .then(() => {
+          document.getElementById('signOutResult').textContent = 'User signed out successfully!';
+        })
+        .catch(error => {
+          document.getElementById('signOutResult').textContent = `Error signing out: ${error.message}`;
+        });
+    });
+  </script>
+</body>
+</html>
