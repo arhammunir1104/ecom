@@ -1,16 +1,20 @@
 import { createContext, useEffect, useState, ReactNode } from "react";
-import { auth, onAuthChange, signInWithGoogle, logOut } from "../lib/firebase";
+import { auth, onAuthChange } from "../lib/firebase";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "../lib/queryClient";
 import { queryClient } from "../lib/queryClient";
+import * as firebaseService from "../lib/firebaseService";
+import { User as FirebaseUser } from "firebase/auth";
 
 interface AuthUser {
-  id: number;
+  id?: number;  // For compatibility with existing code
+  uid: string;  // Firebase UID
   username: string;
   email: string;
   fullName?: string;
   role: string;
   twoFactorEnabled?: boolean;
+  photoURL?: string;
 }
 
 interface AuthContextType {
@@ -59,20 +63,34 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       setIsLoading(true);
       if (firebaseUser) {
         try {
-          // Get user info from backend
-          const storedUser = localStorage.getItem('user');
-          if (storedUser) {
-            setUser(JSON.parse(storedUser));
+          // Get user profile from Firestore
+          const userProfile = await firebaseService.getUserProfile(firebaseUser.uid);
+          
+          if (userProfile) {
+            // Convert Firestore profile to AuthUser format
+            const authUser: AuthUser = {
+              uid: userProfile.uid,
+              username: userProfile.username,
+              email: userProfile.email,
+              fullName: userProfile.fullName,
+              role: userProfile.role || "user",
+              twoFactorEnabled: userProfile.twoFactorEnabled || false,
+              photoURL: userProfile.photoURL
+            };
+            
+            setUser(authUser);
+            localStorage.setItem('user', JSON.stringify(authUser));
+            console.log("User authenticated from Firestore:", authUser.username);
           } else {
-            // This would be where we'd make an API call to get user details 
-            // if we weren't using local storage
+            console.log("No Firestore profile found for user:", firebaseUser.uid);
             setUser(null);
           }
         } catch (error) {
-          console.error("Error getting user data:", error);
+          console.error("Error getting user data from Firestore:", error);
           setUser(null);
         }
       } else {
+        console.log("No Firebase user found, clearing auth state");
         setUser(null);
         localStorage.removeItem('user');
       }
@@ -84,41 +102,83 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
   const login = async (email: string, password: string, recaptchaToken?: string): Promise<{ requiresTwoFactor: boolean; email?: string }> => {
     try {
-      const res = await apiRequest("POST", "/api/auth/login", { email, password, recaptchaToken });
+      console.log("Starting email/password login");
       
-      // Check the response status to see if it's a 2FA redirect
-      if (res.status === 200) {
-        const userData = await res.json();
+      // Verify reCAPTCHA if needed
+      if (recaptchaToken) {
+        // We could validate the recaptcha token with the server if needed
+        console.log("reCAPTCHA token received");
+      }
+      
+      // Use Firebase authentication
+      const firebaseUser = await firebaseService.signInWithEmail(email, password);
+      console.log("Firebase authentication successful for:", email);
+      
+      // Get the user profile from Firestore
+      const userProfile = await firebaseService.getUserProfile(firebaseUser.uid);
+      
+      if (!userProfile) {
+        throw new Error("User profile not found");
+      }
+      
+      // Check if two-factor authentication is enabled
+      if (userProfile.twoFactorEnabled) {
+        console.log("Two-factor authentication required for:", email);
         
-        // Check if the user has 2FA enabled
-        if (userData.twoFactorEnabled) {
-          // Return that 2FA is required and the email for verification
-          return { requiresTwoFactor: true, email: userData.email };
+        // Trigger 2FA verification process
+        try {
+          await apiRequest("POST", "/api/auth/2fa/send-code", { email });
+        } catch (tfaError) {
+          console.error("Error sending 2FA code:", tfaError);
+          // Continue anyway - we'll show the 2FA input form
         }
         
-        // Normal login - no 2FA required
-        setUser(userData);
-        localStorage.setItem('user', JSON.stringify(userData));
-        
-        // Invalidate queries that depend on authentication
-        queryClient.invalidateQueries({ queryKey: ["/api/profile"] });
-        
-        toast({
-          title: "Login Successful",
-          description: `Welcome back, ${userData.username}!`,
-        });
-        
-        return { requiresTwoFactor: false };
-      } else {
-        throw new Error("Login failed");
+        return { requiresTwoFactor: true, email: email };
       }
+      
+      // Normal login - no 2FA required
+      const authUser: AuthUser = {
+        uid: userProfile.uid,
+        username: userProfile.username,
+        email: userProfile.email,
+        fullName: userProfile.fullName,
+        role: userProfile.role || "user",
+        twoFactorEnabled: userProfile.twoFactorEnabled || false,
+        photoURL: userProfile.photoURL
+      };
+      
+      setUser(authUser);
+      localStorage.setItem('user', JSON.stringify(authUser));
+      
+      // Invalidate queries that depend on authentication
+      queryClient.invalidateQueries({ queryKey: ["/api/profile"] });
+      
+      toast({
+        title: "Login Successful",
+        description: `Welcome back, ${authUser.username}!`,
+      });
+      
+      return { requiresTwoFactor: false };
     } catch (error: any) {
       console.error("Login error:", error);
+      
+      let errorMessage = "Invalid credentials. Please try again.";
+      
+      // Provide more specific error messages for common Firebase errors
+      if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
+        errorMessage = "Incorrect email or password.";
+      } else if (error.code === 'auth/too-many-requests') {
+        errorMessage = "Too many login attempts. Please try again later or reset your password.";
+      } else if (error.code === 'auth/user-disabled') {
+        errorMessage = "This account has been disabled.";
+      }
+      
       toast({
         title: "Login Failed",
-        description: error.message || "Invalid credentials. Please try again.",
+        description: errorMessage,
         variant: "destructive",
       });
+      
       throw error;
     }
   };
@@ -127,42 +187,40 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     try {
       console.log("Starting Google login process");
       
-      const firebaseUser = await signInWithGoogle();
+      // Use the Firebase service to sign in with Google
+      const firebaseUser = await firebaseService.signInWithGoogle();
       console.log("Firebase user authenticated:", firebaseUser.email);
       
-      // Now call our backend to create/verify the user
-      console.log("Sending user data to backend...");
-      const response = await apiRequest("POST", "/api/auth/google", {
-        displayName: firebaseUser.displayName || firebaseUser.email?.split('@')[0],
-        email: firebaseUser.email,
-        uid: firebaseUser.uid,
-        photoURL: firebaseUser.photoURL
-      });
+      // The user profile is already stored in Firestore by signInWithGoogle function
+      // We just need to get the user profile
+      const userProfile = await firebaseService.getUserProfile(firebaseUser.uid);
       
-      if (!response.ok) {
-        console.error("Backend authentication failed:", response.status);
-        let errorMessage = "Failed to authenticate with Google";
-        try {
-          const errorData = await response.json();
-          errorMessage = errorData.message || errorMessage;
-        } catch (e) {
-          console.error("Could not parse error response", e);
-        }
-        throw new Error(errorMessage);
+      if (!userProfile) {
+        throw new Error("Failed to retrieve user profile");
       }
       
-      const userData = await response.json();
-      console.log("User authenticated successfully:", userData.username);
+      // Convert the Firestore profile to our AuthUser format
+      const authUser: AuthUser = {
+        uid: userProfile.uid,
+        username: userProfile.username,
+        email: userProfile.email,
+        fullName: userProfile.fullName,
+        role: userProfile.role,
+        twoFactorEnabled: userProfile.twoFactorEnabled,
+        photoURL: userProfile.photoURL
+      };
       
-      setUser(userData);
-      localStorage.setItem('user', JSON.stringify(userData));
+      console.log("User authenticated successfully:", authUser.username);
+      
+      setUser(authUser);
+      localStorage.setItem('user', JSON.stringify(authUser));
       
       // Invalidate queries that depend on authentication
       queryClient.invalidateQueries({ queryKey: ["/api/profile"] });
       
       toast({
         title: "Login Successful",
-        description: `Welcome, ${userData.username}!`,
+        description: `Welcome, ${authUser.username}!`,
       });
       
       // Redirect to home page after successful Google login
@@ -183,29 +241,84 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
   const signup = async (username: string, email: string, password: string) => {
     try {
-      const res = await apiRequest("POST", "/api/auth/register", { username, email, password });
-      const userData = await res.json();
-      setUser(userData);
-      localStorage.setItem('user', JSON.stringify(userData));
+      console.log("Starting user registration");
+      
+      // Register the user with Firebase and create their Firestore profile
+      const firebaseUser = await firebaseService.registerWithEmailAndPassword(
+        email,
+        password,
+        username
+      );
+      
+      console.log("Firebase user created:", firebaseUser.uid);
+      
+      // Get the user profile from Firestore
+      const userProfile = await firebaseService.getUserProfile(firebaseUser.uid);
+      
+      if (!userProfile) {
+        throw new Error("Failed to retrieve user profile after signup");
+      }
+      
+      // Convert Firestore profile to AuthUser format
+      const authUser: AuthUser = {
+        uid: userProfile.uid,
+        username: userProfile.username,
+        email: userProfile.email,
+        fullName: userProfile.fullName,
+        role: userProfile.role,
+        twoFactorEnabled: false,
+        photoURL: userProfile.photoURL
+      };
+      
+      setUser(authUser);
+      localStorage.setItem('user', JSON.stringify(authUser));
       
       toast({
         title: "Signup Successful",
         description: "Your account has been created!",
       });
+      
+      // If there's any server-side functionality needed (like sending welcome emails)
+      // we can still make an API call to inform the server about the new user
+      try {
+        await apiRequest("POST", "/api/auth/register-complete", { 
+          uid: firebaseUser.uid,
+          email: firebaseUser.email 
+        });
+      } catch (apiError) {
+        console.error("Error notifying server about new user:", apiError);
+        // Non-critical error - don't show to user
+      }
     } catch (error: any) {
       console.error("Signup error:", error);
+      
+      let errorMessage = "Unable to create account. Please try again.";
+      
+      // Provide more specific error messages for common Firebase errors
+      if (error.code === 'auth/email-already-in-use') {
+        errorMessage = "This email is already in use. Please try logging in instead.";
+      } else if (error.code === 'auth/invalid-email') {
+        errorMessage = "The email address is not valid.";
+      } else if (error.code === 'auth/weak-password') {
+        errorMessage = "The password is too weak. Please choose a stronger password.";
+      }
+      
       toast({
         title: "Signup Failed",
-        description: error.message || "Unable to create account. Please try again.",
+        description: errorMessage,
         variant: "destructive",
       });
+      
       throw error;
     }
   };
 
   const logout = async () => {
     try {
-      await logOut();
+      // Sign out from Firebase Authentication
+      await firebaseService.signOut();
+      
+      // Clear local user state
       setUser(null);
       localStorage.removeItem('user');
       
@@ -229,18 +342,46 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
   const verifyTwoFactor = async (email: string, token: string): Promise<void> => {
     try {
+      // First validate the 2FA token with our backend
       const res = await apiRequest("POST", "/api/auth/2fa/validate", { email, token });
-      const userData = await res.json();
       
-      setUser(userData);
-      localStorage.setItem('user', JSON.stringify(userData));
+      if (!res.ok) {
+        throw new Error("Invalid verification code");
+      }
+      
+      // Get the Firebase user
+      const currentUser = auth.currentUser;
+      if (!currentUser) {
+        throw new Error("Authentication session expired");
+      }
+      
+      // Get the user profile from Firestore
+      const userProfile = await firebaseService.getUserProfile(currentUser.uid);
+      
+      if (!userProfile) {
+        throw new Error("User profile not found");
+      }
+      
+      // After successful 2FA verification, set the user in state
+      const authUser: AuthUser = {
+        uid: userProfile.uid,
+        username: userProfile.username,
+        email: userProfile.email,
+        fullName: userProfile.fullName,
+        role: userProfile.role || "user",
+        twoFactorEnabled: true,
+        photoURL: userProfile.photoURL
+      };
+      
+      setUser(authUser);
+      localStorage.setItem('user', JSON.stringify(authUser));
       
       // Invalidate queries that depend on authentication
       queryClient.invalidateQueries({ queryKey: ["/api/profile"] });
       
       toast({
         title: "Login Successful",
-        description: `Welcome back, ${userData.username}!`,
+        description: `Welcome back, ${authUser.username}!`,
       });
     } catch (error: any) {
       console.error("2FA verification error:", error);
@@ -259,7 +400,22 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         throw new Error("You must be logged in to setup two-factor authentication");
       }
       
-      const res = await apiRequest("POST", "/api/auth/2fa/setup", {});
+      // Get the current Firebase user
+      const currentUser = auth.currentUser;
+      if (!currentUser) {
+        throw new Error("Authentication session expired");
+      }
+      
+      // Call our backend to set up 2FA and send verification code
+      const res = await apiRequest("POST", "/api/auth/2fa/setup", {
+        uid: currentUser.uid,
+        email: currentUser.email
+      });
+      
+      if (!res.ok) {
+        throw new Error("Failed to set up two-factor authentication");
+      }
+      
       const data = await res.json();
       
       if (data.emailSent) {
@@ -291,8 +447,30 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         throw new Error("You must be logged in to verify two-factor authentication");
       }
       
-      const res = await apiRequest("POST", "/api/auth/2fa/verify", { token });
+      // Get the current Firebase user
+      const currentUser = auth.currentUser;
+      if (!currentUser) {
+        throw new Error("Authentication session expired");
+      }
+      
+      // Verify the token with our backend
+      const res = await apiRequest("POST", "/api/auth/2fa/verify", { 
+        token,
+        uid: currentUser.uid 
+      });
+      
+      if (!res.ok) {
+        throw new Error("Invalid verification code");
+      }
+      
       const data = await res.json();
+      
+      if (!data.success) {
+        throw new Error(data.message || "Failed to verify 2FA setup");
+      }
+      
+      // Update the user profile in Firestore to enable 2FA
+      await firebaseService.setTwoFactorAuthentication(currentUser.uid, true);
       
       // Update the local user data to reflect that 2FA is now enabled
       const updatedUser = { ...user, twoFactorEnabled: true };
@@ -322,8 +500,24 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         throw new Error("You must be logged in to disable two-factor authentication");
       }
       
-      const res = await apiRequest("POST", "/api/auth/2fa/disable", {});
-      const data = await res.json();
+      // Get the current Firebase user
+      const currentUser = auth.currentUser;
+      if (!currentUser) {
+        throw new Error("Authentication session expired");
+      }
+      
+      // Call our backend to disable 2FA (for any server-side cleanup needed)
+      const res = await apiRequest("POST", "/api/auth/2fa/disable", {
+        uid: currentUser.uid
+      });
+      
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.message || "Failed to disable two-factor authentication");
+      }
+      
+      // Update the user profile in Firestore to disable 2FA
+      await firebaseService.setTwoFactorAuthentication(currentUser.uid, false);
       
       // Update the local user data to reflect that 2FA is now disabled
       const updatedUser = { ...user, twoFactorEnabled: false };
@@ -353,7 +547,23 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         throw new Error("You must be logged in to resend verification code");
       }
       
-      const res = await apiRequest("POST", "/api/auth/2fa/resend", {});
+      // Get the current Firebase user
+      const currentUser = auth.currentUser;
+      if (!currentUser) {
+        throw new Error("Authentication session expired");
+      }
+      
+      // Call our backend to send a new verification code
+      const res = await apiRequest("POST", "/api/auth/2fa/resend", {
+        uid: currentUser.uid,
+        email: currentUser.email
+      });
+      
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.message || "Failed to resend verification code");
+      }
+      
       const data = await res.json();
       
       if (data.emailSent) {
