@@ -297,6 +297,34 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         throw new Error("Failed to retrieve user profile");
       }
       
+      // Check if the user has 2FA enabled
+      if (userProfile.twoFactorEnabled) {
+        console.log("User has 2FA enabled - redirecting to verification");
+        
+        // Try to send a verification code
+        try {
+          await apiRequest("POST", "/api/auth/2fa/send-code", { 
+            email: userProfile.email,
+            uid: userProfile.uid
+          });
+        } catch (tfaError) {
+          console.error("Error sending 2FA code:", tfaError);
+          // Continue anyway - we'll show the 2FA input form
+        }
+        
+        // Store just enough info to identify the user for 2FA verification
+        localStorage.setItem('pendingAuth', JSON.stringify({
+          email: userProfile.email,
+          uid: userProfile.uid,
+          requiresTwoFactor: true
+        }));
+        
+        // Redirect to the 2FA verification page
+        window.location.href = '/auth/verify-2fa';
+        return;
+      }
+      
+      // User doesn't have 2FA, continue with normal login
       // Convert the Firestore profile to our AuthUser format
       const authUser: AuthUser = {
         uid: userProfile.uid,

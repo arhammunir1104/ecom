@@ -1478,6 +1478,54 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Check if a user exists in our database
+  // Send 2FA verification code
+  app.post("/api/auth/2fa/send-code", async (req, res) => {
+    try {
+      const { email, uid } = req.body;
+      
+      if (!email) {
+        return res.status(400).json({ message: "Email is required" });
+      }
+      
+      // Try to find the user by Firebase UID or email
+      let user;
+      
+      if (uid) {
+        user = await storage.getUserByFirebaseId(uid);
+      }
+      
+      if (!user && email) {
+        user = await storage.getUserByEmail(email);
+      }
+      
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      if (!user.twoFactorEnabled) {
+        return res.status(400).json({ message: "Two-factor authentication is not enabled for this user" });
+      }
+      
+      // Generate a new OTP and send it via email
+      const result = await setupTwoFactor(user.email);
+      
+      if (!result.success) {
+        return res.status(500).json({ message: "Failed to send verification code to your email" });
+      }
+      
+      // Update the user's secret in the database
+      await storage.updateUserTwoFactorSecret(user.id, result.secret);
+      
+      res.json({ 
+        message: "Verification code sent to your email",
+        emailSent: true,
+      });
+    } catch (error: any) {
+      console.error("Error sending 2FA code:", error);
+      res.status(500).json({ message: "Error sending verification code: " + error.message });
+    }
+  });
+  
   app.post("/api/auth/check-user", async (req, res) => {
     try {
       const { email } = req.body;
