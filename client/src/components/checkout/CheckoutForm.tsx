@@ -230,19 +230,23 @@ const ShippingForm = ({ address, setAddress, onContinue }: ShippingFormProps) =>
           />
         </div>
         
-        <div className="flex justify-end">
+        <div className="flex justify-end mt-6">
           <Button 
             type="submit" 
-            className="bg-purple text-white"
+            className="bg-purple text-white font-medium px-6 py-3 text-lg"
             disabled={isLoading}
+            size="lg"
           >
             {isLoading ? (
               <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                <Loader2 className="mr-2 h-5 w-5 animate-spin" />
                 Processing...
               </>
             ) : (
-              "Proceed to Payment"
+              <>
+                <CreditCard className="mr-2 h-5 w-5" />
+                Proceed to Payment
+              </>
             )}
           </Button>
         </div>
@@ -423,17 +427,18 @@ const PaymentForm = ({ address, amount, onPaymentSuccess }: PaymentFormProps) =>
         
         <Button 
           type="submit" 
-          className="w-full bg-purple text-white"
+          className="w-full bg-purple text-white font-medium text-lg py-3"
           disabled={isProcessing || !stripe || !elements}
+          size="lg"
         >
           {isProcessing ? (
             <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              <Loader2 className="mr-2 h-5 w-5 animate-spin" />
               Processing Payment...
             </>
           ) : (
             <>
-              <ShieldCheck className="mr-2 h-4 w-4" />
+              <ShieldCheck className="mr-2 h-5 w-5" />
               Pay ${amount.toFixed(2)}
             </>
           )}

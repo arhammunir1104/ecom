@@ -83,6 +83,8 @@ const Checkout = () => {
         description: "Please wait while we set up the payment...",
       });
       
+      // Make sure we have a create-payment-intent endpoint available on the server
+      console.log("Making API request to create payment intent");
       const res = await apiRequest("POST", "/api/create-payment-intent", { amount: total });
       
       if (!res.ok) {
@@ -97,7 +99,7 @@ const Checkout = () => {
       }
       
       const data = await res.json();
-      console.log("Payment intent created successfully, client secret received");
+      console.log("Payment intent created successfully, client secret received:", data.clientSecret ? "Yes" : "No");
       setClientSecret(data.clientSecret);
       
       toast({
