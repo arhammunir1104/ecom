@@ -8,6 +8,7 @@ import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useToast } from "@/hooks/use-toast";
 import { Download, Truck, CheckCircle, Clock, AlertTriangle } from "lucide-react";
 import { format } from "date-fns";
 import { generateInvoice } from "@/utils/invoiceGenerator";
@@ -19,6 +20,7 @@ import { db } from "@/lib/firebase";
 
 const Orders = () => {
   const { user, isAuthenticated } = useAuth();
+  const { toast } = useToast();
   const [activeTab, setActiveTab] = useState("all");
   const [firestoreOrders, setFirestoreOrders] = useState<any[]>([]);
   const [isFirestoreLoading, setIsFirestoreLoading] = useState(true);
@@ -172,28 +174,65 @@ const Orders = () => {
                           variant="outline" 
                           size="sm"
                           onClick={() => {
-                            const orderData: OrderData = {
-                              id: order.id,
-                              items: Array.isArray(order.items) ? order.items as InvoiceItem[] : [],
-                              shippingAddress: typeof order.shippingAddress === 'object' 
-                                ? order.shippingAddress as ShippingAddress 
-                                : {
-                                    fullName: 'Customer',
-                                    address: '123 Main St',
-                                    city: 'New York',
-                                    state: 'NY',
-                                    postalCode: '10001',
-                                    country: 'USA',
-                                    phone: '555-1234'
-                                  },
-                              totalAmount: order.totalAmount || 0,
-                              createdAt: order.createdAt,
-                              status: order.status || 'processing',
-                              paymentStatus: order.paymentStatus || 'paid',
-                              trackingNumber: order.trackingNumber || null
-                            };
-                            const { download } = generateInvoice(orderData);
-                            download();
+                            try {
+                              // Ensure all required fields have values to avoid errors
+                              const safeItems = Array.isArray(order.items) 
+                                ? (order.items as any[]).map(item => ({
+                                    name: item.name || 'Product',
+                                    price: parseFloat(String(item.price)) || 0,
+                                    quantity: parseInt(String(item.quantity)) || 1,
+                                    productId: item.productId || '0',
+                                    image: item.image || ''
+                                  }))
+                                : [];
+                              
+                              // Ensure shipping address has all required fields
+                              let safeShippingAddress: ShippingAddress;
+                              
+                              if (typeof order.shippingAddress === 'object' && order.shippingAddress !== null) {
+                                const sa = order.shippingAddress as any;
+                                safeShippingAddress = {
+                                  fullName: sa.fullName || 'Customer',
+                                  address: sa.address || 'Address not provided',
+                                  city: sa.city || 'City not provided',
+                                  state: sa.state || 'State not provided',
+                                  postalCode: sa.postalCode || '00000',
+                                  country: sa.country || 'Country not provided',
+                                  phone: sa.phone || 'Phone not provided'
+                                };
+                              } else {
+                                safeShippingAddress = {
+                                  fullName: 'Customer',
+                                  address: 'Address not provided',
+                                  city: 'City not provided',
+                                  state: 'State not provided',
+                                  postalCode: '00000',
+                                  country: 'Country not provided',
+                                  phone: 'Phone not provided'
+                                };
+                              }
+                              
+                              const orderData: OrderData = {
+                                id: order.id || 'unknown',
+                                items: safeItems,
+                                totalAmount: parseFloat(String(order.totalAmount)) || 0,
+                                shippingAddress: safeShippingAddress,
+                                createdAt: order.createdAt || new Date(),
+                                status: order.status || 'processing',
+                                paymentStatus: order.paymentStatus || 'paid',
+                                trackingNumber: order.trackingNumber || null
+                              };
+                              
+                              const { download } = generateInvoice(orderData);
+                              download();
+                            } catch (error) {
+                              console.error('Error generating invoice:', error);
+                              toast({
+                                title: 'Invoice Error',
+                                description: 'There was a problem generating your invoice. Please try again.',
+                                variant: 'destructive'
+                              });
+                            }
                           }}
                         >
                           <Download className="h-4 w-4 mr-1" />

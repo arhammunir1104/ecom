@@ -1,13 +1,6 @@
-import { jsPDF } from 'jspdf';
-import 'jspdf-autotable';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { format } from 'date-fns';
-
-// Import type for autoTable
-import { UserOptions } from 'jspdf-autotable'
-
-interface JsPDFWithAutoTable extends jsPDF {
-  autoTable: (options: UserOptions) => jsPDF;
-}
 
 export interface InvoiceItem {
   name: string;
@@ -39,13 +32,12 @@ export interface OrderData {
 }
 
 export const generateInvoice = (order: OrderData) => {
-  // Initialize jsPDF with type casting to include autoTable
-  const doc = new jsPDF() as JsPDFWithAutoTable;
+  // Initialize jsPDF
+  const doc = new jsPDF();
   
   // Set up some basic variables
   const pageWidth = doc.internal.pageSize.width;
   const margin = 20;
-  const maxLineWidth = pageWidth - (margin * 2);
   
   // Add logo and company info at the top
   doc.setFontSize(22);
@@ -112,8 +104,8 @@ export const generateInvoice = (order: OrderData) => {
     "", "", "Total:", `$${total.toFixed(2)}`
   ]);
   
-  // Add the table
-  doc.autoTable({
+  // Add the table using autoTable directly
+  autoTable(doc, {
     head: [tableColumn],
     body: tableRows,
     startY: 95,
@@ -140,7 +132,7 @@ export const generateInvoice = (order: OrderData) => {
     }
   });
   
-  // Add footer
+  // Add footer - use the last position from autoTable
   const finalY = (doc as any).lastAutoTable.finalY || 120;
   doc.setFontSize(10);
   doc.text("Thank you for shopping with SoftGirlFashion!", margin, finalY + 10);

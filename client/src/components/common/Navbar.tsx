@@ -178,8 +178,8 @@ const Navbar = () => {
             </Link>
           </div>
           
-          {/* Desktop navigation links */}
-          <div className="hidden md:flex items-center justify-center space-x-10 max-w-2xl mx-auto">
+          {/* Desktop navigation links - positioned as a fixed layout with proper spacing */}
+          <div className="hidden md:flex items-center gap-8 absolute left-1/2 transform -translate-x-1/2">
             <Link href="/" className="font-medium hover:text-purple transition">Home</Link>
             <Link href="/shop" className="font-medium hover:text-purple transition">Shop</Link>
             <Link href="/categories" className="font-medium hover:text-purple transition">Collections</Link>
