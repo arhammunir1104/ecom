@@ -32,13 +32,80 @@ export default function EmailVerification({ email, onSuccess, onCancel, userData
 
     try {
       setIsLoading(true);
-      const res = await apiRequest("POST", "/api/auth/verify-email", { 
+      
+      // First create the user in Firebase Authentication if needed
+      let firebaseUID = null;
+      if (userData?.email && userData?.password) {
+        try {
+          // Import Firebase auth-related functions
+          const { createUserWithEmailAndPassword, updateProfile } = await import("firebase/auth");
+          const { auth } = await import("@/lib/firebase");
+          
+          console.log("Creating user in Firebase Authentication:", userData.email);
+          // Create the user in Firebase Authentication
+          const userCredential = await createUserWithEmailAndPassword(auth, userData.email, userData.password);
+          firebaseUID = userCredential.user.uid;
+          
+          console.log("User created in Firebase Auth with UID:", firebaseUID);
+          
+          // Update the user's display name in Firebase Auth
+          await updateProfile(userCredential.user, {
+            displayName: userData.username
+          });
+          
+          console.log("Firebase Auth user profile updated");
+        } catch (firebaseError: any) {
+          console.error("Firebase Auth error:", firebaseError);
+          // Continue with verification even if Firebase auth fails
+          // The server might still create a local user
+        }
+      }
+      
+      // If we have a Firebase UID, add it to the verification request
+      const verificationData: any = { 
         email, 
         token: verificationCode,
         userData: userData
-      });
+      };
+      
+      if (firebaseUID) {
+        verificationData.firebaseUid = firebaseUID;
+      }
+      
+      const res = await apiRequest("POST", "/api/auth/verify-email", verificationData);
       
       if (res.ok) {
+        // If Firebase auth was successful, also add the user to Firestore
+        if (firebaseUID) {
+          try {
+            // Import Firestore functions
+            const { doc, setDoc, serverTimestamp } = await import("firebase/firestore");
+            const { db } = await import("@/lib/firebase");
+            
+            console.log("Creating user profile in Firestore...");
+            const userDocRef = doc(db, "users", firebaseUID);
+            
+            // Create user profile document
+            const userProfileData = {
+              uid: firebaseUID,
+              email: userData.email,
+              username: userData.username,
+              fullName: userData.fullName || userData.username,
+              role: "user",
+              twoFactorEnabled: false,
+              photoURL: null,
+              createdAt: serverTimestamp(),
+              updatedAt: serverTimestamp()
+            };
+            
+            // Create user profile in Firestore
+            await setDoc(userDocRef, userProfileData);
+            console.log("User profile created in Firestore for ID:", firebaseUID);
+          } catch (firestoreError) {
+            console.error("Error creating Firestore profile:", firestoreError);
+          }
+        }
+        
         toast({
           title: "Verification successful",
           description: "Your email has been verified.",

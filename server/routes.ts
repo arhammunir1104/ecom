@@ -268,7 +268,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Email verification endpoint for registration
   app.post("/api/auth/verify-email", async (req, res) => {
     try {
-      const { email, token, userData } = req.body;
+      console.log("Email verification request:", req.body);
+      const { email, token, userData, firebaseUid } = req.body;
       
       if (!email || !token) {
         return res.status(400).json({ message: "Email and verification code are required" });
@@ -284,19 +285,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let existingUser = await storage.getUserByEmail(email);
       
       if (existingUser) {
+        // If they already exist but we have a Firebase UID, update their record
+        if (firebaseUid && !existingUser.firebaseUid) {
+          existingUser = await storage.updateUser(existingUser.id, { firebaseUid });
+          console.log(`Updated existing user ${existingUser.id} with Firebase UID ${firebaseUid}`);
+          
+          return res.status(200).json({ 
+            id: existingUser.id,
+            username: existingUser.username,
+            email: existingUser.email,
+            fullName: existingUser.fullName,
+            role: existingUser.role,
+            twoFactorEnabled: existingUser.twoFactorEnabled || false,
+            message: "Email verified and account updated with Firebase authentication."
+          });
+        }
+        
         return res.status(409).json({ 
           message: "An account with this email already exists. Please log in instead." 
         });
       }
       
       // Create user account (with the userData saved from registration)
-      const user = await storage.createUser({
+      const newUserData: any = {
         username: userData?.username || email.split('@')[0], // Use provided username or generate one
         email: email,
         password: userData?.password || "temporaryPassword", // Use provided password or a default
         fullName: userData?.fullName,
         role: "user"
-      });
+      };
+      
+      // If we have a Firebase UID, include it in the user record
+      if (firebaseUid) {
+        newUserData.firebaseUid = firebaseUid;
+        console.log(`Creating new user with Firebase UID: ${firebaseUid}`);
+      }
+      
+      const user = await storage.createUser(newUserData);
       
       res.status(201).json({ 
         id: user.id,
@@ -1196,6 +1221,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       console.error("2FA validation error:", error);
       res.status(500).json({ message: "Error validating 2FA token: " + error.message });
+    }
+  });
+  
+  // Check if a user exists in our database
+  app.post("/api/auth/check-user", async (req, res) => {
+    try {
+      const { email } = req.body;
+      
+      if (!email) {
+        return res.status(400).json({ message: "Email is required" });
+      }
+      
+      console.log("Checking if user exists:", email);
+      
+      // Find the user by email
+      const user = await storage.getUserByEmail(email);
+      
+      if (!user) {
+        console.log("User not found:", email);
+        return res.status(404).json({ 
+          exists: false,
+          message: "User not found" 
+        });
+      }
+      
+      console.log("User exists:", email, "Firebase UID:", user.firebaseUid);
+      
+      // User exists but check if they have a Firebase UID
+      return res.json({
+        exists: true,
+        hasFirebaseAuth: !!user.firebaseUid,
+        message: "User exists"
+      });
+    } catch (error) {
+      console.error("Check user error:", error);
+      res.status(500).json({ message: "Server error" });
     }
   });
 
