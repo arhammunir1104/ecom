@@ -2,11 +2,11 @@ import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
 import { format } from 'date-fns';
 
-// Add autotable to jsPDF
-declare module 'jspdf' {
-  interface jsPDF {
-    autoTable: (options: any) => jsPDF;
-  }
+// Import type for autoTable
+import { UserOptions } from 'jspdf-autotable'
+
+interface JsPDFWithAutoTable extends jsPDF {
+  autoTable: (options: UserOptions) => jsPDF;
 }
 
 export interface InvoiceItem {
@@ -39,8 +39,8 @@ export interface OrderData {
 }
 
 export const generateInvoice = (order: OrderData) => {
-  // Initialize jsPDF
-  const doc = new jsPDF();
+  // Initialize jsPDF with type casting to include autoTable
+  const doc = new jsPDF() as JsPDFWithAutoTable;
   
   // Set up some basic variables
   const pageWidth = doc.internal.pageSize.width;
