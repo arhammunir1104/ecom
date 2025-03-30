@@ -15,12 +15,14 @@ interface FilterSidebarProps {
   categories: Category[];
   activeCategory: number | null;
   setActiveCategory: (id: number | null) => void;
+  onFilterChange?: (key: string, value: string | null) => void;
 }
 
 const FilterSidebar = ({
   categories,
   activeCategory,
   setActiveCategory,
+  onFilterChange,
 }: FilterSidebarProps) => {
   const [priceRange, setPriceRange] = useState([0, 200]);
 
@@ -80,7 +82,63 @@ const FilterSidebar = ({
         </div>
       </div>
 
-      <Accordion type="single" collapsible defaultValue="price" className="w-full">
+      <div className="mt-6">
+        <h3 className="font-medium text-lg mb-4">Product Type</h3>
+        <div className="space-y-2">
+          <div className="flex items-center space-x-2">
+            <Checkbox 
+              id="featured" 
+              onCheckedChange={(checked) => {
+                if (onFilterChange) {
+                  onFilterChange("featured", checked ? "true" : null);
+                }
+              }}
+            />
+            <Label
+              htmlFor="featured"
+              className="text-sm cursor-pointer"
+            >
+              Featured Products
+            </Label>
+          </div>
+          
+          <div className="flex items-center space-x-2">
+            <Checkbox 
+              id="trending" 
+              onCheckedChange={(checked) => {
+                if (onFilterChange) {
+                  onFilterChange("trending", checked ? "true" : null);
+                }
+              }}
+            />
+            <Label
+              htmlFor="trending"
+              className="text-sm cursor-pointer"
+            >
+              Trending Products
+            </Label>
+          </div>
+          
+          <div className="flex items-center space-x-2">
+            <Checkbox 
+              id="sale" 
+              onCheckedChange={(checked) => {
+                if (onFilterChange) {
+                  onFilterChange("sale", checked ? "true" : null);
+                }
+              }}
+            />
+            <Label
+              htmlFor="sale"
+              className="text-sm cursor-pointer"
+            >
+              On Sale
+            </Label>
+          </div>
+        </div>
+      </div>
+      
+      <Accordion type="single" collapsible defaultValue="price" className="w-full mt-6">
         <AccordionItem value="price" className="border-b">
           <AccordionTrigger className="font-medium text-base">Price</AccordionTrigger>
           <AccordionContent>
@@ -90,7 +148,13 @@ const FilterSidebar = ({
                 min={0}
                 max={200}
                 step={5}
-                onValueChange={setPriceRange}
+                onValueChange={(values) => {
+                  setPriceRange(values);
+                  if (onFilterChange) {
+                    onFilterChange("minPrice", values[0].toString());
+                    onFilterChange("maxPrice", values[1].toString());
+                  }
+                }}
                 className="mb-6"
               />
               <div className="flex justify-between">

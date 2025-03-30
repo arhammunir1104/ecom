@@ -25,10 +25,13 @@ const Shop = () => {
     queryKey: ["/api/categories"],
   });
   
-  const { data: products, isLoading } = useQuery<Product[]>({
+  const { data: products, isLoading, refetch } = useQuery<Product[]>({
     queryKey: ["/api/products", { 
       category: categoryId, 
-      search: searchParams.get("search") || undefined 
+      search: searchParams.get("search") || undefined,
+      trending: searchParams.get("trending") || undefined,
+      featured: searchParams.get("featured") || undefined,
+      sale: searchParams.get("sale") || undefined,
     }],
   });
   
@@ -139,6 +142,10 @@ const Shop = () => {
                         handleFilterChange("category", id ? String(id) : null);
                         setShowFilters(false);
                       }}
+                      onFilterChange={(key, value) => {
+                        handleFilterChange(key, value);
+                        if (key !== "category") setShowFilters(false);
+                      }}
                     />
                   </div>
                 </SheetContent>
@@ -174,6 +181,7 @@ const Shop = () => {
               categories={categories || []}
               activeCategory={Number(categoryId) || null}
               setActiveCategory={(id) => handleFilterChange("category", id ? String(id) : null)}
+              onFilterChange={handleFilterChange}
             />
           </div>
           

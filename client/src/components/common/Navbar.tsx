@@ -67,9 +67,9 @@ const Navbar = () => {
         </div>
         
         {/* Main navigation */}
-        <nav className="flex justify-between items-center py-4">
-          {/* Mobile menu button */}
-          <div className="flex items-center">
+        <nav className="flex flex-wrap justify-between items-center py-4">
+          {/* Mobile menu button and Logo */}
+          <div className="flex items-center flex-shrink-0 mr-4">
             <Sheet>
               <SheetTrigger asChild>
                 <Button variant="ghost" size="icon" className="md:hidden mr-2">
@@ -104,6 +104,20 @@ const Navbar = () => {
                         <SheetClose asChild>
                           <Link href="/categories" className="flex py-2 px-4 hover:bg-pink-lighter rounded-md transition-colors">
                             Collections
+                          </Link>
+                        </SheetClose>
+                      </li>
+                      <li>
+                        <SheetClose asChild>
+                          <Link href="/shop?trending=true" className="flex py-2 px-4 hover:bg-pink-lighter rounded-md transition-colors">
+                            New Arrivals
+                          </Link>
+                        </SheetClose>
+                      </li>
+                      <li>
+                        <SheetClose asChild>
+                          <Link href="/shop?sale=true" className="flex py-2 px-4 hover:bg-pink-lighter rounded-md transition-colors">
+                            Sale
                           </Link>
                         </SheetClose>
                       </li>
@@ -178,17 +192,17 @@ const Navbar = () => {
             </Link>
           </div>
           
-          {/* Desktop navigation links - positioned as a fixed layout with proper spacing */}
-          <div className="hidden md:flex items-center gap-8 absolute left-1/2 transform -translate-x-1/2">
-            <Link href="/" className="font-medium hover:text-purple transition">Home</Link>
-            <Link href="/shop" className="font-medium hover:text-purple transition">Shop</Link>
-            <Link href="/categories" className="font-medium hover:text-purple transition">Collections</Link>
-            <Link href="/shop?trending=true" className="font-medium hover:text-purple transition">New Arrivals</Link>
-            <Link href="/shop?sale=true" className="font-medium hover:text-purple transition">Sale</Link>
+          {/* Desktop navigation links */}
+          <div className="hidden md:flex items-center justify-center space-x-8 flex-grow">
+            <Link href="/" className="whitespace-nowrap font-medium hover:text-purple transition">Home</Link>
+            <Link href="/shop" className="whitespace-nowrap font-medium hover:text-purple transition">Shop</Link>
+            <Link href="/categories" className="whitespace-nowrap font-medium hover:text-purple transition">Collections</Link>
+            <Link href="/shop?trending=true" className="whitespace-nowrap font-medium hover:text-purple transition">New Arrivals</Link>
+            <Link href="/shop?sale=true" className="whitespace-nowrap font-medium hover:text-purple transition">Sale</Link>
           </div>
           
           {/* Icons */}
-          <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-3 flex-shrink-0">
             {isMobileSearchOpen ? (
               <div className="fixed inset-0 bg-black/20 z-50 flex items-center justify-center p-4">
                 <div className="bg-white rounded-lg p-4 w-full max-w-md">

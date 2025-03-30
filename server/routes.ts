@@ -545,8 +545,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/products", async (req, res) => {
     try {
       let products;
-      const { category, search, featured, trending } = req.query;
+      const { 
+        category, 
+        search, 
+        featured, 
+        trending, 
+        sale,
+        minPrice, 
+        maxPrice 
+      } = req.query;
       
+      // Fetch base products based on primary filter
       if (category) {
         const categoryId = Number(category);
         if (isNaN(categoryId)) {
@@ -561,6 +570,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
         products = await storage.getTrendingProducts();
       } else {
         products = await storage.getAllProducts();
+      }
+      
+      // Apply secondary filters if needed
+      if (products && products.length > 0) {
+        // Price filter
+        if (minPrice || maxPrice) {
+          const min = minPrice ? Number(minPrice) : 0;
+          const max = maxPrice ? Number(maxPrice) : Infinity;
+          
+          products = products.filter(product => 
+            product.price >= min && product.price <= max
+          );
+        }
+        
+        // Sale filter (has discount price)
+        if (sale === 'true') {
+          products = products.filter(product => 
+            product.discountPrice && product.discountPrice > 0 && product.discountPrice < product.price
+          );
+        }
       }
       
       res.json(products);

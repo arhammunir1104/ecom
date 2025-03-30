@@ -94,7 +94,26 @@ export const getQueryFn: <T>(options: {
       }
     }
     
-    const res = await fetch(queryKey[0] as string, {
+    // Build URL with query parameters if they exist
+    let url = queryKey[0] as string;
+    const params = queryKey[1] as Record<string, any>;
+    
+    if (params) {
+      const searchParams = new URLSearchParams();
+      
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+          searchParams.append(key, value.toString());
+        }
+      });
+      
+      const queryString = searchParams.toString();
+      if (queryString) {
+        url += (url.includes('?') ? '&' : '?') + queryString;
+      }
+    }
+    
+    const res = await fetch(url, {
       credentials: "include",
       headers,
     });
