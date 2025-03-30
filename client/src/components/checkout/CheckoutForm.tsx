@@ -79,13 +79,13 @@ const ShippingForm = ({ address, setAddress, onContinue }: ShippingFormProps) =>
     setIsLoading(true);
     
     try {
+      console.log("Form submitted with data:", data);
+      
       // Update the address state in the parent component
       setAddress(data);
       
-      // Delay to simulate server validation
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      // Proceed to payment
+      // No need for artificial delay - proceed directly
+      // Proceed to payment implementation in the checkout page
       onContinue();
     } catch (error) {
       console.error("Error validating address:", error);
@@ -230,8 +230,16 @@ const ShippingForm = ({ address, setAddress, onContinue }: ShippingFormProps) =>
           />
         </div>
         
-        {/* Button is hidden - we use the one in the sidebar */}
-        <input type="submit" hidden />
+        {/* Hidden button gets triggered by the "Complete Your Order" button in the sidebar */}
+        <Button 
+          id="shipping-submit-button" 
+          type="submit" 
+          className="w-full mt-6"
+          aria-hidden="true"
+          style={{ display: 'none' }}
+        >
+          Submit
+        </Button>
       </form>
     </Form>
   );

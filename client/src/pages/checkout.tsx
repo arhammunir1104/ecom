@@ -85,6 +85,20 @@ const Checkout = () => {
 
   // Create payment intent when proceeding to payment
   const handleProceedToPayment = async () => {
+    // Find the hidden submit button and click it to trigger form validation
+    const submitButton = document.getElementById('shipping-submit-button');
+    if (submitButton) {
+      submitButton.click();
+      return; // The form's onSubmit handler will call the real implementation below
+    }
+    
+    // If the button can't be found, or if this is called from somewhere else
+    // Fall back to the manual validation
+    await proceedToPayment();
+  };
+  
+  // The actual implementation that gets called after form validation
+  const proceedToPayment = async () => {
     if (!validateAddress()) return;
 
     try {
@@ -152,9 +166,12 @@ const Checkout = () => {
     );
 
     if (missingFields.length > 0) {
+      console.log("Missing fields:", missingFields);
+      console.log("Current address state:", address);
+      
       toast({
         title: "Missing Information",
-        description: "Please fill in all required fields",
+        description: "Please fill in all required fields: " + missingFields.join(", "),
         variant: "destructive",
       });
       return false;
@@ -226,7 +243,7 @@ const Checkout = () => {
                     <CheckoutForm.ShippingForm
                       address={address}
                       setAddress={setAddress}
-                      onContinue={handleProceedToPayment}
+                      onContinue={proceedToPayment}
                     />
                   </TabsContent>
 
