@@ -61,6 +61,32 @@ export default function DirectSignup() {
       
       console.log("Firestore document created successfully");
       
+      // Register with the backend server for synchronization
+      try {
+        console.log("Syncing user with backend server...");
+        const response = await fetch('/api/auth/google', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            displayName: username,
+            email: email,
+            uid: user.uid,
+            photoURL: user.photoURL
+          }),
+        });
+        
+        if (response.ok) {
+          console.log("User synchronized with backend server successfully");
+        } else {
+          console.warn("Failed to sync user with backend server:", await response.json());
+        }
+      } catch (syncError) {
+        console.error("Error syncing with backend:", syncError);
+        // Non-critical, continue with signup
+      }
+      
       setSuccess("Account created successfully! You can now log in.");
       toast({
         title: "Account Created",

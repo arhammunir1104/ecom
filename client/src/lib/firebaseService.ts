@@ -81,6 +81,33 @@ export const registerWithEmailAndPassword = async (
     await setDoc(userDocRef, userData);
     
     console.log("User profile created in Firestore:", user.uid);
+    
+    // Synchronize with backend server
+    try {
+      console.log("Syncing user with backend server...");
+      const response = await fetch('/api/auth/google', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          displayName: username,
+          email: email,
+          uid: user.uid,
+          photoURL: user.photoURL
+        }),
+      });
+      
+      if (response.ok) {
+        console.log("User synchronized with backend server successfully");
+      } else {
+        console.warn("Failed to sync user with backend server:", await response.json());
+      }
+    } catch (syncError) {
+      console.error("Error syncing with backend:", syncError);
+      // Non-critical, continue with signup
+    }
+    
     return user;
   } catch (error) {
     console.error("Error registering user:", error);
@@ -201,6 +228,32 @@ export const signInWithGoogle = async (): Promise<FirebaseUser> => {
       await setDoc(userDocRef, userData);
       
       console.log("User profile created in Firestore for Google user:", user.uid);
+      
+      // Synchronize with backend server
+      try {
+        console.log("Syncing Google user with backend server...");
+        const response = await fetch('/api/auth/google', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            displayName: user.displayName,
+            email: user.email,
+            uid: user.uid,
+            photoURL: user.photoURL
+          }),
+        });
+        
+        if (response.ok) {
+          console.log("Google user synchronized with backend server successfully");
+        } else {
+          console.warn("Failed to sync Google user with backend server:", await response.json());
+        }
+      } catch (syncError) {
+        console.error("Error syncing Google user with backend:", syncError);
+        // Non-critical, continue with signup
+      }
     } else {
       console.log("Existing Google user, updating login timestamp");
       // Update the last login time
@@ -258,6 +311,34 @@ export const createUserProfile = async (
   try {
     const userDocRef = getUserDocRef(uid);
     await setDoc(userDocRef, userData);
+    
+    // Synchronize with backend server if we have enough data
+    if (userData.email) {
+      try {
+        console.log("Syncing user profile with backend server...");
+        const response = await fetch('/api/auth/google', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            displayName: userData.fullName || userData.username,
+            email: userData.email,
+            uid: uid,
+            photoURL: userData.photoURL
+          }),
+        });
+        
+        if (response.ok) {
+          console.log("User profile synchronized with backend server successfully");
+        } else {
+          console.warn("Failed to sync user profile with backend server:", await response.json());
+        }
+      } catch (syncError) {
+        console.error("Error syncing profile with backend:", syncError);
+        // Non-critical, continue with operation
+      }
+    }
   } catch (error) {
     console.error("Error creating user profile:", error);
     throw error;

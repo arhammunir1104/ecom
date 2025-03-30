@@ -17,6 +17,8 @@ export const users = pgTable("users", {
   stripeCustomerId: text("stripe_customer_id"),
   twoFactorSecret: text("two_factor_secret"),
   twoFactorEnabled: boolean("two_factor_enabled").default(false),
+  firebaseUid: text("firebase_uid").unique(),
+  photoURL: text("photo_url"),
 });
 
 // Categories Table

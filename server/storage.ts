@@ -13,6 +13,7 @@ export interface IStorage {
   // User methods
   getUser(id: number): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
+  getUserByFirebaseId(firebaseUid: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
   updateUser(id: number, userData: Partial<User>): Promise<User | undefined>;
   updateUserStripeInfo(id: number, stripeInfo: { customerId: string }): Promise<User | undefined>;
@@ -270,6 +271,12 @@ export class MemStorage implements IStorage {
       (user) => user.email === email
     );
   }
+  
+  async getUserByFirebaseId(firebaseUid: string): Promise<User | undefined> {
+    return Array.from(this.users.values()).find(
+      (user) => user.firebaseUid === firebaseUid
+    );
+  }
 
   async createUser(userData: InsertUser): Promise<User> {
     const id = this.currentUserId++;
@@ -281,7 +288,9 @@ export class MemStorage implements IStorage {
       wishlistItems: [],
       stripeCustomerId: null,
       twoFactorSecret: null,
-      twoFactorEnabled: false
+      twoFactorEnabled: false,
+      firebaseUid: userData.firebaseUid || null,
+      photoURL: userData.photoURL || null
     };
     this.users.set(id, user);
     return user;

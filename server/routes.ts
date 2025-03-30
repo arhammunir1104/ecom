@@ -41,12 +41,49 @@ const isAuthenticated = (req: Request, res: Response, next: Function) => {
     userId = req.body.userId;
   }
   
+  // 4. Check for Firebase UID in the request body or headers
+  if (!userId) {
+    if (req.body && req.body.uid) {
+      userId = req.body.uid;
+    } else if (req.headers["firebase-uid"]) {
+      userId = req.headers["firebase-uid"];
+    }
+  }
+  
+  // If still no user ID found, return 401
   if (!userId) {
     return res.status(401).json({ message: "Unauthorized - No user ID found" });
   }
   
-  req.user = { id: Number(userId) };
-  next();
+  // Convert string userId to number if needed
+  const numericUserId = /^\d+$/.test(userId.toString()) ? Number(userId) : null;
+  
+  // If a numeric user ID (from DB), use it directly
+  if (numericUserId) {
+    req.user = { id: numericUserId };
+    next();
+    return;
+  }
+  
+  // Handle Firebase authentication - find or create a user record
+  (async () => {
+    try {
+      // Try to find user by Firebase UID first
+      const foundUser = await storage.getUserByFirebaseId(userId.toString());
+      
+      if (foundUser) {
+        req.user = { id: foundUser.id, firebaseUid: userId.toString() };
+        next();
+        return;
+      }
+      
+      // If we're here, no user was found - return error
+      res.status(401).json({ message: "User not found in our system" });
+    } catch (error) {
+      console.error("Error in isAuthenticated middleware:", error);
+      res.status(500).json({ message: "Server error in authentication" });
+    }
+  })();
 };
 
 // Middleware for checking if user is an admin
@@ -262,14 +299,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Google authentication endpoint
   app.post("/api/auth/google", async (req, res) => {
     try {
-      const { displayName, email, uid } = req.body;
+      const { displayName, email, uid, photoURL } = req.body;
       
       if (!email) {
         return res.status(400).json({ message: "Email is required" });
       }
       
-      // Check if user already exists
-      let user = await storage.getUserByEmail(email);
+      if (!uid) {
+        return res.status(400).json({ message: "Firebase UID is required" });
+      }
+      
+      // First check if user exists by Firebase UID
+      let user = await storage.getUserByFirebaseId(uid);
+      
+      // If no user found by Firebase UID, check by email
+      if (!user) {
+        user = await storage.getUserByEmail(email);
+      }
       
       if (!user) {
         // Create a new user if they don't exist
@@ -279,18 +325,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
           email: email,
           password: `google_${uid}`,  // Use a placeholder password as it won't be used
           fullName: displayName,
-          role: "user"
+          role: "user",
+          firebaseUid: uid,
+          photoURL: photoURL
         });
         
         console.log(`Created new user from Google login: ${username} (${email})`);
-      } else {
-        console.log(`Existing user logged in with Google: ${user.username} (${email})`);
+      } else if (!user.firebaseUid) {
+        // If user exists but doesn't have Firebase UID, update it
+        user = await storage.updateUser(user.id, { 
+          firebaseUid: uid,
+          photoURL: photoURL
+        });
+        
+        if (user) {
+          console.log(`Updated existing user with Firebase UID: ${user.username} (${email})`);
+        }
       }
       
       // Don't send the password in the response
-      const { password, ...userWithoutPassword } = user;
-      
-      res.json(userWithoutPassword);
+      if (user) {
+        const { password, ...userWithoutPassword } = user;
+        res.json(userWithoutPassword);
+      } else {
+        res.status(500).json({ message: "Failed to retrieve user data" });
+      }
     } catch (error) {
       console.error("Google auth error:", error);
       res.status(500).json({ message: "Error authenticating with Google" });
