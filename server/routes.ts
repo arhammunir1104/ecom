@@ -20,7 +20,10 @@ declare global {
 }
 
 // Initialize Stripe
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "sk_test_placeholder", {
+if (!process.env.STRIPE_SECRET_KEY) {
+  console.error("⚠️ STRIPE_SECRET_KEY is not set. Please set it in your secrets/environment variables.");
+}
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "", {
   apiVersion: "2023-10-16" as any,
 });
 
@@ -917,19 +920,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Log the request to help with debugging
       console.log(`Creating payment intent for amount: $${amount}`);
       
-      // Create a payment intent
-      const paymentIntent = await stripe.paymentIntents.create({
-        amount: Math.round(amount * 100), // Convert to cents
-        currency: "usd",
-      });
+      if (!process.env.STRIPE_SECRET_KEY) {
+        console.error("⚠️ STRIPE_SECRET_KEY is not set. Payment intent creation will fail.");
+        return res.status(500).json({ message: "Stripe API key is not configured" });
+      }
       
-      // Log success
-      console.log("Payment intent created successfully:", paymentIntent.id);
-      
-      res.json({ 
-        clientSecret: paymentIntent.client_secret,
-        paymentIntentId: paymentIntent.id
-      });
+      try {
+        // Create a payment intent
+        const paymentIntent = await stripe.paymentIntents.create({
+          amount: Math.round(amount * 100), // Convert to cents
+          currency: "usd",
+          payment_method_types: ['card'],
+          metadata: {
+            integration_check: 'accept_a_payment',
+          },
+        });
+        
+        // Log success
+        console.log("Payment intent created successfully:", paymentIntent.id);
+        console.log("Client secret available:", !!paymentIntent.client_secret);
+        
+        res.json({ 
+          clientSecret: paymentIntent.client_secret,
+          paymentIntentId: paymentIntent.id
+        });
+      } catch (stripeError: any) {
+        console.error("Stripe API error:", stripeError);
+        return res.status(400).json({ 
+          message: stripeError.message || "Error creating payment with Stripe",
+          code: stripeError.code || "stripe_error"
+        });
+      }
     } catch (error: any) {
       console.error("Create payment intent error:", error);
       res.status(500).json({ message: error.message || "Error creating payment intent" });

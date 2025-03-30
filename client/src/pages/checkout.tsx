@@ -13,7 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { apiRequest } from "@/lib/queryClient";
 import { Product } from "@shared/schema";
-import { Check, ChevronLeft, CreditCard, LockIcon, MapPin, Truck } from "lucide-react";
+import { Check, ChevronLeft, CreditCard, Loader2, LockIcon, MapPin, Truck } from "lucide-react";
 
 // Initialize Stripe - using a default key if environment variable is not available
 const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLIC_KEY);
@@ -185,6 +185,19 @@ const Checkout = () => {
                       setAddress={setAddress}
                       onContinue={handleProceedToPayment}
                     />
+                    
+                    {/* Fallback button in case form button isn't working */}
+                    <div className="flex justify-end mt-6">
+                      <Button 
+                        type="button" 
+                        className="bg-purple text-white font-medium px-6 py-3 text-lg"
+                        onClick={handleProceedToPayment}
+                        size="lg"
+                      >
+                        <CreditCard className="mr-2 h-5 w-5" />
+                        Proceed to Payment
+                      </Button>
+                    </div>
                   </TabsContent>
                   
                   <TabsContent value="payment">
@@ -196,6 +209,20 @@ const Checkout = () => {
                           onPaymentSuccess={handlePaymentSuccess}
                         />
                       </Elements>
+                    )}
+                    {!clientSecret && (
+                      <div className="p-6 text-center">
+                        <div className="animate-spin h-8 w-8 border-4 border-purple border-t-transparent rounded-full mx-auto mb-4" />
+                        <p>Preparing payment form...</p>
+                        <Button 
+                          type="button" 
+                          className="bg-purple text-white font-medium px-6 py-3 text-lg mt-4"
+                          onClick={handleProceedToPayment}
+                        >
+                          <CreditCard className="mr-2 h-5 w-5" />
+                          Retry Payment Setup
+                        </Button>
+                      </div>
                     )}
                   </TabsContent>
                   
@@ -279,6 +306,18 @@ const Checkout = () => {
                 <LockIcon className="h-3 w-3 mr-1" />
                 Secure Checkout
               </div>
+              
+              {activeTab === "shipping" && (
+                <Button 
+                  type="button" 
+                  onClick={handleProceedToPayment}
+                  className="w-full bg-purple hover:bg-pink-300 text-white font-bold py-3 mt-4 flex items-center justify-center"
+                  size="lg"
+                >
+                  <CreditCard className="mr-2 h-5 w-5" />
+                  Complete Your Order
+                </Button>
+              )}
             </CardContent>
           </Card>
           
