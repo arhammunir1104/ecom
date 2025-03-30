@@ -26,64 +26,114 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "sk_test_placeholder"
 
 // Middleware for checking if user is authenticated
 const isAuthenticated = (req: Request, res: Response, next: Function) => {
+  console.log("isAuthenticated middleware called for path:", req.path);
+  console.log("Headers:", req.headers);
+  console.log("Body:", req.body);
+  
   // Check for the user ID in various places
   
   // 1. Check headers first (for API calls that set it directly)
   let userId = req.headers["user-id"];
+  let firebaseUid = null;
   
   // 2. Check for the X-User-ID header that our frontend can set
   if (!userId && req.headers["x-user-id"]) {
     userId = req.headers["x-user-id"];
   }
   
-  // 3. Check if a user object was sent in the request body (for client-side auth)
+  // 3. Get Firebase UID from header (capitalization doesn't matter for headers)
+  if (req.headers["firebase-uid"]) {
+    firebaseUid = req.headers["firebase-uid"];
+    console.log("Found Firebase UID in header:", firebaseUid);
+  }
+  
+  // 4. Check if a user object was sent in the request body (for client-side auth)
   if (!userId && req.body && req.body.userId) {
     userId = req.body.userId;
   }
   
-  // 4. Check for Firebase UID in the request body or headers
-  if (!userId) {
-    if (req.body && req.body.uid) {
-      userId = req.body.uid;
-    } else if (req.headers["firebase-uid"]) {
-      userId = req.headers["firebase-uid"];
-    }
+  // 5. Check for Firebase UID in the request body
+  if (!firebaseUid && req.body && req.body.uid) {
+    firebaseUid = req.body.uid;
+    console.log("Found Firebase UID in body:", firebaseUid);
   }
   
-  // If still no user ID found, return 401
-  if (!userId) {
-    return res.status(401).json({ message: "Unauthorized - No user ID found" });
-  }
+  console.log("Resolved userId:", userId);
+  console.log("Resolved firebaseUid:", firebaseUid);
   
-  // Convert string userId to number if needed
-  const numericUserId = /^\d+$/.test(userId.toString()) ? Number(userId) : null;
-  
-  // If a numeric user ID (from DB), use it directly
-  if (numericUserId) {
-    req.user = { id: numericUserId };
-    next();
+  // Try to authenticate with Firebase UID first if available
+  if (firebaseUid) {
+    (async () => {
+      try {
+        // Try to find user by Firebase UID
+        const foundUser = await storage.getUserByFirebaseId(firebaseUid.toString());
+        
+        if (foundUser) {
+          console.log("Found user by Firebase UID:", foundUser.id);
+          req.user = { id: foundUser.id, firebaseUid: firebaseUid.toString() };
+          next();
+          return;
+        } else {
+          console.log("No user found with Firebase UID:", firebaseUid);
+        }
+      } catch (error) {
+        console.error("Error finding user by Firebase UID:", error);
+      }
+      
+      // If we get here and we also have a userId, try that next
+      if (userId) {
+        proceedWithUserIdAuthentication();
+      } else {
+        // If no userId either, return 401
+        res.status(401).json({ message: "User not found with Firebase UID and no userId provided" });
+      }
+    })();
     return;
   }
   
-  // Handle Firebase authentication - find or create a user record
-  (async () => {
-    try {
-      // Try to find user by Firebase UID first
-      const foundUser = await storage.getUserByFirebaseId(userId.toString());
-      
-      if (foundUser) {
-        req.user = { id: foundUser.id, firebaseUid: userId.toString() };
-        next();
-        return;
-      }
-      
-      // If we're here, no user was found - return error
-      res.status(401).json({ message: "User not found in our system" });
-    } catch (error) {
-      console.error("Error in isAuthenticated middleware:", error);
-      res.status(500).json({ message: "Server error in authentication" });
+  // If we only have userId, proceed with that
+  if (userId) {
+    proceedWithUserIdAuthentication();
+    return;
+  }
+  
+  // If we have neither, return 401
+  return res.status(401).json({ message: "Unauthorized - No user ID or Firebase UID found" });
+  
+  // Helper function to authenticate with userId
+  function proceedWithUserIdAuthentication() {
+    // Convert string userId to number if needed
+    const numericUserId = /^\d+$/.test(userId.toString()) ? Number(userId) : null;
+    
+    if (numericUserId) {
+      console.log("Using numeric user ID:", numericUserId);
+      req.user = { id: numericUserId };
+      next();
+      return;
     }
-  })();
+    
+    // If userId is not numeric, it might be Firebase UID
+    (async () => {
+      try {
+        // Try to find user by Firebase UID
+        const foundUser = await storage.getUserByFirebaseId(userId.toString());
+        
+        if (foundUser) {
+          console.log("Found user by treating userId as Firebase UID:", foundUser.id);
+          req.user = { id: foundUser.id, firebaseUid: userId.toString() };
+          next();
+          return;
+        }
+        
+        // If we're here, no user was found - return error
+        console.log("No user found with ID:", userId);
+        res.status(401).json({ message: "User not found in our system" });
+      } catch (error) {
+        console.error("Error in isAuthenticated middleware:", error);
+        res.status(500).json({ message: "Server error in authentication" });
+      }
+    })();
+  }
 };
 
 // Middleware for checking if user is an admin
@@ -964,12 +1014,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Two-factor authentication routes
   app.post("/api/auth/2fa/setup", isAuthenticated, async (req, res) => {
     try {
+      // Log headers for debugging
+      console.log("2FA setup request headers:", req.headers);
+      console.log("2FA setup request body:", req.body);
+      
       if (!req.user?.id) {
-        return res.status(401).json({ message: "Unauthorized" });
+        return res.status(401).json({ message: "Unauthorized - No user ID" });
       }
+      
       const user = await storage.getUser(req.user.id);
       if (!user) {
-        return res.status(404).json({ message: "User not found" });
+        return res.status(404).json({ message: "User not found with ID: " + req.user.id });
       }
 
       // Generate a new OTP and send it via email
@@ -1003,8 +1058,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/auth/2fa/verify", isAuthenticated, async (req, res) => {
     try {
+      // Log headers for debugging
+      console.log("2FA verify request headers:", req.headers);
+      console.log("2FA verify request body:", req.body);
+      
       if (!req.user?.id) {
-        return res.status(401).json({ message: "Unauthorized" });
+        return res.status(401).json({ message: "Unauthorized - No user ID" });
       }
 
       const validation = twoFactorVerifySchema.safeParse(req.body);
@@ -1040,8 +1099,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/auth/2fa/disable", isAuthenticated, async (req, res) => {
     try {
+      // Log headers for debugging
+      console.log("2FA disable request headers:", req.headers);
+      console.log("2FA disable request body:", req.body);
+      
       if (!req.user?.id) {
-        return res.status(401).json({ message: "Unauthorized" });
+        return res.status(401).json({ message: "Unauthorized - No user ID" });
       }
       const user = await storage.getUser(req.user.id);
       
@@ -1064,8 +1127,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/auth/2fa/resend", isAuthenticated, async (req, res) => {
     try {
+      // Log headers for debugging
+      console.log("2FA resend request headers:", req.headers);
+      console.log("2FA resend request body:", req.body);
+      
       if (!req.user?.id) {
-        return res.status(401).json({ message: "Unauthorized" });
+        return res.status(401).json({ message: "Unauthorized - No user ID" });
       }
       const user = await storage.getUser(req.user.id);
       
@@ -1095,6 +1162,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/auth/2fa/validate", async (req, res) => {
     try {
+      // Log headers for debugging
+      console.log("2FA validate request headers:", req.headers);
+      console.log("2FA validate request body:", req.body);
+      
       const { email, token } = req.body;
       
       if (!email || !token) {

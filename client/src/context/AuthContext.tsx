@@ -406,14 +406,26 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         throw new Error("Authentication session expired");
       }
       
+      console.log("Setting up 2FA for user:", currentUser.uid);
+      
       // Call our backend to set up 2FA and send verification code
-      const res = await apiRequest("POST", "/api/auth/2fa/setup", {
-        uid: currentUser.uid,
-        email: currentUser.email
+      const res = await fetch("/api/auth/2fa/setup", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Firebase-UID": currentUser.uid // Add Firebase UID directly in header
+        },
+        body: JSON.stringify({
+          uid: currentUser.uid,
+          email: currentUser.email
+        }),
+        credentials: "include"
       });
       
       if (!res.ok) {
-        throw new Error("Failed to set up two-factor authentication");
+        const errorData = await res.json();
+        console.error("2FA setup error:", errorData);
+        throw new Error(errorData.message || "Failed to set up two-factor authentication");
       }
       
       const data = await res.json();
@@ -453,14 +465,26 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         throw new Error("Authentication session expired");
       }
       
+      console.log("Verifying 2FA setup for user:", currentUser.uid);
+      
       // Verify the token with our backend
-      const res = await apiRequest("POST", "/api/auth/2fa/verify", { 
-        token,
-        uid: currentUser.uid 
+      const res = await fetch("/api/auth/2fa/verify", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Firebase-UID": currentUser.uid // Add Firebase UID directly in header
+        },
+        body: JSON.stringify({ 
+          token,
+          uid: currentUser.uid 
+        }),
+        credentials: "include"
       });
       
       if (!res.ok) {
-        throw new Error("Invalid verification code");
+        const errorData = await res.json();
+        console.error("2FA verification error:", errorData);
+        throw new Error(errorData.message || "Invalid verification code");
       }
       
       const data = await res.json();
@@ -506,13 +530,24 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         throw new Error("Authentication session expired");
       }
       
+      console.log("Disabling 2FA for user:", currentUser.uid);
+      
       // Call our backend to disable 2FA (for any server-side cleanup needed)
-      const res = await apiRequest("POST", "/api/auth/2fa/disable", {
-        uid: currentUser.uid
+      const res = await fetch("/api/auth/2fa/disable", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Firebase-UID": currentUser.uid // Add Firebase UID directly in header
+        },
+        body: JSON.stringify({
+          uid: currentUser.uid
+        }),
+        credentials: "include"
       });
       
       if (!res.ok) {
         const errorData = await res.json();
+        console.error("2FA disable error:", errorData);
         throw new Error(errorData.message || "Failed to disable two-factor authentication");
       }
       
@@ -553,14 +588,25 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         throw new Error("Authentication session expired");
       }
       
+      console.log("Resending 2FA code for user:", currentUser.uid);
+      
       // Call our backend to send a new verification code
-      const res = await apiRequest("POST", "/api/auth/2fa/resend", {
-        uid: currentUser.uid,
-        email: currentUser.email
+      const res = await fetch("/api/auth/2fa/resend", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Firebase-UID": currentUser.uid // Add Firebase UID directly in header
+        },
+        body: JSON.stringify({
+          uid: currentUser.uid,
+          email: currentUser.email
+        }),
+        credentials: "include"
       });
       
       if (!res.ok) {
         const errorData = await res.json();
+        console.error("2FA resend error:", errorData);
         throw new Error(errorData.message || "Failed to resend verification code");
       }
       

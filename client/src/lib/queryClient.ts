@@ -46,6 +46,11 @@ export async function apiRequest(
       if (userData && userData.id) {
         headers["X-User-ID"] = userData.id.toString();
       }
+      // Add Firebase UID if available
+      if (userData && userData.uid) {
+        headers["Firebase-UID"] = userData.uid;
+        console.log("Added Firebase UID to request header:", userData.uid);
+      }
     } catch (e) {
       console.error("Error parsing user data from localStorage:", e);
     }
@@ -78,6 +83,11 @@ export const getQueryFn: <T>(options: {
         const userData = JSON.parse(storedUser);
         if (userData && userData.id) {
           headers["X-User-ID"] = userData.id.toString();
+        }
+        // Add Firebase UID if available
+        if (userData && userData.uid) {
+          headers["Firebase-UID"] = userData.uid;
+          console.log("Added Firebase UID to query header:", userData.uid);
         }
       } catch (e) {
         console.error("Error parsing user data from localStorage:", e);
