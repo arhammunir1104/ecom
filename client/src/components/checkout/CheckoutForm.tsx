@@ -81,12 +81,27 @@ const ShippingForm = ({ address, setAddress, onContinue }: ShippingFormProps) =>
     try {
       console.log("Form submitted with data:", data);
       
-      // Update the address state in the parent component
+      // Ensure all required fields are present before continuing
+      if (!data.fullName || !data.address || !data.city || !data.postalCode || !data.phone) {
+        const missingFields = [];
+        if (!data.fullName) missingFields.push("fullName");
+        if (!data.address) missingFields.push("address");
+        if (!data.city) missingFields.push("city");
+        if (!data.postalCode) missingFields.push("postalCode");
+        if (!data.phone) missingFields.push("phone");
+        
+        console.error("Missing required shipping fields:", missingFields);
+        return;
+      }
+      
+      // Update the address state in the parent component first
       setAddress(data);
       
-      // No need for artificial delay - proceed directly
-      // Proceed to payment implementation in the checkout page
-      onContinue();
+      // Then proceed to payment after state is updated
+      setTimeout(() => {
+        // Proceed to payment implementation in the checkout page
+        onContinue();
+      }, 100);
     } catch (error) {
       console.error("Error validating address:", error);
     } finally {
@@ -311,99 +326,11 @@ const PaymentForm = ({ address, amount, onPaymentSuccess }: PaymentFormProps) =>
           description: error.message || "An error occurred while processing payment",
           variant: "destructive",
         });
-      } else {
-        // Create order in database and Firestore
-        try {
-          // Get items from local cart
-          const cart = JSON.parse(localStorage.getItem('cart') || '{}');
-          const cartItems = Object.entries(cart).map(([productId, quantity]) => ({
-            productId: Number(productId),
-            quantity: Number(quantity)
-          }));
-          
-          // Create order
-          const orderData = {
-            items: cartItems,
-            totalAmount: amount,
-            status: "paid",
-            paymentStatus: "completed",
-            paymentIntent: paymentIntent?.id,
-            shippingAddress: {
-              fullName: address.fullName,
-              address: address.address,
-              city: address.city,
-              state: address.state,
-              postalCode: address.postalCode,
-              country: address.country,
-              phone: address.phone
-            }
-          };
-          
-          // Step 1: Create order in our server database
-          const response = await apiRequest("POST", "/api/orders", orderData);
-          
-          if (!response.ok) {
-            console.error('Failed to create order:', await response.text());
-          } else {
-            // Get current Firebase user ID
-            const auth = window.localStorage.getItem('firebaseUid');
-            if (auth) {
-              try {
-                // Import Firebase services
-                const { doc, setDoc, collection, serverTimestamp } = await import('firebase/firestore');
-                const { db } = await import('@/lib/firebase');
-
-                // Create an orders collection reference
-                const ordersRef = collection(db, 'users', auth, 'orders');
-                
-                // Create a new document with a generated ID
-                const orderDoc = doc(ordersRef);
-                
-                // Add the order to Firestore
-                await setDoc(orderDoc, {
-                  ...orderData,
-                  id: orderDoc.id,
-                  userId: auth,
-                  createdAt: serverTimestamp(),
-                  items: (await Promise.all(cartItems.map(async item => {
-                    // Get product details from API for display in order history
-                    try {
-                      const response = await fetch(`/api/products/${item.productId}`);
-                      if (response.ok) {
-                        const product = await response.json();
-                        return {
-                          productId: String(item.productId),
-                          quantity: Number(item.quantity),
-                          name: product.name,
-                          price: product.discountPrice || product.price,
-                          image: Array.isArray(product.images) && product.images.length > 0 ? 
-                            product.images[0] : null
-                        };
-                      }
-                    } catch (error) {
-                      console.error('Error getting product details:', error);
-                    }
-                    
-                    // Fallback if product details can't be fetched
-                    return {
-                      productId: String(item.productId),
-                      quantity: Number(item.quantity)
-                    };
-                  })))
-                });
-                
-                console.log('Order saved to Firestore successfully:', orderDoc.id);
-              } catch (firestoreError) {
-                console.error('Error saving order to Firestore:', firestoreError);
-                // This is non-critical, so we continue
-              }
-            }
-          }
-        } catch (orderError) {
-          console.error('Error creating order:', orderError);
-        }
+      } else if (paymentIntent) {
+        // Payment was successful, save the order
+        await saveOrderData(paymentIntent);
         
-        // Payment successful
+        // Show success message
         toast({
           title: "Payment Successful",
           description: "Your order has been placed successfully",
@@ -423,6 +350,108 @@ const PaymentForm = ({ address, amount, onPaymentSuccess }: PaymentFormProps) =>
       });
     } finally {
       setIsProcessing(false);
+    }
+  };
+  
+  // Save order data to API and Firestore
+  const saveOrderData = async (paymentIntent: any) => {
+    try {
+      // Get items from local cart
+      const cart = JSON.parse(localStorage.getItem('cart') || '{}');
+      const cartItems = Object.entries(cart).map(([productId, quantity]) => ({
+        productId: Number(productId),
+        quantity: Number(quantity)
+      }));
+      
+      // Create order data object
+      const orderData = {
+        items: cartItems,
+        totalAmount: amount,
+        status: "processing",
+        paymentStatus: "completed",
+        paymentIntent: paymentIntent.id,
+        shippingAddress: {
+          fullName: address.fullName,
+          address: address.address,
+          city: address.city,
+          state: address.state,
+          postalCode: address.postalCode,
+          country: address.country,
+          phone: address.phone
+        }
+      };
+      
+      // First try to save to the API for backward compatibility
+      try {
+        const apiResponse = await apiRequest("POST", "/api/orders", orderData);
+        if (!apiResponse.ok) {
+          console.error('Failed to create order in API:', await apiResponse.text());
+        }
+      } catch (apiError) {
+        console.error('Error creating order in API:', apiError);
+        // We continue even if the API save fails
+      }
+      
+      // Try to save to Firestore for authenticated users
+      const firebaseUid = localStorage.getItem('firebaseUid');
+      if (firebaseUid) {
+        try {
+          // Import Firebase services
+          const { doc, setDoc, collection, serverTimestamp, getDoc } = await import('firebase/firestore');
+          const { db } = await import('@/lib/firebase');
+          
+          // Create an orders collection reference and a new document
+          const ordersRef = collection(db, 'users', firebaseUid, 'orders');
+          const orderDoc = doc(ordersRef);
+          
+          // Get product details for better order display
+          const orderItemsWithDetails = await Promise.all(
+            cartItems.map(async (item) => {
+              try {
+                // Try to get product details from the API
+                const response = await fetch(`/api/products/${item.productId}`);
+                if (response.ok) {
+                  const product = await response.json();
+                  return {
+                    productId: String(item.productId),
+                    quantity: Number(item.quantity),
+                    name: product.name,
+                    price: product.discountPrice || product.price,
+                    image: Array.isArray(product.images) && product.images.length > 0 ? 
+                      product.images[0] : null
+                  };
+                }
+              } catch (error) {
+                console.error('Error getting product details:', error);
+              }
+              
+              // Fallback with minimal data if needed
+              return {
+                productId: String(item.productId),
+                quantity: Number(item.quantity)
+              };
+            })
+          );
+          
+          // Prepare complete order data for Firestore
+          const firestoreOrderData = {
+            ...orderData,
+            id: orderDoc.id,
+            userId: firebaseUid,
+            createdAt: serverTimestamp(),
+            items: orderItemsWithDetails,
+            trackingNumber: null
+          };
+          
+          // Save to Firestore
+          await setDoc(orderDoc, firestoreOrderData);
+          console.log('Order saved to Firestore successfully:', orderDoc.id);
+        } catch (firestoreError) {
+          console.error('Error saving order to Firestore:', firestoreError);
+        }
+      }
+    } catch (err) {
+      console.error('Error saving order data:', err);
     }
   };
   
