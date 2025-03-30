@@ -160,10 +160,10 @@ const Orders = () => {
                         </p>
                       </div>
                       <div className="flex items-center gap-2">
-                        <Badge className={getStatusColor(order.status)}>
+                        <Badge className={getStatusColor(order.status || 'processing')}>
                           <span className="flex items-center gap-1">
-                            {getStatusIcon(order.status)}
-                            {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
+                            {getStatusIcon(order.status || 'processing')}
+                            {(order.status || 'processing').charAt(0).toUpperCase() + (order.status || 'processing').slice(1)}
                           </span>
                         </Badge>
                         <Button variant="outline" size="sm">
@@ -192,12 +192,12 @@ const Orders = () => {
                               <div>
                                 <p className="font-medium">{item.name}</p>
                                 <p className="text-sm text-gray-500">
-                                  Qty: {item.quantity} x ${item.price.toFixed(2)}
+                                  Qty: {item.quantity} x ${item.price ? item.price.toFixed(2) : '0.00'}
                                 </p>
                               </div>
                             </div>
                             <p className="font-medium">
-                              ${(item.quantity * item.price).toFixed(2)}
+                              ${(item.quantity * (item.price || 0)).toFixed(2)}
                             </p>
                           </div>
                         ))}
@@ -208,11 +208,11 @@ const Orders = () => {
                       {/* Order totals */}
                       <div className="flex justify-between font-medium">
                         <span>Total</span>
-                        <span className="text-purple">${order.totalAmount.toFixed(2)}</span>
+                        <span className="text-purple">${(order.totalAmount || 0).toFixed(2)}</span>
                       </div>
                       
                       {/* Tracking details */}
-                      {order.status === "shipped" && order.trackingNumber && (
+                      {(order.status === "shipped" || order.status === "delivered") && order.trackingNumber && (
                         <div className="mt-4 p-3 bg-blue-50 rounded-md">
                           <div className="flex items-center gap-2">
                             <Truck className="h-4 w-4 text-blue-500" />
