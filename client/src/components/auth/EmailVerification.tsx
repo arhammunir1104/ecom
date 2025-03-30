@@ -48,6 +48,9 @@ export default function EmailVerification({ email, onSuccess, onCancel, userData
           
           console.log("User created in Firebase Auth with UID:", firebaseUID);
           
+          // Store the Firebase UID in localStorage for immediate reference across components
+          localStorage.setItem('firebaseUid', firebaseUID);
+          
           // Update the user's display name in Firebase Auth
           await updateProfile(userCredential.user, {
             displayName: userData.username

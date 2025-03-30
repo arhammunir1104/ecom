@@ -230,26 +230,8 @@ const ShippingForm = ({ address, setAddress, onContinue }: ShippingFormProps) =>
           />
         </div>
         
-        <div className="flex justify-end mt-6">
-          <Button 
-            type="submit" 
-            className="bg-purple text-white font-medium px-6 py-3 text-lg"
-            disabled={isLoading}
-            size="lg"
-          >
-            {isLoading ? (
-              <>
-                <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                Processing...
-              </>
-            ) : (
-              <>
-                <CreditCard className="mr-2 h-5 w-5" />
-                Proceed to Payment
-              </>
-            )}
-          </Button>
-        </div>
+        {/* Button is hidden - we use the one in the sidebar */}
+        <input type="submit" hidden />
       </form>
     </Form>
   );
@@ -322,7 +304,7 @@ const PaymentForm = ({ address, amount, onPaymentSuccess }: PaymentFormProps) =>
           variant: "destructive",
         });
       } else {
-        // Create order in database
+        // Create order in database and Firestore
         try {
           // Get items from local cart
           const cart = JSON.parse(localStorage.getItem('cart') || '{}');
@@ -349,10 +331,44 @@ const PaymentForm = ({ address, amount, onPaymentSuccess }: PaymentFormProps) =>
             }
           };
           
+          // Step 1: Create order in our server database
           const response = await apiRequest("POST", "/api/orders", orderData);
           
           if (!response.ok) {
             console.error('Failed to create order:', await response.text());
+          } else {
+            // Get current Firebase user ID
+            const auth = window.localStorage.getItem('firebaseUid');
+            if (auth) {
+              try {
+                // Import Firebase services
+                const { doc, setDoc, collection, serverTimestamp } = await import('firebase/firestore');
+                const { db } = await import('@/lib/firebase');
+
+                // Create an orders collection reference
+                const ordersRef = collection(db, 'users', auth, 'orders');
+                
+                // Create a new document with a generated ID
+                const orderDoc = doc(ordersRef);
+                
+                // Add the order to Firestore
+                await setDoc(orderDoc, {
+                  ...orderData,
+                  id: orderDoc.id,
+                  userId: auth,
+                  createdAt: serverTimestamp(),
+                  items: cartItems.map(item => ({
+                    productId: String(item.productId),
+                    quantity: Number(item.quantity)
+                  }))
+                });
+                
+                console.log('Order saved to Firestore successfully:', orderDoc.id);
+              } catch (firestoreError) {
+                console.error('Error saving order to Firestore:', firestoreError);
+                // This is non-critical, so we continue
+              }
+            }
           }
         } catch (orderError) {
           console.error('Error creating order:', orderError);

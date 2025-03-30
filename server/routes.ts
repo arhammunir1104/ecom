@@ -105,6 +105,12 @@ const isAuthenticated = (req: Request, res: Response, next: Function) => {
   
   // Helper function to authenticate with userId
   function proceedWithUserIdAuthentication() {
+    // Make sure userId is defined
+    if (!userId) {
+      console.error("User ID is undefined in authentication");
+      return res.status(401).json({ message: "Unauthorized - No user ID provided" });
+    }
+
     // Convert string userId to number if needed
     const numericUserId = /^\d+$/.test(userId.toString()) ? Number(userId) : null;
     
@@ -289,19 +295,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       if (existingUser) {
         // If they already exist but we have a Firebase UID, update their record
-        if (firebaseUid && !existingUser.firebaseUid) {
-          existingUser = await storage.updateUser(existingUser.id, { firebaseUid });
-          console.log(`Updated existing user ${existingUser.id} with Firebase UID ${firebaseUid}`);
+        if (firebaseUid && existingUser && !existingUser.firebaseUid) {
+          const updatedUser = await storage.updateUser(existingUser.id, { firebaseUid });
           
-          return res.status(200).json({ 
-            id: existingUser.id,
-            username: existingUser.username,
-            email: existingUser.email,
-            fullName: existingUser.fullName,
-            role: existingUser.role,
-            twoFactorEnabled: existingUser.twoFactorEnabled || false,
-            message: "Email verified and account updated with Firebase authentication."
-          });
+          if (updatedUser) {
+            console.log(`Updated existing user ${updatedUser.id} with Firebase UID ${firebaseUid}`);
+            
+            return res.status(200).json({ 
+              id: updatedUser.id,
+              username: updatedUser.username,
+              email: updatedUser.email,
+              fullName: updatedUser.fullName,
+              role: updatedUser.role,
+              twoFactorEnabled: updatedUser.twoFactorEnabled || false,
+              message: "Email verified and account updated with Firebase authentication."
+            });
+          }
         }
         
         return res.status(409).json({ 

@@ -79,7 +79,9 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
             };
             
             setUser(authUser);
+            // Store both complete user object and firebaseUid separately for easier access
             localStorage.setItem('user', JSON.stringify(authUser));
+            localStorage.setItem('firebaseUid', authUser.uid);
             console.log("User authenticated from Firestore:", authUser.username);
           } else {
             console.log("No Firestore profile found for user:", firebaseUser.uid);
@@ -310,6 +312,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       
       setUser(authUser);
       localStorage.setItem('user', JSON.stringify(authUser));
+      localStorage.setItem('firebaseUid', authUser.uid);
       
       // Invalidate queries that depend on authentication
       queryClient.invalidateQueries({ queryKey: ["/api/profile"] });
@@ -368,6 +371,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       
       setUser(authUser);
       localStorage.setItem('user', JSON.stringify(authUser));
+      localStorage.setItem('firebaseUid', authUser.uid);
       
       toast({
         title: "Signup Successful",
@@ -417,6 +421,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       // Clear local user state
       setUser(null);
       localStorage.removeItem('user');
+      localStorage.removeItem('firebaseUid');
       
       // Clear any user-specific queries
       queryClient.invalidateQueries();
@@ -471,6 +476,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       
       setUser(authUser);
       localStorage.setItem('user', JSON.stringify(authUser));
+      localStorage.setItem('firebaseUid', authUser.uid);
       
       // Invalidate queries that depend on authentication
       queryClient.invalidateQueries({ queryKey: ["/api/profile"] });
@@ -596,6 +602,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       const updatedUser = { ...user, twoFactorEnabled: true };
       setUser(updatedUser);
       localStorage.setItem('user', JSON.stringify(updatedUser));
+      localStorage.setItem('firebaseUid', updatedUser.uid);
       
       toast({
         title: "2FA Enabled",
@@ -654,6 +661,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       const updatedUser = { ...user, twoFactorEnabled: false };
       setUser(updatedUser);
       localStorage.setItem('user', JSON.stringify(updatedUser));
+      localStorage.setItem('firebaseUid', updatedUser.uid);
       
       toast({
         title: "2FA Disabled",
