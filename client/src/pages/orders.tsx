@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { Order } from "@shared/schema";
@@ -11,14 +11,59 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Download, Truck, CheckCircle, Clock, AlertTriangle } from "lucide-react";
 import { format } from "date-fns";
 
+// Firebase imports
+import { collection, getDocs, query, orderBy } from "firebase/firestore";
+import { db } from "@/lib/firebase";
+
 const Orders = () => {
   const { user, isAuthenticated } = useAuth();
   const [activeTab, setActiveTab] = useState("all");
+  const [firestoreOrders, setFirestoreOrders] = useState<any[]>([]);
+  const [isFirestoreLoading, setIsFirestoreLoading] = useState(true);
   
-  const { data: orders, isLoading } = useQuery<Order[]>({
+  // Fetch from API (kept for backward compatibility)
+  const { data: apiOrders, isLoading: isApiLoading } = useQuery<Order[]>({
     queryKey: ["/api/orders"],
     enabled: isAuthenticated,
   });
+  
+  // Fetch orders from Firestore
+  useEffect(() => {
+    async function fetchOrders() {
+      try {
+        setIsFirestoreLoading(true);
+        const uid = window.localStorage.getItem('firebaseUid');
+        
+        if (uid) {
+          const ordersRef = collection(db, 'users', uid, 'orders');
+          const q = query(ordersRef, orderBy('createdAt', 'desc'));
+          const querySnapshot = await getDocs(q);
+          
+          const orders = querySnapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data(),
+            // Convert Firestore Timestamp to Date
+            createdAt: doc.data().createdAt?.toDate() || new Date(),
+          }));
+          
+          setFirestoreOrders(orders);
+          console.log('Fetched orders from Firestore:', orders);
+        }
+      } catch (error) {
+        console.error('Error fetching orders from Firestore:', error);
+      } finally {
+        setIsFirestoreLoading(false);
+      }
+    }
+    
+    if (isAuthenticated) {
+      fetchOrders();
+    }
+  }, [isAuthenticated]);
+  
+  // Combine orders from both sources, prioritizing Firestore orders
+  const orders = firestoreOrders.length > 0 ? firestoreOrders : apiOrders;
+  const isLoading = isApiLoading && isFirestoreLoading;
   
   const getStatusIcon = (status: string) => {
     switch (status) {

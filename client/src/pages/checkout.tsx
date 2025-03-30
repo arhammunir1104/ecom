@@ -377,8 +377,8 @@ const Checkout = () => {
               {activeTab === "shipping" && (
                 <Button
                   type="button"
-                  onClick={handleProceedToPayment}
-                  className="w-full bg-purple bg-pink-300 text-white font-bold py-3 mt-4 flex items-center justify-center"
+                  onClick={proceedToPayment}
+                  className="w-full bg-pink-500 text-white font-bold py-3 mt-4 flex items-center justify-center"
                   size="lg"
                 >
                   <CreditCard className="mr-2 h-5 w-5" />

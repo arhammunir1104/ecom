@@ -365,10 +365,31 @@ const PaymentForm = ({ address, amount, onPaymentSuccess }: PaymentFormProps) =>
                   id: orderDoc.id,
                   userId: auth,
                   createdAt: serverTimestamp(),
-                  items: cartItems.map(item => ({
-                    productId: String(item.productId),
-                    quantity: Number(item.quantity)
-                  }))
+                  items: (await Promise.all(cartItems.map(async item => {
+                    // Get product details from API for display in order history
+                    try {
+                      const response = await fetch(`/api/products/${item.productId}`);
+                      if (response.ok) {
+                        const product = await response.json();
+                        return {
+                          productId: String(item.productId),
+                          quantity: Number(item.quantity),
+                          name: product.name,
+                          price: product.discountPrice || product.price,
+                          image: Array.isArray(product.images) && product.images.length > 0 ? 
+                            product.images[0] : null
+                        };
+                      }
+                    } catch (error) {
+                      console.error('Error getting product details:', error);
+                    }
+                    
+                    // Fallback if product details can't be fetched
+                    return {
+                      productId: String(item.productId),
+                      quantity: Number(item.quantity)
+                    };
+                  })))
                 });
                 
                 console.log('Order saved to Firestore successfully:', orderDoc.id);
@@ -451,7 +472,7 @@ const PaymentForm = ({ address, amount, onPaymentSuccess }: PaymentFormProps) =>
         
         <Button 
           type="submit" 
-          className="w-full bg-purple text-white font-medium text-lg py-3"
+          className="w-full bg-pink-500 text-white font-medium text-lg py-3"
           disabled={isProcessing || !stripe || !elements}
           size="lg"
         >
