@@ -303,9 +303,17 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         
         // Try to send a verification code
         try {
-          await apiRequest("POST", "/api/auth/2fa/send-code", { 
-            email: userProfile.email,
-            uid: userProfile.uid
+          console.log("Adding Firebase UID to request header:", userProfile.uid);
+          await fetch("/api/auth/2fa/send-code", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Firebase-UID": userProfile.uid
+            },
+            body: JSON.stringify({ 
+              email: userProfile.email,
+              uid: userProfile.uid
+            })
           });
         } catch (tfaError) {
           console.error("Error sending 2FA code:", tfaError);
@@ -567,7 +575,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         });
         return { 
           success: true,
-          otpAuthUrl: data.otpAuthUrl || null
+          otpAuthUrl: data.otpAuthUrl || undefined
         };
       } else {
         throw new Error(data.message || "Failed to send verification code");

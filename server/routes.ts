@@ -1446,11 +1446,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         user = await storage.getUser(req.user.id);
       }
       
-      if (!user || !user.twoFactorSecret) {
-        return res.status(401).json({ message: "Invalid authentication attempt" });
+      if (!user) {
+        console.log("User not found for 2FA validation with Firebase UID:", firebaseUid, "or email:", email);
+        return res.status(401).json({ message: "Invalid authentication attempt - user not found" });
       }
       
+      if (!user.twoFactorSecret) {
+        console.log("User found but missing 2FA secret. User ID:", user.id, "Email:", user.email);
+        return res.status(401).json({ message: "Invalid authentication attempt - 2FA not properly set up" });
+      }
+      
+      console.log("Verifying 2FA token for user:", user.email);
       const isValid = verifyToken(token, user.twoFactorSecret);
+      console.log("2FA token verification result:", isValid);
       
       if (!isValid) {
         return res.status(401).json({ message: "Invalid verification code" });
@@ -1481,25 +1489,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Send 2FA verification code
   app.post("/api/auth/2fa/send-code", async (req, res) => {
     try {
-      const { email, uid } = req.body;
+      // Log request details for debugging
+      console.log("2FA send-code request headers:", req.headers);
+      console.log("2FA send-code request body:", req.body);
       
-      if (!email) {
-        return res.status(400).json({ message: "Email is required" });
+      const { email, uid } = req.body;
+      const firebaseUid = req.headers["firebase-uid"]?.toString() || uid;
+      
+      if (!email && !firebaseUid) {
+        return res.status(400).json({ message: "Email or Firebase UID is required" });
       }
       
       // Try to find the user by Firebase UID or email
       let user;
       
-      if (uid) {
-        user = await storage.getUserByFirebaseId(uid);
+      if (firebaseUid) {
+        console.log("Looking up user by Firebase UID:", firebaseUid);
+        user = await storage.getUserByFirebaseId(firebaseUid);
       }
       
       if (!user && email) {
+        console.log("Looking up user by email:", email);
         user = await storage.getUserByEmail(email);
       }
       
       if (!user) {
-        return res.status(404).json({ message: "User not found" });
+        console.log("User not found for 2FA send-code. Firebase UID:", firebaseUid, "Email:", email);
+        
+        // If we have Firebase UID but no user, try to create one
+        if (firebaseUid && email) {
+          console.log("Attempting to create user for:", email, firebaseUid);
+          try {
+            user = await storage.createUser({
+              username: email.split('@')[0],
+              email: email,
+              password: 'firebase-auth', // Placeholder
+              fullName: null,
+              role: 'user',
+              firebaseUid: firebaseUid,
+              photoURL: null
+            });
+            console.log("Created user:", user.id);
+          } catch (createError) {
+            console.error("Failed to create user:", createError);
+          }
+        }
+        
+        if (!user) {
+          return res.status(404).json({ message: "User not found" });
+        }
       }
       
       if (!user.twoFactorEnabled) {

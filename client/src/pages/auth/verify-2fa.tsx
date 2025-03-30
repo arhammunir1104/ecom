@@ -72,12 +72,53 @@ export default function VerifyTwoFactor() {
 
     setIsLoading(true);
     try {
-      await verifyTwoFactor(email, token);
-      // Clear the pending auth data
-      localStorage.removeItem('pendingAuth');
-      // Redirect is handled in the verifyTwoFactor function
-    } catch (error) {
+      // If verifyTwoFactor from context is available, use it
+      if (verifyTwoFactor) {
+        await verifyTwoFactor(email, token);
+        localStorage.removeItem('pendingAuth');
+        navigate('/', { replace: true });
+      } else {
+        // Fallback direct API call if context method not available
+        const response = await fetch('/api/auth/2fa/validate', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(uid ? { 'Firebase-UID': uid } : {})
+          },
+          body: JSON.stringify({ 
+            email,
+            token,
+            uid
+          }),
+        });
+
+        if (!response.ok) {
+          const data = await response.json();
+          throw new Error(data.message || 'Invalid verification code');
+        }
+
+        // Get the user data from the response
+        const userData = await response.json();
+        
+        // Set auth state
+        localStorage.removeItem('pendingAuth');
+        localStorage.setItem('user', JSON.stringify(userData));
+        
+        toast({
+          title: 'Login Successful',
+          description: `Welcome back, ${userData.username}!`,
+        });
+        
+        // Redirect to home
+        navigate('/', { replace: true });
+      }
+    } catch (error: any) {
       console.error('2FA verification error:', error);
+      toast({
+        title: 'Verification Failed',
+        description: error.message || 'Invalid verification code. Please try again.',
+        variant: 'destructive',
+      });
       // Don't clear pendingAuth here to allow retry
     } finally {
       setIsLoading(false);
@@ -100,6 +141,7 @@ export default function VerifyTwoFactor() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...(uid ? { 'Firebase-UID': uid } : {})
         },
         body: JSON.stringify({ 
           email,
@@ -155,12 +197,9 @@ export default function VerifyTwoFactor() {
                   className="justify-center"
                 >
                   <InputOTPGroup>
-                    <InputOTPSlot index={0} />
-                    <InputOTPSlot index={1} />
-                    <InputOTPSlot index={2} />
-                    <InputOTPSlot index={3} />
-                    <InputOTPSlot index={4} />
-                    <InputOTPSlot index={5} />
+                    {Array.from({ length: 6 }).map((_, i) => (
+                      <InputOTPSlot key={i} />
+                    ))}
                   </InputOTPGroup>
                 </InputOTP>
               </div>
