@@ -20,6 +20,7 @@ import Categories from "./pages/categories";
 import Orders from "./pages/orders";
 import Login from "./pages/auth/login";
 import Signup from "./pages/auth/signup";
+import DirectSignup from "./pages/auth/direct-signup";
 import UserProfile from "./pages/user-profile";
 import NotFound from "@/pages/not-found";
 
@@ -74,8 +75,10 @@ function Router() {
       }} />
       <Route path="/auth/login" component={Login} />
       <Route path="/auth/signup" component={Signup} />
+      <Route path="/auth/direct-signup" component={DirectSignup} />
       <Route path="/login" component={Login} />
       <Route path="/signup" component={Signup} />
+      <Route path="/direct-signup" component={DirectSignup} />
 
       {/* User Authenticated Routes */}
       <Route path="/profile" component={() => (
