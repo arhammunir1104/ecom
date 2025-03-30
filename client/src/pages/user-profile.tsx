@@ -333,9 +333,10 @@ export default function UserProfile() {
       <h1 className="text-3xl font-bold mb-6">My Account</h1>
       
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid grid-cols-2 w-full max-w-md">
+        <TabsList className="grid grid-cols-3 w-full max-w-md">
           <TabsTrigger value="profile">Profile</TabsTrigger>
           <TabsTrigger value="security">Security</TabsTrigger>
+          <TabsTrigger value="orders">Orders</TabsTrigger>
         </TabsList>
         
         {/* Profile Tab */}
@@ -556,7 +557,18 @@ export default function UserProfile() {
           </Card>
         </TabsContent>
         
-
+        {/* Orders Tab */}
+        <TabsContent value="orders">
+          <Card>
+            <CardHeader>
+              <CardTitle>Order History</CardTitle>
+              <CardDescription>View your previous orders.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <p className="text-muted-foreground">You haven't placed any orders yet.</p>
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
       
       {/* Two-Factor Setup Dialog */}

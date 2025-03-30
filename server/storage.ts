@@ -21,11 +21,6 @@ export interface IStorage {
   enableTwoFactor(id: number): Promise<User | undefined>;
   disableTwoFactor(id: number): Promise<User | undefined>;
   getAllUsers(): Promise<User[]>;
-  
-  // Wishlist methods
-  addToWishlist(userId: number, productId: number): Promise<User | undefined>;
-  removeFromWishlist(userId: number, productId: number): Promise<User | undefined>;
-  getWishlist(userId: number): Promise<number[]>;
 
   // Category methods
   getCategory(id: number): Promise<Category | undefined>;
@@ -357,51 +352,6 @@ export class MemStorage implements IStorage {
 
   async getAllUsers(): Promise<User[]> {
     return Array.from(this.users.values());
-  }
-  
-  // Wishlist methods
-  async addToWishlist(userId: number, productId: number): Promise<User | undefined> {
-    const user = await this.getUser(userId);
-    if (!user) return undefined;
-    
-    // Check if product exists
-    const product = await this.getProduct(productId);
-    if (!product) return undefined;
-    
-    // Make sure wishlistItems is an array
-    const wishlist = Array.isArray(user.wishlistItems) ? user.wishlistItems : [];
-    
-    // Check if product is already in wishlist
-    if (!wishlist.includes(productId)) {
-      // Add to wishlist
-      const updatedWishlist = [...wishlist, productId];
-      const updatedUser = { ...user, wishlistItems: updatedWishlist };
-      this.users.set(userId, updatedUser);
-      return updatedUser;
-    }
-    
-    return user; // Return unchanged user if product already in wishlist
-  }
-  
-  async removeFromWishlist(userId: number, productId: number): Promise<User | undefined> {
-    const user = await this.getUser(userId);
-    if (!user) return undefined;
-    
-    // Make sure wishlistItems is an array
-    const wishlist = Array.isArray(user.wishlistItems) ? user.wishlistItems : [];
-    
-    // Remove from wishlist
-    const updatedWishlist = wishlist.filter(id => id !== productId);
-    const updatedUser = { ...user, wishlistItems: updatedWishlist };
-    this.users.set(userId, updatedUser);
-    return updatedUser;
-  }
-  
-  async getWishlist(userId: number): Promise<number[]> {
-    const user = await this.getUser(userId);
-    if (!user) return [];
-    
-    return Array.isArray(user.wishlistItems) ? user.wishlistItems : [];
   }
 
   // Category methods
