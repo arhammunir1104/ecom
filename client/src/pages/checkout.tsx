@@ -75,15 +75,42 @@ const Checkout = () => {
     if (!validateAddress()) return;
     
     try {
+      console.log("Creating payment intent for total:", total);
+      
+      // Show loading toast
+      toast({
+        title: "Processing Payment",
+        description: "Please wait while we set up the payment...",
+      });
+      
       const res = await apiRequest("POST", "/api/create-payment-intent", { amount: total });
+      
+      if (!res.ok) {
+        let errorMessage = "Unable to process payment. Please try again.";
+        try {
+          const errorData = await res.json();
+          errorMessage = errorData.message || errorMessage;
+        } catch (e) {
+          console.error("Could not parse error response", e);
+        }
+        throw new Error(errorMessage);
+      }
+      
       const data = await res.json();
+      console.log("Payment intent created successfully, client secret received");
       setClientSecret(data.clientSecret);
+      
+      toast({
+        title: "Payment Ready",
+        description: "Please complete your payment information.",
+      });
+      
       setActiveTab("payment");
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error creating payment intent:", error);
       toast({
-        title: "Error",
-        description: "Unable to process payment. Please try again.",
+        title: "Payment Error",
+        description: error.message || "Unable to process payment. Please try again.",
         variant: "destructive",
       });
     }

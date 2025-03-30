@@ -560,18 +560,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/orders", isAuthenticated, async (req, res) => {
+  app.post("/api/orders", async (req, res) => {
     try {
-      const validation = insertOrderSchema.safeParse({
-        ...req.body,
-        userId: req.user?.id
-      });
+      console.log("Creating order with data:", req.body);
       
-      if (!validation.success) {
-        return res.status(400).json({ message: "Invalid data", errors: validation.error.flatten().fieldErrors });
+      // Get userId if authenticated, otherwise create as guest order
+      let userId = req.user?.id;
+      
+      // If user isn't authenticated, check if user ID was passed in the body (for guest checkout)
+      if (!userId && req.body.userId) {
+        userId = req.body.userId;
       }
       
+      const orderData = {
+        ...req.body,
+        // Set userId to null for guest orders if not authenticated
+        userId: userId || null
+      };
+      
+      console.log("Processed order data:", orderData);
+      
+      const validation = insertOrderSchema.safeParse(orderData);
+      
+      if (!validation.success) {
+        console.error("Order validation failed:", validation.error.flatten().fieldErrors);
+        return res.status(400).json({ 
+          message: "Invalid order data", 
+          errors: validation.error.flatten().fieldErrors 
+        });
+      }
+      
+      console.log("Order validation successful, creating order");
       const order = await storage.createOrder(validation.data);
+      console.log("Order created successfully:", order.id);
+      
       res.status(201).json(order);
     } catch (error) {
       console.error("Create order error:", error);
@@ -748,20 +770,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Stripe payment intent for checkout
-  app.post("/api/create-payment-intent", isAuthenticated, async (req, res) => {
+  // Stripe payment intent for checkout - authentication is not required for this endpoint
+  // as we want to allow guest checkout as well
+  app.post("/api/create-payment-intent", async (req, res) => {
     try {
+      console.log("Creating payment intent, request body:", req.body);
       const { amount } = req.body;
       if (!amount || typeof amount !== "number" || amount <= 0) {
         return res.status(400).json({ message: "Valid amount is required" });
       }
       
+      // Log the request to help with debugging
+      console.log(`Creating payment intent for amount: $${amount}`);
+      
+      // Create a payment intent
       const paymentIntent = await stripe.paymentIntents.create({
         amount: Math.round(amount * 100), // Convert to cents
         currency: "usd",
       });
       
-      res.json({ clientSecret: paymentIntent.client_secret });
+      // Log success
+      console.log("Payment intent created successfully:", paymentIntent.id);
+      
+      res.json({ 
+        clientSecret: paymentIntent.client_secret,
+        paymentIntentId: paymentIntent.id
+      });
     } catch (error: any) {
       console.error("Create payment intent error:", error);
       res.status(500).json({ message: error.message || "Error creating payment intent" });

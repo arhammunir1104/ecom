@@ -125,21 +125,34 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
   const loginWithGoogle = async () => {
     try {
+      console.log("Starting Google login process");
+      
       const firebaseUser = await signInWithGoogle();
+      console.log("Firebase user authenticated:", firebaseUser.email);
       
       // Now call our backend to create/verify the user
+      console.log("Sending user data to backend...");
       const response = await apiRequest("POST", "/api/auth/google", {
-        displayName: firebaseUser.displayName,
+        displayName: firebaseUser.displayName || firebaseUser.email?.split('@')[0],
         email: firebaseUser.email,
-        uid: firebaseUser.uid
+        uid: firebaseUser.uid,
+        photoURL: firebaseUser.photoURL
       });
       
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Failed to authenticate with Google");
+        console.error("Backend authentication failed:", response.status);
+        let errorMessage = "Failed to authenticate with Google";
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.message || errorMessage;
+        } catch (e) {
+          console.error("Could not parse error response", e);
+        }
+        throw new Error(errorMessage);
       }
       
       const userData = await response.json();
+      console.log("User authenticated successfully:", userData.username);
       
       setUser(userData);
       localStorage.setItem('user', JSON.stringify(userData));

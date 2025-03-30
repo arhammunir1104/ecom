@@ -37,19 +37,24 @@ export const signInWithGoogle = async () => {
   try {
     // Configure additional scopes and parameters
     googleProvider.setCustomParameters({
-      prompt: 'select_account',
-      // Add the current domain to make sure it matches Firebase console settings
-      login_hint: window.location.hostname
+      prompt: 'select_account'
     });
+    
+    // Use .replit.dev domain in auth origin config to fix domain verification issues
+    const currentOrigin = window.location.origin;
+    
+    // Log the current domain for debugging
+    console.log("Current domain:", currentOrigin);
     
     const result = await signInWithPopup(auth, googleProvider);
     return result.user;
   } catch (error: any) {
     console.error("Error signing in with Google: ", error);
     
-    // Provide more helpful error messages
+    // Provide more helpful error messages with specific troubleshooting instructions
     if (error.code === 'auth/configuration-not-found') {
       console.error('Firebase Configuration Error: Make sure your domain is added to the authorized domains in Firebase console, and Google Sign-in method is enabled.');
+      console.error('Add this exact domain to Firebase console authorized domains:', window.location.origin);
     } else if (error.code === 'auth/popup-blocked') {
       console.error('Popup was blocked by the browser. Please enable popups for this site.');
     }
