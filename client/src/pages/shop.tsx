@@ -200,7 +200,17 @@ const Shop = () => {
             ) : sortedProducts.length > 0 ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                 {sortedProducts.map((product) => (
-                  <ProductCard key={product.id} product={product} />
+                  <ProductCard 
+                    key={product.id}
+                    id={product.id}
+                    name={product.name}
+                    price={product.price}
+                    discountPrice={product.discountPrice}
+                    imageUrl={Array.isArray(product.images) && product.images.length > 0 ? product.images[0] : ""}
+                    featured={product.featured}
+                    trending={product.trending}
+                    categoryId={product.categoryId}
+                  />
                 ))}
               </div>
             ) : (

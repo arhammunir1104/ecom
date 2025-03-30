@@ -1,4 +1,4 @@
-import { createContext, useEffect, useState, ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import { auth, onAuthChange } from "../lib/firebase";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "../lib/queryClient";
@@ -51,6 +51,14 @@ export const AuthContext = createContext<AuthContextType>({
 
 interface AuthProviderProps {
   children: ReactNode;
+}
+
+export function useAuth() {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error("useAuth must be used within an AuthProvider");
+  }
+  return context;
 }
 
 export const AuthProvider = ({ children }: AuthProviderProps) => {

@@ -114,7 +114,7 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
             </Button>
           </SheetTrigger>
           <div className="flex-1">
-            <h1 className="text-xl font-semibold">Feminine Elegance Admin</h1>
+            <h1 className="text-xl font-semibold">SoftGirl Fashion Admin</h1>
           </div>
           <div className="flex items-center gap-2">
             <div className="hidden md:block">

@@ -43,11 +43,11 @@ export const generateSecret = (email: string): { secret: string; otp: string } =
 // Send OTP to user's email
 export const sendOTPEmail = async (email: string, otp: string): Promise<boolean> => {
   try {
-    const storeName = 'Feminine Elegance';
+    const storeName = 'SoftGirl Fashion';
     
     // Send email with OTP
     const info = await transporter.sendMail({
-      from: `"${storeName}" <${process.env.SMTP_FROM_EMAIL || 'noreply@feminineelegance.com'}>`,
+      from: `"${storeName}" <${process.env.SMTP_FROM_EMAIL || 'noreply@softgirlfashion.com'}>`,
       to: email,
       subject: 'Your Verification Code',
       text: `Your verification code is: ${otp}. This code will expire in ${OTP_EXPIRY_MINUTES} minutes.`,

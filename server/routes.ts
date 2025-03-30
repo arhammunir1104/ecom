@@ -1061,6 +1061,82 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: "Server error" });
     }
   });
+  
+  // Wishlist routes
+  app.get("/api/wishlist", isAuthenticated, async (req, res) => {
+    try {
+      if (!req.user?.id) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      // Get the wishlist items IDs
+      const wishlistItemIds = await storage.getWishlist(req.user.id);
+      
+      // Get the product details for each item in the wishlist
+      const wishlistProducts = await Promise.all(
+        wishlistItemIds.map(async (id) => {
+          const product = await storage.getProduct(id);
+          return product;
+        })
+      );
+      
+      // Filter out any undefined products (in case a product was deleted)
+      const validProducts = wishlistProducts.filter(product => product !== undefined);
+      
+      res.json(validProducts);
+    } catch (error) {
+      console.error("Get wishlist error:", error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+  
+  app.post("/api/wishlist/add", isAuthenticated, async (req, res) => {
+    try {
+      if (!req.user?.id) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const { productId } = req.body;
+      if (!productId) {
+        return res.status(400).json({ message: "Product ID is required" });
+      }
+      
+      // Add product to wishlist
+      const updatedUser = await storage.addToWishlist(req.user.id, productId);
+      if (!updatedUser) {
+        return res.status(404).json({ message: "User or product not found" });
+      }
+      
+      res.json({ message: "Product added to wishlist", wishlistItems: updatedUser.wishlistItems });
+    } catch (error) {
+      console.error("Add to wishlist error:", error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+  
+  app.delete("/api/wishlist/remove", isAuthenticated, async (req, res) => {
+    try {
+      if (!req.user?.id) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const { productId } = req.body;
+      if (!productId) {
+        return res.status(400).json({ message: "Product ID is required" });
+      }
+      
+      // Remove product from wishlist
+      const updatedUser = await storage.removeFromWishlist(req.user.id, productId);
+      if (!updatedUser) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      res.json({ message: "Product removed from wishlist", wishlistItems: updatedUser.wishlistItems });
+    } catch (error) {
+      console.error("Remove from wishlist error:", error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
 
   app.put("/api/profile", isAuthenticated, async (req, res) => {
     try {

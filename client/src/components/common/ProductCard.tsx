@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
-import { Product } from "@shared/schema";
 import { useCart } from "@/hooks/useCart";
+import { useWishlist } from "@/context/WishlistContext";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Heart, Search, ShoppingBag } from "lucide-react";
+import { Heart, HeartOff, Search, ShoppingBag } from "lucide-react";
 import {
   Card,
   CardContent,
@@ -12,32 +12,47 @@ import {
 } from "@/components/ui/card";
 
 interface ProductCardProps {
-  product: Product;
+  id: number;
+  name: string;
+  price: number;
+  discountPrice?: number | null;
+  imageUrl: string;
+  featured?: boolean | null;
+  trending?: boolean | null;
+  categoryId?: number | null;
 }
 
-const ProductCard = ({ product }: ProductCardProps) => {
+const ProductCard = ({ 
+  id, 
+  name, 
+  price, 
+  discountPrice, 
+  imageUrl, 
+  featured, 
+  trending,
+  categoryId 
+}: ProductCardProps) => {
   const [isHovered, setIsHovered] = useState(false);
   const { addToCart } = useCart();
+  const { isInWishlist, addToWishlist, removeFromWishlist } = useWishlist();
   
-  const { 
-    id, 
-    name, 
-    price, 
-    discountPrice, 
-    images, 
-    featured,
-    trending,
-    categoryId,
-  } = product;
-  
-  const imageUrl = Array.isArray(images) && images.length > 0 
-    ? images[0] 
-    : "https://via.placeholder.com/300x400?text=No+Image";
+  const inWishlist = isInWishlist(id);
 
   const handleAddToCart = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
     addToCart(id);
+  };
+  
+  const handleToggleWishlist = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    if (inWishlist) {
+      removeFromWishlist(id);
+    } else {
+      addToWishlist(id);
+    }
   };
   
   const [, setLocation] = useLocation();
@@ -88,11 +103,17 @@ const ProductCard = ({ product }: ProductCardProps) => {
             <Button 
               size="icon" 
               variant="secondary" 
-              className="w-8 h-8 rounded-full bg-white hover:bg-pink-lighter"
-              onClick={(e) => e.preventDefault()}
+              className={`w-8 h-8 rounded-full ${inWishlist ? 'bg-pink-light text-red-500' : 'bg-white hover:bg-pink-lighter'}`}
+              onClick={handleToggleWishlist}
             >
-              <Heart className="h-4 w-4 text-purple" />
-              <span className="sr-only">Add to wishlist</span>
+              {inWishlist ? (
+                <HeartOff className="h-4 w-4" />
+              ) : (
+                <Heart className="h-4 w-4 text-purple" />
+              )}
+              <span className="sr-only">
+                {inWishlist ? 'Remove from wishlist' : 'Add to wishlist'}
+              </span>
             </Button>
             <Button 
               size="icon" 
@@ -147,15 +168,15 @@ const ProductCard = ({ product }: ProductCardProps) => {
             {discountPrice ? (
               <div className="flex items-center gap-2">
                 <span className="text-purple font-semibold text-lg">
-                  ${discountPrice.toFixed(2)}
+                  ${Number(discountPrice).toFixed(2)}
                 </span>
                 <span className="text-gray-400 line-through text-sm">
-                  ${price.toFixed(2)}
+                  ${Number(price).toFixed(2)}
                 </span>
               </div>
             ) : (
               <span className="text-purple font-semibold text-lg">
-                ${price.toFixed(2)}
+                ${Number(price).toFixed(2)}
               </span>
             )}
           </div>
