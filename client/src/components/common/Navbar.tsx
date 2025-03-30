@@ -49,30 +49,131 @@ const Navbar = () => {
   return (
     <header className={`sticky top-0 z-50 bg-white transition-shadow ${isScrolled ? 'shadow-sm' : ''}`}>
       <div className="container mx-auto px-4">
-        {/* Top bar with contact info and shipping */}
-        <div className="hidden md:flex justify-between py-2 text-xs border-b border-gray-100">
-          <div className="flex items-center space-x-6">
-            <span className="flex items-center">
+        {/* Top bar with contact info, search and icons */}
+        <div className="flex justify-between items-center py-2 border-b border-gray-100">
+          {/* Contact info (hidden on mobile) */}
+          <div className="hidden md:flex items-center space-x-6">
+            <span className="flex items-center text-xs">
               <Phone className="w-3 h-3 text-purple mr-1.5" />
               +1 (800) 555-1234
             </span>
-            <span className="flex items-center">
+            <span className="flex items-center text-xs">
               <Mail className="w-3 h-3 text-purple mr-1.5" />
               support@softgirlfashion.com
             </span>
           </div>
-          <div className="flex items-center">
-            <a href="#" className="hover:text-purple transition">Free shipping on orders over $99</a>
+          
+          {/* Logo for mobile */}
+          <div className="md:hidden">
+            <Link href="/" className="font-playfair text-2xl font-bold tracking-wider text-purple">
+              Soft<span className="text-pink-light">Girl</span>Fashion
+            </Link>
+          </div>
+          
+          {/* Search and Icon buttons */}
+          <div className="flex items-center space-x-3">
+            {/* Desktop search form */}
+            <form onSubmit={handleSearch} className="hidden md:flex relative mr-4">
+              <Input
+                type="search"
+                placeholder="Search products..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-48 h-8 text-sm"
+              />
+              <Button 
+                type="submit"
+                variant="ghost" 
+                size="icon" 
+                className="absolute right-0 top-0 h-8"
+              >
+                <Search className="h-4 w-4" />
+              </Button>
+            </form>
+            
+            {/* Mobile search button */}
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              onClick={() => setIsMobileSearchOpen(true)}
+              className="hover:text-purple transition md:hidden"
+            >
+              <Search className="h-5 w-5" />
+              <span className="sr-only">Search</span>
+            </Button>
+            
+            {/* User dropdown */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="hover:text-purple transition">
+                  <User className="h-5 w-5" />
+                  <span className="sr-only">User menu</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                {isAuthenticated ? (
+                  <>
+                    <DropdownMenuLabel>
+                      {user?.fullName || user?.username}
+                    </DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem asChild>
+                      <Link href="/profile">My Profile</Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link href="/orders">My Orders</Link>
+                    </DropdownMenuItem>
+                    {isAdmin && (
+                      <DropdownMenuItem asChild>
+                        <Link href="/admin">Admin Dashboard</Link>
+                      </DropdownMenuItem>
+                    )}
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => logout()}>
+                      Logout
+                    </DropdownMenuItem>
+                  </>
+                ) : (
+                  <>
+                    <DropdownMenuItem asChild>
+                      <Link href="/login">Login</Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link href="/signup">Sign Up</Link>
+                    </DropdownMenuItem>
+                  </>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+            
+            {/* Wishlist button */}
+            <Button variant="ghost" size="icon" className="hover:text-purple transition">
+              <Heart className="h-5 w-5" />
+              <span className="sr-only">Wishlist</span>
+            </Button>
+            
+            {/* Cart button */}
+            <Link href="/cart">
+              <Button variant="ghost" size="icon" className="hover:text-purple transition relative">
+                <ShoppingBag className="h-5 w-5" />
+                <span className="sr-only">Cart</span>
+                {getCartCount() > 0 && (
+                  <Badge className="absolute -top-2 -right-2 bg-purple text-white rounded-full w-5 h-5 flex items-center justify-center p-0 text-xs">
+                    {getCartCount()}
+                  </Badge>
+                )}
+              </Button>
+            </Link>
           </div>
         </div>
         
         {/* Main navigation */}
-        <nav className="flex flex-wrap justify-between items-center py-4">
-          {/* Mobile menu button and Logo */}
-          <div className="flex items-center flex-shrink-0 mr-4">
+        <nav className="flex justify-between items-center py-3">
+          {/* Mobile menu button */}
+          <div className="flex items-center md:hidden">
             <Sheet>
               <SheetTrigger asChild>
-                <Button variant="ghost" size="icon" className="md:hidden mr-2">
+                <Button variant="ghost" size="icon" className="md:hidden">
                   <Menu className="h-5 w-5" />
                   <span className="sr-only">Open menu</span>
                 </Button>
@@ -185,122 +286,57 @@ const Navbar = () => {
                 </div>
               </SheetContent>
             </Sheet>
-            
-            {/* Logo */}
-            <Link href="/" className="font-playfair text-2xl md:text-3xl font-bold tracking-wider text-purple">
+          </div>
+          
+          {/* Desktop Logo centered */}
+          <div className="hidden md:block mx-auto">
+            <Link href="/" className="font-playfair text-3xl font-bold tracking-wider text-purple">
               Soft<span className="text-pink-light">Girl</span>Fashion
             </Link>
           </div>
           
-          {/* Desktop navigation links */}
-          <div className="hidden md:flex items-center justify-center space-x-8 flex-grow">
+          {/* Empty div for mobile to help with spacing */}
+          <div className="md:hidden"></div>
+        </nav>
+        
+        {/* Desktop navigation links in second row */}
+        <div className="hidden md:flex justify-center items-center py-3 border-t border-gray-100">
+          <div className="flex items-center space-x-8">
             <Link href="/" className="whitespace-nowrap font-medium hover:text-purple transition">Home</Link>
             <Link href="/shop" className="whitespace-nowrap font-medium hover:text-purple transition">Shop</Link>
             <Link href="/categories" className="whitespace-nowrap font-medium hover:text-purple transition">Collections</Link>
             <Link href="/shop?trending=true" className="whitespace-nowrap font-medium hover:text-purple transition">New Arrivals</Link>
             <Link href="/shop?sale=true" className="whitespace-nowrap font-medium hover:text-purple transition">Sale</Link>
           </div>
-          
-          {/* Icons */}
-          <div className="flex items-center space-x-3 flex-shrink-0">
-            {isMobileSearchOpen ? (
-              <div className="fixed inset-0 bg-black/20 z-50 flex items-center justify-center p-4">
-                <div className="bg-white rounded-lg p-4 w-full max-w-md">
-                  <div className="flex justify-between items-center mb-4">
-                    <h3 className="font-medium">Search</h3>
-                    <Button 
-                      variant="ghost" 
-                      size="icon" 
-                      onClick={() => setIsMobileSearchOpen(false)}
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                  </div>
-                  <form onSubmit={handleSearch} className="flex gap-2">
-                    <Input
-                      type="search"
-                      placeholder="Search products..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="flex-grow"
-                    />
-                    <Button type="submit">Search</Button>
-                  </form>
-                </div>
-              </div>
-            ) : (
-              <Button 
-                variant="ghost" 
-                size="icon" 
-                onClick={() => setIsMobileSearchOpen(true)}
-                className="hover:text-purple transition sm:block"
-              >
-                <Search className="h-5 w-5" />
-                <span className="sr-only">Search</span>
-              </Button>
-            )}
-            
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="hover:text-purple transition">
-                  <User className="h-5 w-5" />
-                  <span className="sr-only">User menu</span>
+        </div>
+        
+        {/* Mobile search modal */}
+        {isMobileSearchOpen && (
+          <div className="fixed inset-0 bg-black/20 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-lg p-4 w-full max-w-md">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="font-medium">Search</h3>
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  onClick={() => setIsMobileSearchOpen(false)}
+                >
+                  <X className="h-4 w-4" />
                 </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
-                {isAuthenticated ? (
-                  <>
-                    <DropdownMenuLabel>
-                      {user?.fullName || user?.username}
-                    </DropdownMenuLabel>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem asChild>
-                      <Link href="/profile">My Profile</Link>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem asChild>
-                      <Link href="/orders">My Orders</Link>
-                    </DropdownMenuItem>
-                    {isAdmin && (
-                      <DropdownMenuItem asChild>
-                        <Link href="/admin">Admin Dashboard</Link>
-                      </DropdownMenuItem>
-                    )}
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={() => logout()}>
-                      Logout
-                    </DropdownMenuItem>
-                  </>
-                ) : (
-                  <>
-                    <DropdownMenuItem asChild>
-                      <Link href="/login">Login</Link>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem asChild>
-                      <Link href="/signup">Sign Up</Link>
-                    </DropdownMenuItem>
-                  </>
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
-            
-            <Button variant="ghost" size="icon" className="hover:text-purple transition">
-              <Heart className="h-5 w-5" />
-              <span className="sr-only">Wishlist</span>
-            </Button>
-            
-            <Link href="/cart">
-              <Button variant="ghost" size="icon" className="hover:text-purple transition relative">
-                <ShoppingBag className="h-5 w-5" />
-                <span className="sr-only">Cart</span>
-                {getCartCount() > 0 && (
-                  <Badge className="absolute -top-2 -right-2 bg-purple text-white rounded-full w-5 h-5 flex items-center justify-center p-0 text-xs">
-                    {getCartCount()}
-                  </Badge>
-                )}
-              </Button>
-            </Link>
+              </div>
+              <form onSubmit={handleSearch} className="flex gap-2">
+                <Input
+                  type="search"
+                  placeholder="Search products..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="flex-grow"
+                />
+                <Button type="submit">Search</Button>
+              </form>
+            </div>
           </div>
-        </nav>
+        )}
       </div>
     </header>
   );
