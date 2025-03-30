@@ -89,18 +89,15 @@ const Checkout = () => {
     const submitButton = document.getElementById('shipping-submit-button');
     if (submitButton) {
       submitButton.click();
-      return; // The form's onSubmit handler will call the real implementation below
+      return; // The form will handle validation and call proceedToPayment
     }
     
-    // If the button can't be found, or if this is called from somewhere else
-    // Fall back to the manual validation
+    // If the button can't be found for some reason, call the payment function directly
     await proceedToPayment();
   };
   
-  // The actual implementation that gets called after form validation
+  // This function gets called after form validation succeeds
   const proceedToPayment = async () => {
-    if (!validateAddress()) return;
-
     try {
       console.log("Creating payment intent for total:", total);
 
@@ -149,35 +146,6 @@ const Checkout = () => {
         variant: "destructive",
       });
     }
-  };
-
-  // Validate address fields
-  const validateAddress = () => {
-    const requiredFields = [
-      "fullName",
-      "address",
-      "city",
-      "postalCode",
-      "country",
-      "phone",
-    ];
-    const missingFields = requiredFields.filter(
-      (field) => !address[field as keyof typeof address],
-    );
-
-    if (missingFields.length > 0) {
-      console.log("Missing fields:", missingFields);
-      console.log("Current address state:", address);
-      
-      toast({
-        title: "Missing Information",
-        description: "Please fill in all required fields: " + missingFields.join(", "),
-        variant: "destructive",
-      });
-      return false;
-    }
-
-    return true;
   };
 
   // Handle successful payment
@@ -377,7 +345,7 @@ const Checkout = () => {
               {activeTab === "shipping" && (
                 <Button
                   type="button"
-                  onClick={proceedToPayment}
+                  onClick={handleProceedToPayment}
                   className="w-full bg-pink-500 text-white font-bold py-3 mt-4 flex items-center justify-center"
                   size="lg"
                 >

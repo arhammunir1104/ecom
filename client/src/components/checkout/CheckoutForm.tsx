@@ -81,29 +81,16 @@ const ShippingForm = ({ address, setAddress, onContinue }: ShippingFormProps) =>
     try {
       console.log("Form submitted with data:", data);
       
-      // Ensure all required fields are present before continuing
-      if (!data.fullName || !data.address || !data.city || !data.postalCode || !data.phone) {
-        const missingFields = [];
-        if (!data.fullName) missingFields.push("fullName");
-        if (!data.address) missingFields.push("address");
-        if (!data.city) missingFields.push("city");
-        if (!data.postalCode) missingFields.push("postalCode");
-        if (!data.phone) missingFields.push("phone");
-        
-        console.error("Missing required shipping fields:", missingFields);
-        return;
-      }
-      
-      // Update the address state in the parent component first
+      // Update the address state in the parent component
       setAddress(data);
       
-      // Then proceed to payment after state is updated
+      // Give time for state to update
       setTimeout(() => {
-        // Proceed to payment implementation in the checkout page
+        // Call the parent's onContinue method which will proceed to payment
         onContinue();
       }, 100);
     } catch (error) {
-      console.error("Error validating address:", error);
+      console.error("Error submitting address:", error);
     } finally {
       setIsLoading(false);
     }
