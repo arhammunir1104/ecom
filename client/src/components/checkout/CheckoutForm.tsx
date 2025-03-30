@@ -451,7 +451,7 @@ const PaymentForm = ({ address, amount, onPaymentSuccess }: PaymentFormProps) =>
         
         <Button 
           type="submit" 
-          className="w-full bg-purple text-white font-medium text-lg py-3"
+          className="w-full bg-purple hover:bg-purple-700 text-white font-medium text-lg py-3"
           disabled={isProcessing || !stripe || !elements}
           size="lg"
         >
