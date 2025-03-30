@@ -79,6 +79,7 @@ export default function UserProfile() {
   const [setupInProgress, setSetupInProgress] = useState(false);
   const [verificationCode, setVerificationCode] = useState("");
   const [setupStep, setSetupStep] = useState<"initial" | "qrcode" | "verification">("initial");
+  const [isResending, setIsResending] = useState(false);
   const qrCodeRef = useRef<HTMLDivElement>(null);
   
   // Disable 2FA dialog state
@@ -226,6 +227,52 @@ export default function UserProfile() {
       });
     } finally {
       setIsLoading(false);
+    }
+  };
+  
+  // Resend 2FA verification code
+  const handleResendCode = async () => {
+    try {
+      setIsResending(true);
+      const result = await setupTwoFactor();
+      
+      if (result.success) {
+        toast({
+          title: "Code sent",
+          description: "A new verification code has been sent to your email.",
+        });
+        
+        // Update QR code with new OTP
+        setTimeout(() => {
+          if (qrCodeRef.current && result.otpAuthUrl) {
+            qrCodeRef.current.innerHTML = '';
+            QRCode.toCanvas(
+              qrCodeRef.current,
+              result.otpAuthUrl,
+              {
+                width: 200,
+                color: {
+                  dark: '#000',
+                  light: '#FFF',
+                },
+              },
+              (error: Error | null | undefined) => {
+                if (error) {
+                  console.error("Error generating QR code:", error);
+                }
+              }
+            );
+          }
+        }, 100);
+      }
+    } catch (error: any) {
+      toast({
+        title: "Resend failed",
+        description: error.message || "Unable to send a new verification code",
+        variant: "destructive",
+      });
+    } finally {
+      setIsResending(false);
     }
   };
   
@@ -557,6 +604,17 @@ export default function UserProfile() {
                 </InputOTPGroup>
               )}
             />
+          </div>
+          
+          <div className="text-center mt-4">
+            <Button 
+              variant="link" 
+              onClick={handleResendCode}
+              disabled={isLoading || isResending}
+              size="sm"
+            >
+              {isResending ? "Sending code..." : "Resend verification code"}
+            </Button>
           </div>
           
           <AlertDialogFooter className="mt-4">

@@ -1143,6 +1143,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Two-factor authentication routes
+  // Resend 2FA verification code
+  app.post("/api/auth/2fa/resend", async (req, res) => {
+    try {
+      // Extract the Firebase UID from the header or body
+      const firebaseUid = req.headers["firebase-uid"]?.toString() || req.body?.uid;
+      const email = req.body?.email;
+      
+      if (!firebaseUid || !email) {
+        return res.status(400).json({ message: "Firebase UID and email are required" });
+      }
+      
+      // Try to find the user by Firebase UID
+      let user = await storage.getUserByFirebaseId(firebaseUid);
+      
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      if (!user.twoFactorSecret) {
+        return res.status(400).json({ message: "Two-factor authentication not set up for this user" });
+      }
+      
+      // Generate a new OTP and send it via email
+      const result = await setupTwoFactor(user.email);
+      
+      if (!result.success) {
+        return res.status(500).json({ message: "Failed to send verification code to your email" });
+      }
+      
+      // Update the user's secret in the database
+      await storage.updateUserTwoFactorSecret(user.id, result.secret);
+      
+      res.json({ 
+        message: "Verification code sent to your email",
+        emailSent: true
+      });
+      
+    } catch (error: any) {
+      console.error("2FA resend error:", error);
+      res.status(500).json({ message: "Error resending verification code: " + error.message });
+    }
+  });
+  
   app.post("/api/auth/2fa/setup", async (req, res) => {
     try {
       // Log headers for debugging

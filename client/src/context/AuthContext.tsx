@@ -591,7 +591,11 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       
       const data = await res.json();
       
-      if (!data.success) {
+      // The backend doesn't actually return "success", it returns the 
+      // message directly, so we'll check based on the response
+      if (data.message && data.message.includes("enabled successfully")) {
+        console.log("2FA enabled successfully with response:", data);
+      } else if (!data.twoFactorEnabled) {
         throw new Error(data.message || "Failed to verify 2FA setup");
       }
       
