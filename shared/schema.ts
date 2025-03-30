@@ -61,7 +61,7 @@ export const reviews = pgTable("reviews", {
 // Orders Table
 export const orders = pgTable("orders", {
   id: serial("id").primaryKey(),
-  userId: integer("user_id").references(() => users.id).notNull(),
+  userId: integer("user_id").references(() => users.id),
   items: jsonb("items").notNull(),
   totalAmount: doublePrecision("total_amount").notNull(),
   shippingAddress: jsonb("shipping_address").notNull(),

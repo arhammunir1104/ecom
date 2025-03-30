@@ -491,6 +491,9 @@ export class MemStorage implements IStorage {
   }
 
   async getUserOrders(userId: number): Promise<Order[]> {
+    // If userId is provided, filter by userId, otherwise return an empty array
+    if (!userId) return [];
+    
     return Array.from(this.orders.values()).filter(
       (order) => order.userId === userId
     );

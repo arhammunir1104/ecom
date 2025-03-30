@@ -674,12 +674,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Order routes
-  app.get("/api/orders", isAuthenticated, async (req, res) => {
+  app.get("/api/orders", async (req, res) => {
     try {
-      if (!req.user?.id) {
-        return res.status(401).json({ message: "Unauthorized" });
+      // Get Firebase UID from header
+      const firebaseUid = req.headers["firebase-uid"]?.toString();
+      
+      // Try to find user by Firebase UID if available
+      let userId = null;
+      if (firebaseUid) {
+        const user = await storage.getUserByFirebaseId(firebaseUid);
+        if (user) {
+          userId = user.id;
+        } else {
+          return res.status(401).json({ 
+            message: "User not found with Firebase UID and no fallback authentication available" 
+          });
+        }
+      } else if (req.user?.id) {
+        // If no Firebase UID but we have a session user ID
+        userId = req.user.id;
       }
-      const orders = await storage.getUserOrders(req.user.id);
+      
+      // If no user authentication found at all, return an empty array
+      // This allows for guest checkout without errors
+      if (!userId) {
+        return res.json([]);
+      }
+      
+      const orders = await storage.getUserOrders(userId);
       res.json(orders);
     } catch (error) {
       console.error("Get user orders error:", error);
