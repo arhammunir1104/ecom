@@ -567,7 +567,7 @@ export default function AdminEditProduct() {
                       ))}
                     </div>
                     <div className="border border-dashed rounded-md p-4">
-                      <label className="cursor-pointer flex flex-col items-center">
+                      <label className="cursor-pointer flex flex-col items-center w-full">
                         <ImagePlus className="mb-2 h-8 w-8 text-gray-400" />
                         <span className="text-sm font-medium mb-1">Upload Images</span>
                         <span className="text-xs text-gray-500 text-center mb-2">
@@ -575,12 +575,18 @@ export default function AdminEditProduct() {
                         </span>
                         <input
                           type="file"
+                          id="editProductImage"
                           accept="image/*"
                           multiple
                           className="hidden"
                           onChange={handleImageChange}
                         />
-                        <Button type="button" variant="secondary" size="sm">
+                        <Button 
+                          type="button" 
+                          variant="secondary" 
+                          size="sm"
+                          onClick={() => document.getElementById('editProductImage')?.click()}
+                        >
                           Select Files
                         </Button>
                       </label>

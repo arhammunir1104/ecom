@@ -335,24 +335,30 @@ export default function AdminEditCategory() {
                     </div>
                   ) : (
                     <div className="border border-dashed rounded-md flex items-center justify-center aspect-[3/2]">
-                      <label className="cursor-pointer flex flex-col items-center p-8">
+                      <label className="cursor-pointer flex flex-col items-center p-8 w-full h-full">
                         <ImagePlus className="mb-4 h-10 w-10 text-gray-400" />
                         <span className="text-lg font-medium mb-1">Upload Image</span>
                         <span className="text-sm text-gray-500 text-center mb-4">
                           Drag and drop or click to browse
                         </span>
-                        <Button type="button" variant="secondary" className="mb-2">
+                        <input
+                          type="file"
+                          id="editCategoryImage"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={handleImageChange}
+                        />
+                        <Button 
+                          type="button" 
+                          variant="secondary" 
+                          className="mb-2"
+                          onClick={() => document.getElementById('editCategoryImage')?.click()}
+                        >
                           Select Image
                         </Button>
                         <p className="text-xs text-gray-500">
                           Recommended size: 800 x 600px
                         </p>
-                        <input
-                          type="file"
-                          accept="image/*"
-                          className="hidden"
-                          onChange={handleImageChange}
-                        />
                       </label>
                     </div>
                   )}

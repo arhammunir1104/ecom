@@ -487,15 +487,25 @@ export default function AdminAddProduct() {
                       ))}
                       {imagePreviews.length < 4 && (
                         <div className="border border-dashed rounded-md flex items-center justify-center aspect-square">
-                          <label className="cursor-pointer flex flex-col items-center p-4">
+                          <label className="cursor-pointer flex flex-col items-center p-4 w-full h-full">
                             <ImagePlus className="mb-2 h-6 w-6 text-gray-400" />
                             <span className="text-sm text-gray-500">Add Image</span>
                             <input
                               type="file"
+                              id="productImage"
                               accept="image/*"
                               className="hidden"
                               onChange={handleImageChange}
                             />
+                            <Button 
+                              type="button" 
+                              variant="secondary" 
+                              size="sm"
+                              className="mt-2"
+                              onClick={() => document.getElementById('productImage')?.click()}
+                            >
+                              Select
+                            </Button>
                           </label>
                         </div>
                       )}
