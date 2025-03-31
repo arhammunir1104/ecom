@@ -58,11 +58,11 @@ export default function AdminProducts() {
               product.description.toLowerCase().includes(searchQuery.toLowerCase());
     }
     
-    if (match && categoryFilter) {
+    if (match && categoryFilter && categoryFilter !== 'all') {
       match = product.categoryId === parseInt(categoryFilter);
     }
     
-    if (match && statusFilter) {
+    if (match && statusFilter && statusFilter !== 'all') {
       if (statusFilter === "in-stock") {
         match = product.stock > 0;
       } else if (statusFilter === "out-of-stock") {
@@ -102,8 +102,8 @@ export default function AdminProducts() {
   
   const handleClearFilters = () => {
     setSearchQuery("");
-    setCategoryFilter("");
-    setStatusFilter("");
+    setCategoryFilter("all");
+    setStatusFilter("all");
     setPage(1);
   };
   
@@ -149,7 +149,7 @@ export default function AdminProducts() {
                   <SelectValue placeholder="All Categories" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All Categories</SelectItem>
+                  <SelectItem value="all">All Categories</SelectItem>
                   {categories?.map(category => (
                     <SelectItem key={category.id} value={category.id.toString()}>
                       {category.name}
@@ -165,7 +165,7 @@ export default function AdminProducts() {
                   <SelectValue placeholder="All Status" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All Status</SelectItem>
+                  <SelectItem value="all">All Status</SelectItem>
                   <SelectItem value="in-stock">In Stock</SelectItem>
                   <SelectItem value="out-of-stock">Out of Stock</SelectItem>
                   <SelectItem value="featured">Featured</SelectItem>

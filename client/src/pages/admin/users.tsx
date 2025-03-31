@@ -52,7 +52,7 @@ export default function AdminUsers() {
               (user.fullName && user.fullName.toLowerCase().includes(searchQuery.toLowerCase()));
     }
     
-    if (match && roleFilter) {
+    if (match && roleFilter && roleFilter !== 'all') {
       match = user.role === roleFilter;
     }
     
@@ -79,7 +79,7 @@ export default function AdminUsers() {
   
   const handleClearFilters = () => {
     setSearchQuery("");
-    setRoleFilter("");
+    setRoleFilter("all");
     setPage(1);
   };
   
@@ -116,7 +116,7 @@ export default function AdminUsers() {
                   <SelectValue placeholder="All Roles" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All Roles</SelectItem>
+                  <SelectItem value="all">All Roles</SelectItem>
                   <SelectItem value="admin">Admin</SelectItem>
                   <SelectItem value="user">User</SelectItem>
                 </SelectContent>
