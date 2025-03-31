@@ -60,6 +60,7 @@ const Wishlist = () => {
                   id: item.productId,
                   name: item.name,
                   price: item.price,
+                  discountPrice: item.discountPrice,
                   images: item.image ? [item.image] : [],
                   addedAt: item.addedAt,
                   source: "firebase",
@@ -172,6 +173,7 @@ const Wishlist = () => {
           id: product.id,
           name: product.name,
           price: product.price,
+          discountPrice: product.discountPrice,
           image:
             product.images &&
             Array.isArray(product.images) &&

@@ -15,12 +15,13 @@ export interface CartItem {
   quantity: number;
   name: string;
   price: number;
+  discountPrice?: number | null;
   image?: string;
 }
 
 interface CartContextType {
   cart: Record<string, CartItem>; // productId (string) -> CartItem
-  addToCart: (product: { id: number | string; name: string; price: number; image?: string }, quantity?: number) => void;
+  addToCart: (product: { id: number | string; name: string; price: number; discountPrice?: number | null; image?: string }, quantity?: number) => void;
   removeFromCart: (productId: number | string) => void;
   updateQuantity: (productId: number | string, quantity: number) => void;
   clearCart: () => void;
@@ -123,6 +124,7 @@ export const CartProvider = ({ children }: CartProviderProps) => {
             productId: item.productId,
             name: item.name || 'Unknown Product',
             price: item.price || 0,
+            discountPrice: item.discountPrice || null,
             quantity: item.quantity || 1,
             image: item.image || '',
           };
@@ -148,7 +150,7 @@ export const CartProvider = ({ children }: CartProviderProps) => {
   }, [cart, isLoading]);
 
   const addToCart = async (
-    product: { id: number | string; name: string; price: number; image?: string },
+    product: { id: number | string; name: string; price: number; discountPrice?: number | null; image?: string },
     quantity = 1
   ) => {
     // Ensure we have a valid product ID and convert to string
@@ -180,6 +182,7 @@ export const CartProvider = ({ children }: CartProviderProps) => {
             productId: product.id,
             name: product.name,
             price: product.price,
+            discountPrice: product.discountPrice,
             quantity,
             image: product.image
           };
@@ -321,7 +324,13 @@ export const CartProvider = ({ children }: CartProviderProps) => {
   };
 
   const getCartTotal = () => {
-    return Object.values(cart).reduce((sum, item) => sum + (item.price * item.quantity), 0);
+    return Object.values(cart).reduce((sum, item) => {
+      // Use discounted price if available, otherwise use regular price
+      const effectivePrice = item.discountPrice !== undefined && item.discountPrice !== null 
+        ? item.discountPrice 
+        : item.price;
+      return sum + (effectivePrice * item.quantity);
+    }, 0);
   };
 
   const value = {

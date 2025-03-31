@@ -45,11 +45,12 @@ const ProductCard = ({ product }: ProductCardProps) => {
   const handleAddToCart = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    // Pass the full product object with required fields
+    // Pass the full product object with required fields, including discountPrice
     addToCart({
       id,
       name,
       price,
+      discountPrice,
       image: imageUrl
     });
     
@@ -96,11 +97,12 @@ const ProductCard = ({ product }: ProductCardProps) => {
         return;
       }
       
-      // Add to Firebase wishlist
+      // Add to Firebase wishlist with both price and discountPrice
       await addToWishlist(uid, {
         id: id,
         name: name,
         price: price,
+        discountPrice: discountPrice,
         image: imageUrl
       });
       

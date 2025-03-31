@@ -82,6 +82,7 @@ export interface CartItem {
   quantity: number;
   name: string;
   price: number;
+  discountPrice?: number | null;
   image?: string;
   size?: string;
   color?: string;
@@ -126,6 +127,7 @@ export interface WishlistItem {
   productId: number | string;
   name: string;
   price: number;
+  discountPrice?: number | null;
   image?: string;
   addedAt: Timestamp;
 }
@@ -680,6 +682,7 @@ export const addToCart = async (
         productId: product.id,
         name: product.name,
         price: product.price,
+        discountPrice: product.discountPrice,
         quantity,
         image: product.image || "",  // Ensure image is never undefined
         ...options
@@ -832,7 +835,12 @@ export const createOrderFromCart = async (
     const orderItems: OrderItem[] = [];
     
     Object.values(cart.items).forEach(item => {
-      const subtotal = item.price * item.quantity;
+      // Use discounted price if available, otherwise use regular price
+      const effectivePrice = item.discountPrice !== undefined && item.discountPrice !== null 
+        ? item.discountPrice 
+        : item.price;
+      
+      const subtotal = effectivePrice * item.quantity;
       totalAmount += subtotal;
       
       orderItems.push({
@@ -1608,6 +1616,7 @@ export const addToWishlist = async (
     id: number | string;
     name: string;
     price: number;
+    discountPrice?: number | null;
     image?: string;
   }
 ): Promise<Wishlist> => {
@@ -1635,15 +1644,23 @@ export const addToWishlist = async (
     
     if (!existingItem) {
       // Add new item to wishlist with a JavaScript Date instead of serverTimestamp()
-      // Ensure price is stored as a number value
+      // Ensure prices are stored as number values
       const numericPrice = typeof product.price === 'string' 
         ? parseFloat(product.price) 
         : (typeof product.price === 'number' ? product.price : 0);
+      
+      // Handle discounted price if it exists
+      const numericDiscountPrice = product.discountPrice !== undefined && product.discountPrice !== null
+        ? (typeof product.discountPrice === 'string' 
+            ? parseFloat(product.discountPrice) 
+            : (typeof product.discountPrice === 'number' ? product.discountPrice : null))
+        : null;
       
       wishlist.items.push({
         productId: product.id,
         name: product.name,
         price: numericPrice,
+        discountPrice: numericDiscountPrice,
         image: product.image,
         addedAt: Timestamp.fromDate(new Date()) // Use client-side timestamp instead of serverTimestamp()
       });
