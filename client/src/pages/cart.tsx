@@ -10,6 +10,7 @@ import { Separator } from "@/components/ui/separator";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Product } from "@shared/schema";
 import { useQuery } from "@tanstack/react-query";
+import { CartItem as CartItemType } from "@/context/CartContext";
 
 const Cart = () => {
   const { cart, updateQuantity, removeFromCart, clearCart } = useCart();
@@ -32,7 +33,8 @@ const Cart = () => {
 
   // Calculate cart totals
   const subtotal = cartProducts.reduce((sum, product) => {
-    const quantity = cart[product.id];
+    const cartItem = cart[product.id.toString()];
+    const quantity = cartItem ? cartItem.quantity : 0;
     const price = product.discountPrice || product.price;
     return sum + price * quantity;
   }, 0);
@@ -82,7 +84,7 @@ const Cart = () => {
                 <CartItem 
                   key={product.id}
                   product={product}
-                  quantity={cart[product.id]}
+                  quantity={cart[product.id.toString()]?.quantity || 0}
                   updateQuantity={(quantity) => updateQuantity(product.id, quantity)}
                   removeFromCart={() => removeFromCart(product.id)}
                 />

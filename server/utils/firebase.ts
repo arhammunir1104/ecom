@@ -14,16 +14,12 @@ let isFirebaseInitialized = false;
 export const initializeFirebase = () => {
   if (getApps().length === 0) {
     try {
-      const projectId = process.env.VITE_FIREBASE_PROJECT_ID;
+      // Hard-coded Firebase configuration for development
+      const projectId = "burger-c0af3";
       
-      if (!projectId) {
-        console.warn("Firebase project ID is missing. Firebase services won't be initialized.");
-        return false;
-      }
-      
-      // Initialize the app with default credentials for Replit environment
+      // Initialize the app with explicit project configuration for Replit environment
       const app = initializeApp({
-        projectId,
+        projectId: projectId,
         storageBucket: `${projectId}.appspot.com`,
       });
       

@@ -1,35 +1,25 @@
-import { initializeApp } from "firebase/app";
+import { initializeApp, getApps, getApp } from "firebase/app";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged, User } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 
-// Firebase configuration - get environment variables correctly
-const projectId = import.meta.env.VITE_FIREBASE_PROJECT_ID;
-const apiKey = import.meta.env.VITE_FIREBASE_API_KEY;
-const appId = import.meta.env.VITE_FIREBASE_APP_ID;
-
-// Log Firebase configuration for debugging
-console.log("Firebase Config - Project ID:", projectId);
-console.log("Firebase Config - API Key available:", !!apiKey);
-console.log("Firebase Config - App ID available:", !!appId);
-
-// Check if we have the required Firebase environment variables
-if (!projectId || !apiKey || !appId) {
-  console.warn("Missing required Firebase configuration environment variables!");
-}
-
+// Default Firebase configuration - Use a fallback configuration
 const firebaseConfig = {
-  apiKey: apiKey,
-  // Generate authDomain from projectId if not provided
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || `${projectId}.firebaseapp.com`,
-  projectId: projectId,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || `${projectId}.appspot.com`,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: appId
+  apiKey: "AIzaSyC7KLf8dP_WYbr0wQdVsrHY3LCRWDaEgV0",
+  authDomain: "burger-c0af3.firebaseapp.com",
+  projectId: "burger-c0af3",
+  storageBucket: "burger-c0af3.appspot.com",
+  messagingSenderId: "442391454320",
+  appId: "1:442391454320:web:eb5e1c3c83e19ebf43ff88"
 };
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
+// Log Firebase configuration for debugging
+console.log("Firebase Config - Project ID:", firebaseConfig.projectId);
+console.log("Firebase Config - API Key available:", !!firebaseConfig.apiKey);
+console.log("Firebase Config - App ID available:", !!firebaseConfig.appId);
+
+// Initialize Firebase - handle hot module reloading by checking if app already exists
+const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 
 // Initialize Firebase services
 export const auth = getAuth(app);
