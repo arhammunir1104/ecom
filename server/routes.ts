@@ -20,6 +20,32 @@ declare global {
   }
 }
 
+// Firebase document types
+interface FirebaseCategory {
+  id: string;
+  name: string;
+  description?: string;
+  image?: string;
+  featured?: boolean;
+  [key: string]: any;
+}
+
+interface FirebaseProduct {
+  id: string;
+  name: string;
+  description: string;
+  price: number;
+  discountPrice?: number;
+  categoryId?: number | string;
+  images: string[];
+  sizes: string[];
+  colors: string[];
+  stock: number;
+  featured: boolean;
+  trending: boolean;
+  [key: string]: any;
+}
+
 // Initialize Stripe
 if (!process.env.STRIPE_SECRET_KEY) {
   console.error("⚠️ STRIPE_SECRET_KEY is not set. Please set it in your secrets/environment variables.");
@@ -481,7 +507,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         if (firebaseCategories && firebaseCategories.length > 0) {
           // Transform the Firebase data to match our API format
-          const formattedCategories = firebaseCategories.map(category => ({
+          const formattedCategories = firebaseCategories.map((category: any) => ({
             id: parseInt(category.id),
             name: category.name,
             description: category.description || '',
@@ -520,7 +546,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         if (firebaseCategories && firebaseCategories.length > 0) {
           // Transform the Firebase data to match our API format
-          const formattedCategories = firebaseCategories.map(category => ({
+          const formattedCategories = firebaseCategories.map((category: any) => ({
             id: parseInt(category.id),
             name: category.name,
             description: category.description || '',
@@ -619,12 +645,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         if (firebaseCategory) {
           console.log("Category created successfully in Firebase:", firebaseCategory);
+          const typedCategory = firebaseCategory as any;
           return res.status(201).json({
-            id: parseInt(firebaseCategory.id),
-            name: firebaseCategory.name,
-            description: firebaseCategory.description,
-            image: firebaseCategory.image,
-            featured: firebaseCategory.featured
+            id: parseInt(typedCategory.id),
+            name: typedCategory.name,
+            description: typedCategory.description || '',
+            image: typedCategory.image || null,
+            featured: typedCategory.featured || false
           });
         }
       } catch (firebaseError) {

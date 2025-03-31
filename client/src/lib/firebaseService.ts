@@ -51,12 +51,12 @@ export interface UserProfile {
 }
 
 export interface Product {
-  id: number;
+  id: number | string;
   name: string;
   description: string;
   price: number;
   discountPrice?: number;
-  categoryId?: number;
+  categoryId?: number | string;
   images: string[];
   sizes: string[];
   colors: string[];
@@ -68,7 +68,7 @@ export interface Product {
 }
 
 export interface Category {
-  id: number;
+  id: number | string;
   name: string;
   image?: string;
   description?: string;
@@ -78,7 +78,7 @@ export interface Category {
 }
 
 export interface CartItem {
-  productId: number;
+  productId: number | string;
   quantity: number;
   name: string;
   price: number;
@@ -123,7 +123,7 @@ export interface Order {
 }
 
 export interface WishlistItem {
-  productId: number;
+  productId: number | string;
   name: string;
   price: number;
   image?: string;
@@ -574,7 +574,7 @@ export const getUserCart = async (userId: string): Promise<Cart | null> => {
 export const addToCart = async (
   userId: string,
   product: {
-    id: number;
+    id: number | string;
     name: string;
     price: number;
     image?: string;
@@ -638,7 +638,7 @@ export const addToCart = async (
  */
 export const updateCartItemQuantity = async (
   userId: string,
-  productId: number,
+  productId: number | string,
   quantity: number
 ): Promise<Cart> => {
   try {
@@ -683,7 +683,7 @@ export const updateCartItemQuantity = async (
  */
 export const removeFromCart = async (
   userId: string,
-  productId: number
+  productId: number | string
 ): Promise<Cart> => {
   try {
     const cartDocRef = getCartDocRef(userId);
@@ -954,7 +954,9 @@ export const createProduct = async (productData: Omit<Product, 'id' | 'createdAt
     let nextId = 1;
     if (!productsSnapshot.empty) {
       const lastProduct = productsSnapshot.docs[0].data() as Product;
-      nextId = lastProduct.id + 1;
+      // If id is a string, parse it to a number first
+      const lastId = typeof lastProduct.id === 'string' ? parseInt(lastProduct.id, 10) : lastProduct.id;
+      nextId = lastId + 1;
     }
     
     // Create the product with auto-generated ID and timestamps
@@ -1000,7 +1002,7 @@ export const getAllProducts = async (): Promise<Product[]> => {
 /**
  * Get a single product by ID
  */
-export const getProductById = async (productId: number): Promise<Product | null> => {
+export const getProductById = async (productId: number | string): Promise<Product | null> => {
   try {
     const productDocRef = getProductDocRef(productId);
     const productDoc = await getDoc(productDocRef);
@@ -1070,7 +1072,7 @@ export const getTrendingProducts = async (): Promise<Product[]> => {
  * Update a product
  */
 export const updateProduct = async (
-  productId: number,
+  productId: number | string,
   productData: Partial<Product>
 ): Promise<Product | null> => {
   try {
@@ -1101,7 +1103,7 @@ export const updateProduct = async (
 /**
  * Delete a product
  */
-export const deleteProduct = async (productId: number): Promise<boolean> => {
+export const deleteProduct = async (productId: number | string): Promise<boolean> => {
   try {
     const productDocRef = getProductDocRef(productId);
     await deleteDoc(productDocRef);
@@ -1116,7 +1118,7 @@ export const deleteProduct = async (productId: number): Promise<boolean> => {
 /**
  * Get products by category
  */
-export const getProductsByCategory = async (categoryId: number): Promise<Product[]> => {
+export const getProductsByCategory = async (categoryId: number | string): Promise<Product[]> => {
   try {
     const productsQuery = query(
       collection(db, PRODUCTS_COLLECTION),
@@ -1159,7 +1161,9 @@ export const createCategory = async (categoryData: Omit<Category, 'id' | 'create
     let nextId = 1;
     if (!categoriesSnapshot.empty) {
       const lastCategory = categoriesSnapshot.docs[0].data() as Category;
-      nextId = lastCategory.id + 1;
+      // If id is a string, parse it to a number first
+      const lastId = typeof lastCategory.id === 'string' ? parseInt(lastCategory.id, 10) : lastCategory.id;
+      nextId = lastId + 1;
     }
     
     // Create the category with auto-generated ID and timestamps
@@ -1230,7 +1234,7 @@ export const getFeaturedCategories = async (): Promise<Category[]> => {
 /**
  * Get a single category by ID
  */
-export const getCategoryById = async (categoryId: number): Promise<Category | null> => {
+export const getCategoryById = async (categoryId: number | string): Promise<Category | null> => {
   try {
     const categoryDocRef = getCategoryDocRef(categoryId);
     const categoryDoc = await getDoc(categoryDocRef);
@@ -1250,7 +1254,7 @@ export const getCategoryById = async (categoryId: number): Promise<Category | nu
  * Update a category
  */
 export const updateCategory = async (
-  categoryId: number,
+  categoryId: number | string,
   categoryData: Partial<Category>
 ): Promise<Category | null> => {
   try {
@@ -1281,7 +1285,7 @@ export const updateCategory = async (
 /**
  * Delete a category
  */
-export const deleteCategory = async (categoryId: number): Promise<boolean> => {
+export const deleteCategory = async (categoryId: number | string): Promise<boolean> => {
   try {
     const categoryDocRef = getCategoryDocRef(categoryId);
     await deleteDoc(categoryDocRef);
@@ -1334,7 +1338,7 @@ export const getUserWishlist = async (userId: string): Promise<Wishlist | null> 
 export const addToWishlist = async (
   userId: string,
   product: {
-    id: number;
+    id: number | string;
     name: string;
     price: number;
     image?: string;
@@ -1395,7 +1399,7 @@ export const addToWishlist = async (
  */
 export const removeFromWishlist = async (
   userId: string,
-  productId: number
+  productId: number | string
 ): Promise<Wishlist> => {
   try {
     const wishlistDocRef = getWishlistDocRef(userId);
@@ -1429,7 +1433,7 @@ export const removeFromWishlist = async (
  */
 export const isInWishlist = async (
   userId: string,
-  productId: number
+  productId: number | string
 ): Promise<boolean> => {
   try {
     const wishlist = await getUserWishlist(userId);

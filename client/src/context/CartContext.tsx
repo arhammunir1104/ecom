@@ -11,7 +11,7 @@ import {
 
 // Type definitions
 export interface CartItem {
-  productId: number;
+  productId: number | string;
   quantity: number;
   name: string;
   price: number;
@@ -20,9 +20,9 @@ export interface CartItem {
 
 interface CartContextType {
   cart: Record<string, CartItem>; // productId (string) -> CartItem
-  addToCart: (product: { id: number; name: string; price: number; image?: string }, quantity?: number) => void;
-  removeFromCart: (productId: number) => void;
-  updateQuantity: (productId: number, quantity: number) => void;
+  addToCart: (product: { id: number | string; name: string; price: number; image?: string }, quantity?: number) => void;
+  removeFromCart: (productId: number | string) => void;
+  updateQuantity: (productId: number | string, quantity: number) => void;
   clearCart: () => void;
   getCartTotal: () => number;
   getCartCount: () => number;
@@ -133,9 +133,19 @@ export const CartProvider = ({ children }: CartProviderProps) => {
   }, [cart, isLoading]);
 
   const addToCart = async (
-    product: { id: number; name: string; price: number; image?: string },
+    product: { id: number | string; name: string; price: number; image?: string },
     quantity = 1
   ) => {
+    // Ensure we have a valid product ID and convert to string
+    if (!product || !product.id) {
+      toast({
+        title: "Error",
+        description: "Cannot add item to cart: Invalid product",
+        variant: "destructive"
+      });
+      return;
+    }
+    
     const productId = product.id.toString();
     
     try {
@@ -182,7 +192,16 @@ export const CartProvider = ({ children }: CartProviderProps) => {
     }
   };
 
-  const removeFromCart = async (productId: number) => {
+  const removeFromCart = async (productId: number | string) => {
+    if (!productId) {
+      toast({
+        title: "Error",
+        description: "Cannot remove item: Invalid product ID",
+        variant: "destructive"
+      });
+      return;
+    }
+    
     const productIdStr = productId.toString();
     
     try {
@@ -212,7 +231,16 @@ export const CartProvider = ({ children }: CartProviderProps) => {
     }
   };
 
-  const updateQuantity = async (productId: number, quantity: number) => {
+  const updateQuantity = async (productId: number | string, quantity: number) => {
+    if (!productId) {
+      toast({
+        title: "Error",
+        description: "Cannot update item: Invalid product ID",
+        variant: "destructive"
+      });
+      return;
+    }
+    
     const productIdStr = productId.toString();
     
     if (quantity <= 0) {

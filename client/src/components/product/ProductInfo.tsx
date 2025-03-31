@@ -36,7 +36,7 @@ const ProductInfo = ({ product, category }: ProductInfoProps) => {
   } = product;
   
   const handleAddToCart = () => {
-    addToCart(id, quantity);
+    addToCart(product, quantity);
   };
   
   const formattedSizes = Array.isArray(sizes) ? sizes : [];

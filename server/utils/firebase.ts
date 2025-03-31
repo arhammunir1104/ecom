@@ -1,12 +1,12 @@
 import { initializeApp, cert, getApps } from 'firebase-admin/app';
-import { getFirestore } from 'firebase-admin/firestore';
-import { getAuth } from 'firebase-admin/auth';
-import { getStorage } from 'firebase-admin/storage';
+import { getFirestore, Firestore } from 'firebase-admin/firestore';
+import { getAuth, Auth } from 'firebase-admin/auth';
+import { getStorage, Storage } from 'firebase-admin/storage';
 
 // Check if Firebase Admin is already initialized
-let firestoreDb;
-let firebaseAuth;
-let firebaseStorage;
+let firestoreDb: Firestore | undefined;
+let firebaseAuth: Auth | undefined;
+let firebaseStorage: Storage | undefined;
 
 // Flag to track if Firebase is properly initialized
 let isFirebaseInitialized = false;
@@ -53,32 +53,41 @@ export const initializeFirebase = () => {
   }
 };
 
-export const db = () => {
+export const db = (): Firestore => {
   if (!isFirebaseInitialized) {
     const initialized = initializeFirebase();
     if (!initialized) {
       throw new Error('Firebase services are not initialized. Cannot access Firestore.');
     }
   }
+  if (!firestoreDb) {
+    throw new Error('Firestore is not initialized.');
+  }
   return firestoreDb;
 };
 
-export const auth = () => {
+export const auth = (): Auth => {
   if (!isFirebaseInitialized) {
     const initialized = initializeFirebase();
     if (!initialized) {
       throw new Error('Firebase services are not initialized. Cannot access Auth.');
     }
   }
+  if (!firebaseAuth) {
+    throw new Error('Firebase Auth is not initialized.');
+  }
   return firebaseAuth;
 };
 
-export const storage = () => {
+export const storage = (): Storage => {
   if (!isFirebaseInitialized) {
     const initialized = initializeFirebase();
     if (!initialized) {
       throw new Error('Firebase services are not initialized. Cannot access Storage.');
     }
+  }
+  if (!firebaseStorage) {
+    throw new Error('Firebase Storage is not initialized.');
   }
   return firebaseStorage;
 };
@@ -178,7 +187,7 @@ export const getAllDocuments = async (collection: string) => {
     const firestore = db();
     const querySnapshot = await firestore.collection(collection).get();
     
-    return querySnapshot.docs.map(doc => ({
+    return querySnapshot.docs.map((doc: FirebaseFirestore.QueryDocumentSnapshot<FirebaseFirestore.DocumentData>) => ({
       id: doc.id,
       ...doc.data()
     }));
@@ -216,7 +225,7 @@ export const queryDocuments = async (collection: string, field: string, operator
       .where(field, operator, value)
       .get();
     
-    return querySnapshot.docs.map(doc => ({
+    return querySnapshot.docs.map((doc: FirebaseFirestore.QueryDocumentSnapshot<FirebaseFirestore.DocumentData>) => ({
       id: doc.id,
       ...doc.data()
     }));
