@@ -9,8 +9,9 @@ import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Link, useLocation } from "wouter";
 import { Mail, ArrowLeft, Loader2 } from "lucide-react";
-import { resetPassword } from "@/lib/firebaseService";
-import { apiRequest } from "@/lib/queryClient";
+import { sendPasswordResetOTP } from "@/lib/emailService";
+import { doc, setDoc, collection, Timestamp } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 
 // Form validation schema
 const forgotPasswordSchema = z.object({
@@ -21,10 +22,10 @@ type ForgotPasswordFormValues = z.infer<typeof forgotPasswordSchema>;
 
 export default function ForgotPassword() {
   const { toast } = useToast();
-  const [location, setLocation] = useLocation();
+  const [_, setLocation] = useLocation();
   const [isLoading, setIsLoading] = useState(false);
   const [emailSent, setEmailSent] = useState(false);
-  const [userId, setUserId] = useState<number | null>(null);
+  const [emailAddress, setEmailAddress] = useState("");
 
   const form = useForm<ForgotPasswordFormValues>({
     resolver: zodResolver(forgotPasswordSchema),
@@ -33,69 +34,59 @@ export default function ForgotPassword() {
     },
   });
 
+  // Generate a 6-digit OTP
+  const generateOTP = (): string => {
+    return Math.floor(100000 + Math.random() * 900000).toString();
+  };
+
   const onSubmit = async (values: ForgotPasswordFormValues) => {
     setIsLoading(true);
     try {
-      // First check if this is a Firebase user
-      try {
-        // Try Firebase password reset first
-        await resetPassword(values.email);
-        setEmailSent(true);
-        toast({
-          title: "Reset Email Sent",
-          description: "Check your email for password reset instructions",
-        });
-      } catch (firebaseError: any) {
-        // If Firebase error is auth/user-not-found, try our custom backend
-        if (firebaseError.code === 'auth/user-not-found') {
-          // Try the custom backend for non-Firebase users
-          const response = await apiRequest("POST", "/api/auth/forgot-password", {
-            email: values.email,
-          });
-          
-          const data = await response.json();
-          
-          if (response.ok) {
-            if (data.userId) {
-              setUserId(data.userId);
-              setEmailSent(true);
-            } else {
-              // User not found in our system either, but we don't tell the user for security
-              setEmailSent(true);
-            }
-            
-            toast({
-              title: "Reset Email Sent",
-              description: "If an account exists with that email, a reset code has been sent",
-            });
-          } else {
-            throw new Error(data.message || "Failed to process password reset request");
-          }
-        } else {
-          // This is a different Firebase error, rethrow
-          throw firebaseError;
-        }
-      }
+      const email = values.email.trim().toLowerCase();
+      setEmailAddress(email);
+      
+      // Generate a 6-digit OTP
+      const otp = generateOTP();
+      
+      // Store OTP in Firestore with 5-minute expiration
+      const otpRef = doc(collection(db, "passwordResets"));
+      const expiresAt = new Date();
+      expiresAt.setMinutes(expiresAt.getMinutes() + 5); // 5-minute expiry
+      
+      await setDoc(otpRef, {
+        email,
+        otp,
+        expiresAt: Timestamp.fromDate(expiresAt),
+        attempts: 0,
+        createdAt: Timestamp.fromDate(new Date())
+      });
+      
+      // Send the OTP via email
+      await sendPasswordResetOTP(email, otp);
+      
+      setEmailSent(true);
+      toast({
+        title: "Verification Code Sent",
+        description: "Check your email for a 6-digit verification code"
+      });
+      
+      // Store the document ID in session storage for the next step
+      sessionStorage.setItem("resetDocId", otpRef.id);
     } catch (error: any) {
+      console.error("Error sending reset code:", error);
       toast({
         title: "Error",
-        description: error.message || "An error occurred. Please try again.",
+        description: "There was an error sending the verification code. Please try again.",
         variant: "destructive",
       });
-      console.error("Password reset error:", error);
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleContinue = () => {
-    if (userId) {
-      // If we have a userId, this is a non-Firebase user and we redirect to the verification page
-      setLocation(`/auth/verify-reset-code?userId=${userId}`);
-    } else {
-      // Otherwise, it's a Firebase user and they'll get email instructions
-      setLocation("/auth/login");
-    }
+    // Navigate to the OTP verification page
+    setLocation("/auth/verify-reset-code");
   };
 
   return (
@@ -107,8 +98,8 @@ export default function ForgotPassword() {
           </CardTitle>
           <CardDescription className="text-center">
             {emailSent
-              ? "We've sent you instructions to reset your password"
-              : "Enter your email address and we'll send you a reset link"}
+              ? "We've sent you a verification code"
+              : "Enter your email address and we'll send you a verification code"}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -143,7 +134,7 @@ export default function ForgotPassword() {
                       Sending...
                     </>
                   ) : (
-                    "Send Reset Instructions"
+                    "Send Verification Code"
                   )}
                 </Button>
               </form>
@@ -151,14 +142,14 @@ export default function ForgotPassword() {
           ) : (
             <div className="space-y-4">
               <p className="text-sm text-center">
-                We've sent instructions to reset your password to the email address you provided.
-                Please check your inbox and follow the instructions.
+                We've sent a 6-digit verification code to <strong>{emailAddress}</strong>.
+                The code will expire in 5 minutes.
               </p>
               <p className="text-sm text-center text-muted-foreground">
                 If you don't see the email, check your spam folder.
               </p>
               <Button className="w-full" onClick={handleContinue}>
-                Continue
+                Enter Verification Code
               </Button>
             </div>
           )}

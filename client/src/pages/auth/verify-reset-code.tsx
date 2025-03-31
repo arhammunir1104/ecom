@@ -1,181 +1,297 @@
 import { useState, useEffect } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Link, useLocation } from "wouter";
-import { ArrowLeft, Loader2 } from "lucide-react";
+import { ArrowLeft, Loader2, KeyRound } from "lucide-react";
+import { doc, getDoc, updateDoc, Timestamp } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
-import { apiRequest } from "@/lib/queryClient";
+
+// Form validation schema
+const verifyOtpSchema = z.object({
+  otp: z.string().length(6, "Verification code must be 6 digits")
+});
+
+type VerifyOtpFormValues = z.infer<typeof verifyOtpSchema>;
 
 export default function VerifyResetCode() {
   const { toast } = useToast();
-  const [location, setLocation] = useLocation();
+  const [_, setLocation] = useLocation();
   const [isLoading, setIsLoading] = useState(false);
-  const [verificationCode, setVerificationCode] = useState("");
-  const [userId, setUserId] = useState<number | null>(null);
-  const [isResending, setIsResending] = useState(false);
-  const [secondsLeft, setSecondsLeft] = useState(0);
+  const [timeLeft, setTimeLeft] = useState<number | null>(null);
+  const [resetDocId, setResetDocId] = useState<string | null>(null);
+  const [email, setEmail] = useState<string | null>(null);
+  const [verified, setVerified] = useState(false);
   
-  // Parse userId from URL
+  const form = useForm<VerifyOtpFormValues>({
+    resolver: zodResolver(verifyOtpSchema),
+    defaultValues: {
+      otp: ""
+    }
+  });
+
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const id = params.get("userId");
-    if (id) {
-      setUserId(parseInt(id, 10));
-    } else {
-      // If no userId, redirect back to forgot password
+    // Get document ID from session storage (set in forgot-password page)
+    const docId = sessionStorage.getItem("resetDocId");
+    if (!docId) {
       toast({
-        title: "Error",
-        description: "Invalid request. Please try again.",
-        variant: "destructive",
+        title: "Session Expired",
+        description: "Please restart the password reset process",
+        variant: "destructive"
       });
       setLocation("/auth/forgot-password");
+      return;
     }
-  }, []);
-  
-  // Timer for resend code button
-  useEffect(() => {
-    if (secondsLeft > 0) {
-      const timer = setTimeout(() => setSecondsLeft(secondsLeft - 1), 1000);
-      return () => clearTimeout(timer);
-    }
-  }, [secondsLeft]);
 
-  const handleVerification = async () => {
-    if (!userId) return;
+    setResetDocId(docId);
+
+    // Get reset document details
+    const fetchResetDetails = async () => {
+      try {
+        const resetDocRef = doc(db, "passwordResets", docId);
+        const resetDoc = await getDoc(resetDocRef);
+        
+        if (!resetDoc.exists()) {
+          toast({
+            title: "Invalid Reset Request",
+            description: "Please restart the password reset process",
+            variant: "destructive"
+          });
+          setLocation("/auth/forgot-password");
+          return;
+        }
+        
+        const data = resetDoc.data();
+        setEmail(data.email);
+        
+        // Calculate time left
+        const expiresAt = data.expiresAt.toDate();
+        const now = new Date();
+        const diffInMs = expiresAt.getTime() - now.getTime();
+        const diffInMinutes = Math.floor(diffInMs / 60000);
+        
+        if (diffInMinutes <= 0) {
+          toast({
+            title: "Code Expired",
+            description: "The verification code has expired. Please request a new one.",
+            variant: "destructive"
+          });
+          setLocation("/auth/forgot-password");
+          return;
+        }
+        
+        setTimeLeft(diffInMinutes);
+      } catch (error) {
+        console.error("Error fetching reset details:", error);
+        toast({
+          title: "Error",
+          description: "An error occurred. Please try again.",
+          variant: "destructive"
+        });
+      }
+    };
+    
+    fetchResetDetails();
+  }, [toast, setLocation]);
+
+  // Update timer every minute
+  useEffect(() => {
+    if (timeLeft === null || timeLeft <= 0) return;
+    
+    const timer = setInterval(() => {
+      setTimeLeft(prev => {
+        if (prev === null || prev <= 1) {
+          clearInterval(timer);
+          toast({
+            title: "Code Expired",
+            description: "The verification code has expired. Please request a new one.",
+            variant: "destructive"
+          });
+          setLocation("/auth/forgot-password");
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 60000); // Update every minute
+    
+    return () => clearInterval(timer);
+  }, [timeLeft, toast, setLocation]);
+
+  const onSubmit = async (values: VerifyOtpFormValues) => {
+    if (!resetDocId) return;
     
     setIsLoading(true);
     try {
-      const response = await apiRequest("POST", "/api/auth/verify-reset-code", {
-        userId,
-        otp: verificationCode,
-      });
+      const resetDocRef = doc(db, "passwordResets", resetDocId);
+      const resetDoc = await getDoc(resetDocRef);
       
-      const data = await response.json();
-      
-      if (response.ok) {
+      if (!resetDoc.exists()) {
         toast({
-          title: "Verification successful",
-          description: "Now you can set a new password",
+          title: "Invalid Reset Request",
+          description: "Please restart the password reset process",
+          variant: "destructive"
         });
-        // Redirect to reset password page with token
-        setLocation(`/auth/reset-password?userId=${userId}&token=${data.resetToken}`);
-      } else {
-        throw new Error(data.message || "Invalid verification code");
+        setLocation("/auth/forgot-password");
+        return;
       }
-    } catch (error: any) {
-      toast({
-        title: "Verification failed",
-        description: error.message || "An error occurred. Please try again.",
-        variant: "destructive",
+      
+      const data = resetDoc.data();
+      
+      // Verify expiration
+      const expiresAt = data.expiresAt.toDate();
+      const now = new Date();
+      if (now > expiresAt) {
+        toast({
+          title: "Code Expired",
+          description: "The verification code has expired. Please request a new one.",
+          variant: "destructive"
+        });
+        setLocation("/auth/forgot-password");
+        return;
+      }
+      
+      // Verify attempts
+      if (data.attempts >= 5) {
+        toast({
+          title: "Too Many Attempts",
+          description: "You've made too many incorrect attempts. Please request a new code.",
+          variant: "destructive"
+        });
+        setLocation("/auth/forgot-password");
+        return;
+      }
+      
+      // Check OTP
+      if (data.otp !== values.otp) {
+        // Increment attempts
+        await updateDoc(resetDocRef, {
+          attempts: (data.attempts || 0) + 1
+        });
+        
+        toast({
+          title: "Invalid Code",
+          description: "The verification code you entered is incorrect.",
+          variant: "destructive"
+        });
+        return;
+      }
+      
+      // Mark code as verified
+      await updateDoc(resetDocRef, {
+        verified: true,
+        verifiedAt: Timestamp.fromDate(new Date())
       });
-      setVerificationCode(""); // Clear input on error
+      
+      setVerified(true);
+      
+      toast({
+        title: "Verification Successful",
+        description: "You can now reset your password."
+      });
+      
+    } catch (error: any) {
+      console.error("Error verifying code:", error);
+      toast({
+        title: "Error",
+        description: error.message || "An error occurred. Please try again.",
+        variant: "destructive"
+      });
     } finally {
       setIsLoading(false);
     }
   };
-  
-  const handleResendCode = async () => {
-    if (!userId) return;
-    
-    setIsResending(true);
-    try {
-      // Get the email address first
-      const emailResponse = await apiRequest("GET", `/api/auth/user/${userId}`);
-      const userData = await emailResponse.json();
-      
-      if (!emailResponse.ok || !userData.email) {
-        throw new Error("Could not retrieve user information");
-      }
-      
-      // Send new password reset email
-      const response = await apiRequest("POST", "/api/auth/forgot-password", {
-        email: userData.email,
-      });
-      
-      if (response.ok) {
-        toast({
-          title: "Code resent",
-          description: "A new verification code has been sent to your email",
-        });
-        setSecondsLeft(60); // Start cooldown timer
-      } else {
-        const data = await response.json();
-        throw new Error(data.message || "Failed to resend code");
-      }
-    } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to resend code. Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsResending(false);
+
+  const handleContinue = () => {
+    // Store email in session storage for the reset page
+    if (email) {
+      sessionStorage.setItem("resetEmail", email);
     }
+    
+    // Navigate to reset password page
+    setLocation("/auth/reset-password");
   };
 
   return (
     <div className="container mx-auto flex items-center justify-center min-h-screen px-4">
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-1">
-          <CardTitle className="text-2xl font-bold text-center">Verify Reset Code</CardTitle>
+          <CardTitle className="text-2xl font-bold text-center">
+            {verified ? "Verification Successful" : "Verify Reset Code"}
+          </CardTitle>
           <CardDescription className="text-center">
-            Enter the 6-digit code sent to your email
+            {verified
+              ? "You've successfully verified your identity"
+              : `Enter the 6-digit code sent to your email ${timeLeft ? `(expires in ${timeLeft} min)` : ""}`}
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex justify-center py-4">
-            <InputOTP
-              maxLength={6}
-              value={verificationCode}
-              onChange={setVerificationCode}
-              disabled={isLoading}
-              render={({ slots }) => (
-                <InputOTPGroup>
-                  {slots.map((slot, index) => (
-                    <InputOTPSlot key={index} {...slot} />
-                  ))}
-                </InputOTPGroup>
-              )}
-            />
-          </div>
-          
-          <Button 
-            onClick={handleVerification} 
-            className="w-full" 
-            disabled={isLoading || verificationCode.length !== 6}
-          >
-            {isLoading ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Verifying...
-              </>
-            ) : (
-              "Verify"
-            )}
-          </Button>
-          
-          <div className="text-center mt-4">
-            <Button 
-              variant="link"
-              onClick={handleResendCode}
-              disabled={isResending || secondsLeft > 0}
-            >
-              {secondsLeft > 0
-                ? `Resend code in ${secondsLeft}s`
-                : isResending
-                ? "Sending..."
-                : "Resend code"}
-            </Button>
-          </div>
+        <CardContent>
+          {!verified ? (
+            <Form {...form}>
+              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                <FormField
+                  control={form.control}
+                  name="otp"
+                  render={({ field }) => (
+                    <FormItem className="mx-auto">
+                      <FormLabel className="text-center block">Verification Code</FormLabel>
+                      <FormControl>
+                        <InputOTP 
+                          maxLength={6} 
+                          {...field} 
+                          disabled={isLoading}
+                          render={({ slots }) => (
+                            <InputOTPGroup>
+                              {slots.map((slot, index) => (
+                                <InputOTPSlot key={index} {...slot} />
+                              ))}
+                            </InputOTPGroup>
+                          )}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <Button type="submit" className="w-full" disabled={isLoading}>
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Verifying...
+                    </>
+                  ) : (
+                    "Verify Code"
+                  )}
+                </Button>
+              </form>
+            </Form>
+          ) : (
+            <div className="space-y-4 text-center">
+              <div className="flex justify-center">
+                <KeyRound className="h-16 w-16 text-primary" />
+              </div>
+              <p className="text-sm">
+                Your identity has been verified. You can now create a new password.
+              </p>
+              <Button className="w-full" onClick={handleContinue}>
+                Create New Password
+              </Button>
+            </div>
+          )}
         </CardContent>
         <CardFooter className="flex justify-center">
-          <Button variant="ghost" asChild>
-            <Link to="/auth/forgot-password" className="flex items-center">
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Back
-            </Link>
-          </Button>
+          {!verified && (
+            <Button variant="ghost" asChild>
+              <Link to="/auth/forgot-password" className="flex items-center">
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                Back to Password Reset
+              </Link>
+            </Button>
+          )}
         </CardFooter>
       </Card>
     </div>

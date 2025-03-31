@@ -472,6 +472,38 @@ export const resetPassword = async (email: string): Promise<void> => {
 };
 
 /**
+ * Send OTP email for password reset
+ */
+export const sendOTP = async (email: string, otp: string): Promise<void> => {
+  try {
+    // Send email with OTP via Firebase's custom email sending
+    // For this demo, we'll use a cloud function or other email service
+    // Here we're using Firebase Functions method
+    
+    const response = await fetch("https://us-central1-burger-c0af3.cloudfunctions.net/sendOtpEmail", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        email,
+        otp,
+        subject: "Your Password Reset Code",
+        storeName: "Feminine Elegance",
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.message || "Failed to send OTP email");
+    }
+  } catch (error) {
+    console.error("Error sending OTP:", error);
+    throw error;
+  }
+};
+
+/**
  * Create a user profile in Firestore
  */
 export const createUserProfile = async (
