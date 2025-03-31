@@ -141,6 +141,10 @@ const Navbar = () => {
                     <DropdownMenuItem asChild>
                       <Link href="/signup">Sign Up</Link>
                     </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem asChild>
+                      <Link href="/direct-login">Direct Login (Firebase)</Link>
+                    </DropdownMenuItem>
                   </>
                 )}
               </DropdownMenuContent>

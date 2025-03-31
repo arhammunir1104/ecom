@@ -341,11 +341,17 @@ export default function Signup() {
             Sign up with Google
           </Button>
         </CardContent>
-        <CardFooter className="flex justify-center">
+        <CardFooter className="flex flex-col justify-center space-y-2">
           <p className="text-sm text-muted-foreground">
             Already have an account?{" "}
             <Link to="/login" className="text-primary hover:underline">
               Log in
+            </Link>
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Having trouble signing up?{" "}
+            <Link to="/direct-login" className="text-primary hover:underline">
+              Try direct login
             </Link>
           </p>
         </CardFooter>

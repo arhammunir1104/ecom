@@ -264,8 +264,12 @@ export default function Login() {
           </p>
           <p className="text-xs text-muted-foreground">
             Having trouble logging in?{" "}
+            <Link to="/direct-login" className="text-primary hover:underline">
+              Try direct login
+            </Link>
+            {" "}or{" "}
             <Link to="/direct-signup" className="text-primary hover:underline">
-              Try direct signup
+              direct signup
             </Link>
           </p>
         </CardFooter>

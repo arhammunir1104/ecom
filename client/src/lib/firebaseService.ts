@@ -358,7 +358,8 @@ export const signInWithGoogle = async (): Promise<FirebaseUser> => {
     
     // Use the signInWithGoogle implementation from firebase.ts
     // which uses the proper environment variables
-    const user = await import("./firebase").then(module => module.signInWithGoogle());
+    const { signInWithGoogle: firebaseSignInWithGoogle } = await import("./firebase");
+    const user = await firebaseSignInWithGoogle();
     
     if (!user) {
       throw new Error("Failed to sign in with Google - no user returned");
@@ -879,10 +880,10 @@ export const createOrderFromCart = async (
  */
 export const getUserOrders = async (userId: string): Promise<Order[]> => {
   try {
+    // Simplify the query to avoid composite index requirements
     const ordersQuery = query(
       collection(db, ORDERS_COLLECTION),
-      where("userId", "==", userId),
-      orderBy("orderDate", "desc")
+      where("userId", "==", userId)
     );
     
     const ordersSnapshot = await getDocs(ordersQuery);
@@ -892,7 +893,13 @@ export const getUserOrders = async (userId: string): Promise<Order[]> => {
       orders.push(doc.data() as Order);
     });
     
-    return orders;
+    // Sort manually in memory to avoid needing a composite index - newest first (descending)
+    return orders.sort((a, b) => {
+      // Convert Timestamp to milliseconds for comparison
+      const dateA = a.orderDate instanceof Timestamp ? a.orderDate.toMillis() : a.orderDate;
+      const dateB = b.orderDate instanceof Timestamp ? b.orderDate.toMillis() : b.orderDate;
+      return dateB - dateA; // Descending order (newest first)
+    });
   } catch (error) {
     console.error("Error getting user orders:", error);
     throw error;
@@ -967,24 +974,10 @@ export const getAllOrders = async (
   startAfterTimestamp?: Timestamp
 ): Promise<Order[]> => {
   try {
-    let ordersQuery;
-    
-    if (startAfterTimestamp) {
-      // Use the Timestamp object as a cursor for pagination
-      ordersQuery = query(
-        collection(db, ORDERS_COLLECTION),
-        orderBy("orderDate", "desc"),
-        startAfter(startAfterTimestamp),
-        limit(limitCount)
-      );
-    } else {
-      // Get the first page without a cursor
-      ordersQuery = query(
-        collection(db, ORDERS_COLLECTION),
-        orderBy("orderDate", "desc"),
-        limit(limitCount)
-      );
-    }
+    // Avoid using orderBy and get all orders
+    const ordersQuery = query(
+      collection(db, ORDERS_COLLECTION)
+    );
     
     const ordersSnapshot = await getDocs(ordersQuery);
     const orders: Order[] = [];
@@ -993,7 +986,28 @@ export const getAllOrders = async (
       orders.push(doc.data() as Order);
     });
     
-    return orders;
+    // Sort manually in memory to avoid needing an index - newest first (descending)
+    const sortedOrders = orders.sort((a, b) => {
+      // Convert Timestamp to milliseconds for comparison
+      const dateA = a.orderDate instanceof Timestamp ? a.orderDate.toMillis() : a.orderDate;
+      const dateB = b.orderDate instanceof Timestamp ? b.orderDate.toMillis() : b.orderDate;
+      return dateB - dateA; // Descending order (newest first)
+    });
+    
+    // Handle pagination manually
+    if (startAfterTimestamp) {
+      const startAfterMillis = startAfterTimestamp.toMillis();
+      const filteredOrders = sortedOrders.filter(order => {
+        const orderMillis = order.orderDate instanceof Timestamp ? 
+          order.orderDate.toMillis() : order.orderDate;
+        return orderMillis < startAfterMillis;
+      });
+      
+      return filteredOrders.slice(0, limitCount);
+    }
+    
+    // Return first page with limit
+    return sortedOrders.slice(0, limitCount);
   } catch (error) {
     console.error("Error getting all orders:", error);
     throw error;
@@ -1014,16 +1028,22 @@ export const createProduct = async (productData: Omit<Product, 'id' | 'createdAt
   try {
     console.log("Creating new product in Firestore");
     
-    // Get the next product ID by checking the current count
-    const productsQuery = query(collection(db, PRODUCTS_COLLECTION), orderBy("id", "desc"), limit(1));
+    // Get all products first
+    const productsQuery = query(collection(db, PRODUCTS_COLLECTION));
     const productsSnapshot = await getDocs(productsQuery);
     
     let nextId = 1;
     if (!productsSnapshot.empty) {
-      const lastProduct = productsSnapshot.docs[0].data() as Product;
-      // If id is a string, parse it to a number first
-      const lastId = typeof lastProduct.id === 'string' ? parseInt(lastProduct.id, 10) : lastProduct.id;
-      nextId = lastId + 1;
+      // Find the highest ID manually
+      let highestId = 0;
+      productsSnapshot.forEach((doc) => {
+        const product = doc.data() as Product;
+        const productId = typeof product.id === 'string' ? parseInt(product.id, 10) : product.id;
+        if (productId > highestId) {
+          highestId = productId;
+        }
+      });
+      nextId = highestId + 1;
     }
     
     // Create the product with auto-generated ID and timestamps
@@ -1051,7 +1071,8 @@ export const createProduct = async (productData: Omit<Product, 'id' | 'createdAt
  */
 export const getAllProducts = async (): Promise<Product[]> => {
   try {
-    const productsQuery = query(collection(db, PRODUCTS_COLLECTION), orderBy("id", "asc"));
+    // Get all products without any ordering to avoid index requirements
+    const productsQuery = query(collection(db, PRODUCTS_COLLECTION));
     const productsSnapshot = await getDocs(productsQuery);
     
     const products: Product[] = [];
@@ -1059,7 +1080,14 @@ export const getAllProducts = async (): Promise<Product[]> => {
       products.push(doc.data() as Product);
     });
     
-    return products;
+    // Sort manually in memory to avoid needing an index
+    const sortedProducts = products.sort((a, b) => {
+      const idA = typeof a.id === 'number' ? a.id : parseInt(a.id as string);
+      const idB = typeof b.id === 'number' ? b.id : parseInt(b.id as string);
+      return idA - idB;
+    });
+    
+    return sortedProducts;
   } catch (error) {
     console.error("Error getting all products:", error);
     return [];
@@ -1090,10 +1118,10 @@ export const getProductById = async (productId: number | string): Promise<Produc
  */
 export const getFeaturedProducts = async (): Promise<Product[]> => {
   try {
+    // Simplify the query to avoid composite index requirements
     const productsQuery = query(
       collection(db, PRODUCTS_COLLECTION),
-      where("featured", "==", true),
-      orderBy("id", "asc")
+      where("featured", "==", true)
     );
     
     const productsSnapshot = await getDocs(productsQuery);
@@ -1103,7 +1131,12 @@ export const getFeaturedProducts = async (): Promise<Product[]> => {
       products.push(doc.data() as Product);
     });
     
-    return products;
+    // Sort manually in memory to avoid needing a composite index
+    return products.sort((a, b) => {
+      const idA = typeof a.id === 'number' ? a.id : parseInt(a.id as string);
+      const idB = typeof b.id === 'number' ? b.id : parseInt(b.id as string);
+      return idA - idB;
+    });
   } catch (error) {
     console.error("Error getting featured products:", error);
     return [];
@@ -1115,10 +1148,10 @@ export const getFeaturedProducts = async (): Promise<Product[]> => {
  */
 export const getTrendingProducts = async (): Promise<Product[]> => {
   try {
+    // Simplify the query to avoid composite index requirements
     const productsQuery = query(
       collection(db, PRODUCTS_COLLECTION),
-      where("trending", "==", true),
-      orderBy("id", "asc")
+      where("trending", "==", true)
     );
     
     const productsSnapshot = await getDocs(productsQuery);
@@ -1128,7 +1161,12 @@ export const getTrendingProducts = async (): Promise<Product[]> => {
       products.push(doc.data() as Product);
     });
     
-    return products;
+    // Sort manually in memory to avoid needing a composite index
+    return products.sort((a, b) => {
+      const idA = typeof a.id === 'number' ? a.id : parseInt(a.id as string);
+      const idB = typeof b.id === 'number' ? b.id : parseInt(b.id as string);
+      return idA - idB;
+    });
   } catch (error) {
     console.error("Error getting trending products:", error);
     return [];
@@ -1187,10 +1225,10 @@ export const deleteProduct = async (productId: number | string): Promise<boolean
  */
 export const getProductsByCategory = async (categoryId: number | string): Promise<Product[]> => {
   try {
+    // Simplify the query to avoid composite index requirements
     const productsQuery = query(
       collection(db, PRODUCTS_COLLECTION),
-      where("categoryId", "==", categoryId),
-      orderBy("id", "asc")
+      where("categoryId", "==", categoryId)
     );
     
     const productsSnapshot = await getDocs(productsQuery);
@@ -1200,7 +1238,12 @@ export const getProductsByCategory = async (categoryId: number | string): Promis
       products.push(doc.data() as Product);
     });
     
-    return products;
+    // Sort manually in memory to avoid needing a composite index
+    return products.sort((a, b) => {
+      const idA = typeof a.id === 'number' ? a.id : parseInt(a.id as string);
+      const idB = typeof b.id === 'number' ? b.id : parseInt(b.id as string);
+      return idA - idB;
+    });
   } catch (error) {
     console.error(`Error getting products for category ${categoryId}:`, error);
     return [];
@@ -1221,16 +1264,22 @@ export const createCategory = async (categoryData: Omit<Category, 'id' | 'create
   try {
     console.log("Creating new category in Firestore");
     
-    // Get the next category ID by checking the current count
-    const categoriesQuery = query(collection(db, CATEGORIES_COLLECTION), orderBy("id", "desc"), limit(1));
+    // Get all categories first
+    const categoriesQuery = query(collection(db, CATEGORIES_COLLECTION));
     const categoriesSnapshot = await getDocs(categoriesQuery);
     
     let nextId = 1;
     if (!categoriesSnapshot.empty) {
-      const lastCategory = categoriesSnapshot.docs[0].data() as Category;
-      // If id is a string, parse it to a number first
-      const lastId = typeof lastCategory.id === 'string' ? parseInt(lastCategory.id, 10) : lastCategory.id;
-      nextId = lastId + 1;
+      // Find the highest ID manually
+      let highestId = 0;
+      categoriesSnapshot.forEach((doc) => {
+        const category = doc.data() as Category;
+        const categoryId = typeof category.id === 'string' ? parseInt(category.id, 10) : category.id;
+        if (categoryId > highestId) {
+          highestId = categoryId;
+        }
+      });
+      nextId = highestId + 1;
     }
     
     // Create the category with auto-generated ID and timestamps
@@ -1258,7 +1307,8 @@ export const createCategory = async (categoryData: Omit<Category, 'id' | 'create
  */
 export const getAllCategories = async (): Promise<Category[]> => {
   try {
-    const categoriesQuery = query(collection(db, CATEGORIES_COLLECTION), orderBy("id", "asc"));
+    // Get all categories without any ordering to avoid index requirements
+    const categoriesQuery = query(collection(db, CATEGORIES_COLLECTION));
     const categoriesSnapshot = await getDocs(categoriesQuery);
     
     const categories: Category[] = [];
@@ -1266,7 +1316,14 @@ export const getAllCategories = async (): Promise<Category[]> => {
       categories.push(doc.data() as Category);
     });
     
-    return categories;
+    // Sort manually in memory to avoid needing an index
+    const sortedCategories = categories.sort((a, b) => {
+      const idA = typeof a.id === 'number' ? a.id : parseInt(a.id as string);
+      const idB = typeof b.id === 'number' ? b.id : parseInt(b.id as string);
+      return idA - idB;
+    });
+    
+    return sortedCategories;
   } catch (error) {
     console.error("Error getting all categories:", error);
     return [];
@@ -1278,10 +1335,10 @@ export const getAllCategories = async (): Promise<Category[]> => {
  */
 export const getFeaturedCategories = async (): Promise<Category[]> => {
   try {
+    // Simplify the query to avoid composite index requirements
     const categoriesQuery = query(
       collection(db, CATEGORIES_COLLECTION),
-      where("featured", "==", true),
-      orderBy("id", "asc")
+      where("featured", "==", true)
     );
     
     const categoriesSnapshot = await getDocs(categoriesQuery);
@@ -1291,7 +1348,12 @@ export const getFeaturedCategories = async (): Promise<Category[]> => {
       categories.push(doc.data() as Category);
     });
     
-    return categories;
+    // Sort manually in memory to avoid needing a composite index
+    return categories.sort((a, b) => {
+      const idA = typeof a.id === 'number' ? a.id : parseInt(a.id as string);
+      const idB = typeof b.id === 'number' ? b.id : parseInt(b.id as string);
+      return idA - idB;
+    });
   } catch (error) {
     console.error("Error getting featured categories:", error);
     return [];

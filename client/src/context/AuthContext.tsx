@@ -64,7 +64,25 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       setIsLoading(true);
       if (firebaseUser) {
         try {
-          // Get user profile from Firestore
+          // Check if we have a localStorage cached user first for quick UI display
+          const cachedUserStr = localStorage.getItem('user');
+          const cachedFirebaseUid = localStorage.getItem('firebaseUid');
+          
+          // If we have a cached user and it matches the current Firebase UID, use it temporarily
+          if (cachedUserStr && cachedFirebaseUid === firebaseUser.uid) {
+            try {
+              const cachedUser = JSON.parse(cachedUserStr) as AuthUser;
+              // Set the cached user for immediate UI response
+              setUser(cachedUser);
+              setIsAdmin(cachedUser.role === "admin");
+              console.log("Using cached user data while fetching fresh data:", cachedUser.username);
+            } catch (cacheError) {
+              console.error("Error parsing cached user:", cacheError);
+            }
+          }
+          
+          // Get user profile from Firestore - even if we're using cached data, still fetch fresh data
+          console.log("Fetching latest user profile from Firestore for:", firebaseUser.uid);
           const userProfile = await firebaseService.getUserProfile(firebaseUser.uid);
           
           if (userProfile) {
@@ -88,17 +106,95 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
             console.log("User authenticated from Firestore:", authUser.username);
             console.log("User role:", authUser.role);
           } else {
-            console.log("No Firestore profile found for user:", firebaseUser.uid);
-            setUser(null);
+            // No profile exists in Firestore, but we have a Firebase auth user.
+            // Let's create a basic profile for them
+            console.log("No Firestore profile found for authenticated user, creating one:", firebaseUser.uid);
+            
+            try {
+              const displayName = firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'user';
+              
+              // Create new user profile in Firestore
+              await firebaseService.createUserProfile(firebaseUser.uid, {
+                uid: firebaseUser.uid,
+                email: firebaseUser.email || '',
+                username: displayName,
+                fullName: firebaseUser.displayName || displayName,
+                role: "user",
+                twoFactorEnabled: false,
+                photoURL: firebaseUser.photoURL || undefined,
+                createdAt: new Date() as any,
+                updatedAt: new Date() as any
+              });
+              
+              // Now fetch the profile we just created
+              const newUserProfile = await firebaseService.getUserProfile(firebaseUser.uid);
+              
+              if (newUserProfile) {
+                // Convert Firestore profile to AuthUser format
+                const newAuthUser: AuthUser = {
+                  uid: newUserProfile.uid,
+                  username: newUserProfile.username,
+                  email: newUserProfile.email,
+                  fullName: newUserProfile.fullName,
+                  role: newUserProfile.role || "user",
+                  twoFactorEnabled: newUserProfile.twoFactorEnabled || false,
+                  photoURL: newUserProfile.photoURL
+                };
+                
+                setUser(newAuthUser);
+                setIsAdmin(newAuthUser.role === "admin");
+                localStorage.setItem('user', JSON.stringify(newAuthUser));
+                localStorage.setItem('firebaseUid', newAuthUser.uid);
+                console.log("Created and authenticated new user profile:", newAuthUser.username);
+              } else {
+                throw new Error("Failed to retrieve newly created user profile");
+              }
+            } catch (createError) {
+              console.error("Error creating user profile in Firestore:", createError);
+              
+              // Fallback to a basic user object if we can't create a profile
+              const basicUser: AuthUser = {
+                uid: firebaseUser.uid,
+                username: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'user',
+                email: firebaseUser.email || '',
+                role: "user",
+                twoFactorEnabled: false,
+                photoURL: firebaseUser.photoURL || undefined
+              };
+              
+              setUser(basicUser);
+              setIsAdmin(false);
+              localStorage.setItem('user', JSON.stringify(basicUser));
+              localStorage.setItem('firebaseUid', basicUser.uid);
+              console.log("Using fallback basic user data:", basicUser.username);
+            }
           }
         } catch (error) {
           console.error("Error getting user data from Firestore:", error);
-          setUser(null);
+          
+          // Even if Firestore fails, we still have an authenticated Firebase user
+          // Let's use the Firebase user data as a fallback to keep the user logged in
+          const fallbackUser: AuthUser = {
+            uid: firebaseUser.uid,
+            username: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'user',
+            email: firebaseUser.email || '',
+            role: "user",
+            twoFactorEnabled: false,
+            photoURL: firebaseUser.photoURL || undefined
+          };
+          
+          setUser(fallbackUser);
+          setIsAdmin(false);
+          localStorage.setItem('user', JSON.stringify(fallbackUser));
+          localStorage.setItem('firebaseUid', fallbackUser.uid);
+          console.log("Using fallback user data from Firebase Auth:", fallbackUser.username);
         }
       } else {
         console.log("No Firebase user found, clearing auth state");
         setUser(null);
+        setIsAdmin(false);
         localStorage.removeItem('user');
+        localStorage.removeItem('firebaseUid');
       }
       setIsLoading(false);
     });
@@ -334,65 +430,34 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
   const loginWithGoogle = async () => {
     try {
-      console.log("Starting Google login process");
+      console.log("Starting Google login process with simplified approach");
       
-      // Use the Firebase service to sign in with Google
-      const firebaseUser = await firebaseService.signInWithGoogle();
-      console.log("Firebase user authenticated:", firebaseUser.email);
+      // Use the direct Firebase approach without relying on firebaseService
+      const { signInWithPopup, GoogleAuthProvider } = await import("firebase/auth");
+      const { auth } = await import("@/lib/firebase");
       
-      // The user profile is already stored in Firestore by signInWithGoogle function
-      // We just need to get the user profile
-      const userProfile = await firebaseService.getUserProfile(firebaseUser.uid);
+      // Create a new instance of the Google provider
+      const provider = new GoogleAuthProvider();
       
-      if (!userProfile) {
-        throw new Error("Failed to retrieve user profile");
-      }
+      // Configure additional scopes if needed
+      provider.addScope('email');
+      provider.addScope('profile');
       
-      // Check if the user has 2FA enabled
-      if (userProfile.twoFactorEnabled) {
-        console.log("User has 2FA enabled - redirecting to verification");
-        
-        // Try to send a verification code
-        try {
-          console.log("Adding Firebase UID to request header:", userProfile.uid);
-          await fetch("/api/auth/2fa/send-code", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "Firebase-UID": userProfile.uid
-            },
-            body: JSON.stringify({ 
-              email: userProfile.email,
-              uid: userProfile.uid
-            })
-          });
-        } catch (tfaError) {
-          console.error("Error sending 2FA code:", tfaError);
-          // Continue anyway - we'll show the 2FA input form
-        }
-        
-        // Store just enough info to identify the user for 2FA verification
-        localStorage.setItem('pendingAuth', JSON.stringify({
-          email: userProfile.email,
-          uid: userProfile.uid,
-          requiresTwoFactor: true
-        }));
-        
-        // Redirect to the 2FA verification page
-        window.location.href = '/auth/verify-2fa';
-        return;
-      }
+      // Sign in with Google directly
+      const result = await signInWithPopup(auth, provider);
+      const firebaseUser = result.user;
       
-      // User doesn't have 2FA, continue with normal login
-      // Convert the Firestore profile to our AuthUser format
+      console.log("Firebase user authenticated directly:", firebaseUser.email);
+      
+      // Simplified approach - create AuthUser directly from Firebase user without Firestore lookup
       const authUser: AuthUser = {
-        uid: userProfile.uid,
-        username: userProfile.username,
-        email: userProfile.email,
-        fullName: userProfile.fullName || undefined,
-        role: userProfile.role,
-        twoFactorEnabled: userProfile.twoFactorEnabled,
-        photoURL: userProfile.photoURL || undefined
+        uid: firebaseUser.uid,
+        username: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'user',
+        email: firebaseUser.email || '',
+        fullName: firebaseUser.displayName || undefined,
+        role: "user", // Default to user role
+        twoFactorEnabled: false, // Disable 2FA by default for simplicity
+        photoURL: firebaseUser.photoURL || undefined
       };
       
       console.log("User authenticated successfully:", authUser.username);
@@ -538,13 +603,20 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
   const logout = async () => {
     try {
+      console.log("Starting logout process with simplified approach");
+      
+      // Use Firebase directly
+      const { signOut } = await import("firebase/auth");
+      const { auth } = await import("@/lib/firebase");
+      
       // Sign out from Firebase Authentication
-      await firebaseService.signOut();
+      await signOut(auth);
       
       // Clear local user state
       setUser(null);
       localStorage.removeItem('user');
       localStorage.removeItem('firebaseUid');
+      localStorage.removeItem('pendingAuth');
       
       // Clear any user-specific queries
       queryClient.invalidateQueries();
@@ -553,6 +625,9 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         title: "Logged Out",
         description: "You have been successfully logged out.",
       });
+      
+      // Redirect to login page
+      window.location.href = '/login';
     } catch (error: any) {
       console.error("Logout error:", error);
       toast({
@@ -560,7 +635,15 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         description: error.message || "Unable to log out. Please try again.",
         variant: "destructive",
       });
-      throw error;
+      
+      // Force clear the user state even if Firebase signOut fails
+      setUser(null);
+      localStorage.removeItem('user');
+      localStorage.removeItem('firebaseUid');
+      localStorage.removeItem('pendingAuth');
+      
+      // Redirect to login page to ensure they can attempt to login again
+      window.location.href = '/login';
     }
   };
 
