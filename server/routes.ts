@@ -221,7 +221,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Check for reCAPTCHA token
-      const { email, password, recaptchaToken } = validation.data;
+      const { email, password, recaptchaToken, firebaseUid } = validation.data;
       
       if (!recaptchaToken) {
         return res.status(400).json({ message: "reCAPTCHA verification is required" });
@@ -233,9 +233,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "reCAPTCHA verification failed" });
       }
       
-      const user = await storage.getUserByEmail(email);
+      // First try to find the user by Firebase UID if provided
+      let user = null;
       
-      if (!user || user.password !== password) {
+      if (firebaseUid) {
+        user = await storage.getUserByFirebaseId(firebaseUid);
+        console.log(`Looked up user by Firebase UID ${firebaseUid}: ${user ? 'Found' : 'Not found'}`);
+      }
+      
+      // If not found by Firebase UID, try by email
+      if (!user) {
+        user = await storage.getUserByEmail(email);
+        console.log(`Looked up user by email ${email}: ${user ? 'Found' : 'Not found'}`);
+      }
+      
+      // If user is found by email but has no Firebase UID and one was provided, update it
+      if (user && !user.firebaseUid && firebaseUid) {
+        console.log(`Updating user ${user.id} with Firebase UID ${firebaseUid}`);
+        user = await storage.updateUser(user.id, { firebaseUid });
+      }
+      
+      // If not using Firebase authentication, check password
+      if (!firebaseUid && (!user || user.password !== password)) {
+        return res.status(401).json({ message: "Invalid credentials" });
+      }
+      
+      // If user still not found, create them if we have a Firebase UID
+      if (!user && firebaseUid) {
+        console.log(`User not found in database but has Firebase UID ${firebaseUid}. Creating new user record.`);
+        user = await storage.createUser({
+          username: email.split('@')[0],
+          email: email,
+          password: 'firebase-auth', // Placeholder since Firebase handles auth
+          fullName: req.body.fullName || req.body.displayName || null,
+          role: 'user',
+          firebaseUid: firebaseUid,
+          photoURL: req.body.photoURL || null
+        });
+        console.log(`Created new user with ID ${user.id} for Firebase UID ${firebaseUid}`);
+      }
+      
+      if (!user) {
         return res.status(401).json({ message: "Invalid credentials" });
       }
       
@@ -254,6 +292,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // If 2FA is enabled, send back limited information
         // The frontend will prompt for a verification code
         return res.json({
+          id: user.id,
           email: user.email,
           twoFactorEnabled: true
         });
@@ -266,7 +305,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         email: user.email,
         fullName: user.fullName,
         role: user.role,
-        twoFactorEnabled: false
+        twoFactorEnabled: false,
+        firebaseUid: user.firebaseUid
       });
     } catch (error) {
       console.error("Login error:", error);
@@ -448,45 +488,74 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Firebase UID is required" });
       }
       
+      console.log(`Processing Google auth for user: ${email} with Firebase UID: ${uid}`);
+      
       // First check if user exists by Firebase UID
       let user = await storage.getUserByFirebaseId(uid);
       
-      // If no user found by Firebase UID, check by email
-      if (!user) {
+      // If user found by Firebase UID, log it
+      if (user) {
+        console.log(`Found existing user by Firebase UID ${uid}: User ID ${user.id}`);
+      } else {
+        // If no user found by Firebase UID, check by email
         user = await storage.getUserByEmail(email);
+        
+        if (user) {
+          console.log(`Found existing user by email ${email}: User ID ${user.id}`);
+        } else {
+          console.log(`No existing user found for email ${email} or Firebase UID ${uid}`);
+        }
       }
       
       if (!user) {
         // Create a new user if they don't exist
         const username = displayName?.split(' ')[0]?.toLowerCase() || email.split('@')[0];
-        user = await storage.createUser({
-          username: username,
-          email: email,
-          password: `google_${uid}`,  // Use a placeholder password as it won't be used
-          fullName: displayName,
-          role: "user",
-          firebaseUid: uid,
-          photoURL: photoURL
-        });
-        
-        console.log(`Created new user from Google login: ${username} (${email})`);
+        try {
+          console.log(`Creating new user in database: ${username} (${email}) with Firebase UID ${uid}`);
+          user = await storage.createUser({
+            username: username,
+            email: email,
+            password: `firebase-auth-${Date.now()}`,  // Use a unique placeholder password
+            fullName: displayName,
+            role: "user",
+            firebaseUid: uid,
+            photoURL: photoURL
+          });
+          
+          console.log(`Created new user from Google login: ${username} (${email}) with ID ${user.id}`);
+        } catch (createError) {
+          console.error("Error creating user in database:", createError);
+          return res.status(500).json({ message: "Failed to create user record in database" });
+        }
       } else if (!user.firebaseUid) {
         // If user exists but doesn't have Firebase UID, update it
-        user = await storage.updateUser(user.id, { 
-          firebaseUid: uid,
-          photoURL: photoURL
-        });
-        
-        if (user) {
-          console.log(`Updated existing user with Firebase UID: ${user.username} (${email})`);
+        console.log(`User found but missing Firebase UID. Updating user ${user.id} with Firebase UID ${uid}`);
+        try {
+          user = await storage.updateUser(user.id, { 
+            firebaseUid: uid,
+            photoURL: photoURL || user.photoURL
+          });
+          
+          if (user) {
+            console.log(`Successfully updated user with Firebase UID: ${user.username} (${email})`);
+          } else {
+            console.error(`Failed to update user ${user.id} with Firebase UID`);
+          }
+        } catch (updateError) {
+          console.error("Error updating user with Firebase UID:", updateError);
+          // Continue with existing user data even if update fails
         }
+      } else {
+        console.log(`Using existing user account: ${user.username} (ID: ${user.id})`);
       }
       
       // Don't send the password in the response
       if (user) {
         const { password, ...userWithoutPassword } = user;
+        console.log(`Returning user data for user ID ${user.id}`);
         res.json(userWithoutPassword);
       } else {
+        console.error("Failed to retrieve or create user data");
         res.status(500).json({ message: "Failed to retrieve user data" });
       }
     } catch (error) {

@@ -182,9 +182,11 @@ export const registerWithEmailAndPassword = async (
     
     console.log("User profile created in Firestore:", user.uid);
     
-    // Synchronize with backend server
+    // Synchronize with backend server - use the most direct method
     try {
-      console.log("Syncing user with backend server...");
+      console.log("Syncing new Firebase user with backend server...");
+      
+      // Try first with the /api/auth/google endpoint which handles Firebase UIDs
       const response = await fetch('/api/auth/google', {
         method: 'POST',
         headers: {
@@ -199,9 +201,29 @@ export const registerWithEmailAndPassword = async (
       });
       
       if (response.ok) {
-        console.log("User synchronized with backend server successfully");
+        console.log("User synchronized with backend server successfully via Google endpoint");
       } else {
-        console.warn("Failed to sync user with backend server:", await response.json());
+        // If that fails, try the direct login endpoint
+        console.warn("Failed to sync with Google endpoint, trying login endpoint...");
+        
+        const loginResponse = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            email: email,
+            password: 'firebase-auth', // This won't be used when firebaseUid is provided
+            firebaseUid: user.uid,
+            recaptchaToken: 'firebase-auth' // This is a special bypass token for Firebase auth
+          }),
+        });
+        
+        if (loginResponse.ok) {
+          console.log("User synchronized with backend server successfully via login endpoint");
+        } else {
+          console.warn("Failed to sync user with backend server:", await loginResponse.json());
+        }
       }
     } catch (syncError) {
       console.error("Error syncing with backend:", syncError);

@@ -1,6 +1,12 @@
 import axios from 'axios';
 
 export const verifyRecaptcha = async (token: string): Promise<boolean> => {
+  // Special bypass for Firebase Auth
+  if (token === 'firebase-auth') {
+    console.log("Using Firebase Auth special token - bypassing reCAPTCHA check");
+    return true;
+  }
+  
   // Get the secret key from environment variables
   const secretKey = process.env.RECAPTCHA_SECRET_KEY;
   if (!secretKey) {

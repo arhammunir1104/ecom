@@ -129,30 +129,24 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         // Get Firebase UID
         const firebaseUid = userCredential.user.uid;
         
-        // Use Firebase authentication and also sync with our backend
+        // Use our backend login endpoint with the Firebase UID
         try {
-          // First, try to get the user from our own backend using the Firebase UID
-          const headers: Record<string, string> = {
-            'Content-Type': 'application/json',
-            'Firebase-UID': firebaseUid
-          };
-          
-          // Make a request to our backend to get or create the user record
-          const response = await fetch('/api/auth/google', {
+          // Make a request to our backend login endpoint with the Firebase UID
+          const response = await fetch('/api/auth/login', {
             method: 'POST',
-            headers,
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              displayName: userCredential.user.displayName,
-              email: userCredential.user.email,
-              uid: firebaseUid,
-              photoURL: userCredential.user.photoURL
+              email,
+              password, // This won't be used when firebaseUid is provided
+              recaptchaToken,
+              firebaseUid
             }),
           });
           
           if (!response.ok) {
             const data = await response.json();
-            console.error("Error syncing with backend:", data);
-            throw new Error(data.message || "Failed to sync with backend");
+            console.error("Error logging in with backend:", data);
+            throw new Error(data.message || "Failed to login with backend");
           }
           
           // Get user data from response
@@ -163,7 +157,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           if (userData.twoFactorEnabled) {
             console.log("Two-factor authentication required for:", email);
             
-            // Trigger 2FA verification process
+            // Trigger 2FA verification process if needed
             try {
               await apiRequest("POST", "/api/auth/2fa/send-code", { email });
             } catch (tfaError) {
@@ -188,6 +182,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           // Store authenticated user
           setUser(authUser);
           localStorage.setItem('user', JSON.stringify(authUser));
+          localStorage.setItem('firebaseUid', authUser.uid);
           
           // Invalidate queries that depend on authentication
           queryClient.invalidateQueries({ queryKey: ["/api/profile"] });
@@ -199,30 +194,82 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           
           return { requiresTwoFactor: false };
         } catch (backendError) {
-          console.error("Error with backend synchronization:", backendError);
-          // Fallback to using just the Firebase user data
+          console.error("Error with backend authentication:", backendError);
           
-          // Create minimal AuthUser from Firebase data
-          const authUser: AuthUser = {
-            uid: firebaseUid,
-            username: userCredential.user.displayName || email.split('@')[0],
-            email: email,
-            fullName: userCredential.user.displayName || undefined,
-            role: "user",
-            twoFactorEnabled: false,
-            photoURL: userCredential.user.photoURL || undefined
-          };
-          
-          // Store authenticated user
-          setUser(authUser);
-          localStorage.setItem('user', JSON.stringify(authUser));
-          
-          toast({
-            title: "Login Successful",
-            description: `Welcome back, ${authUser.username}!`,
-          });
-          
-          return { requiresTwoFactor: false };
+          // Try to create/sync user with the backend via Google endpoint
+          try {
+            console.log("Attempting to sync user with backend via Google endpoint");
+            // First, try to get the user from our own backend using the Firebase UID
+            const syncResponse = await fetch('/api/auth/google', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                displayName: userCredential.user.displayName,
+                email: userCredential.user.email,
+                uid: firebaseUid,
+                photoURL: userCredential.user.photoURL
+              }),
+            });
+            
+            if (!syncResponse.ok) {
+              const data = await syncResponse.json();
+              console.error("Error syncing with backend:", data);
+              throw new Error(data.message || "Failed to sync with backend");
+            }
+            
+            // Get user data from response
+            const syncUserData = await syncResponse.json();
+            console.log("User data from backend sync:", syncUserData);
+            
+            // Create AuthUser from backend data
+            const authUser: AuthUser = {
+              uid: syncUserData.firebaseUid || firebaseUid,
+              username: syncUserData.username,
+              email: syncUserData.email,
+              fullName: syncUserData.fullName,
+              role: syncUserData.role || "user",
+              twoFactorEnabled: syncUserData.twoFactorEnabled || false,
+              photoURL: syncUserData.photoURL || userCredential.user.photoURL
+            };
+            
+            // Store authenticated user
+            setUser(authUser);
+            localStorage.setItem('user', JSON.stringify(authUser));
+            localStorage.setItem('firebaseUid', authUser.uid);
+            
+            toast({
+              title: "Login Successful",
+              description: `Welcome back, ${authUser.username}!`,
+            });
+            
+            return { requiresTwoFactor: false };
+          } catch (syncError) {
+            console.error("Error with backend sync:", syncError);
+            // Fallback to using just the Firebase user data
+            
+            // Create minimal AuthUser from Firebase data
+            const authUser: AuthUser = {
+              uid: firebaseUid,
+              username: userCredential.user.displayName || email.split('@')[0],
+              email: email,
+              fullName: userCredential.user.displayName || undefined,
+              role: "user",
+              twoFactorEnabled: false,
+              photoURL: userCredential.user.photoURL || undefined
+            };
+            
+            // Store authenticated user
+            setUser(authUser);
+            localStorage.setItem('user', JSON.stringify(authUser));
+            localStorage.setItem('firebaseUid', authUser.uid);
+            
+            toast({
+              title: "Login Successful",
+              description: `Welcome back, ${authUser.username}!`,
+            });
+            
+            return { requiresTwoFactor: false };
+          }
         }
       } catch (firebaseError: any) {
         console.error("Error signing in with Firebase:", firebaseError);

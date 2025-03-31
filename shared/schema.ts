@@ -122,6 +122,7 @@ export const loginSchema = z.object({
   email: z.string().email("Please enter a valid email"),
   password: z.string().min(1, "Password is required"),
   recaptchaToken: z.string().optional(),
+  firebaseUid: z.string().optional(), // Add firebaseUid for Firebase Authentication
 });
 
 export const twoFactorVerifySchema = z.object({
