@@ -1598,6 +1598,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: "Server error" });
     }
   });
+  
+  // TEMPORARY: Set user as admin (remove this in production)
+  app.post("/api/auth/make-admin", async (req, res) => {
+    try {
+      const { email, secret } = req.body;
+      
+      // Basic protection to prevent unauthorized access
+      if (secret !== "admin123") {
+        return res.status(403).json({ message: "Unauthorized" });
+      }
+      
+      if (!email) {
+        return res.status(400).json({ message: "Email is required" });
+      }
+      
+      console.log("Setting user as admin:", email);
+      
+      // Find the user by email
+      const user = await storage.getUserByEmail(email);
+      
+      if (!user) {
+        console.log("User not found:", email);
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      // Update user role to admin
+      const updatedUser = await storage.updateUser(user.id, { 
+        ...user,
+        role: "admin" 
+      });
+      
+      console.log("User updated to admin role:", updatedUser);
+      
+      return res.json({
+        success: true,
+        message: "User has been granted admin privileges",
+        user: updatedUser
+      });
+    } catch (error) {
+      console.error("Make admin error:", error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
 
   const httpServer = createServer(app);
   return httpServer;

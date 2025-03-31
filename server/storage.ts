@@ -630,4 +630,492 @@ export class MemStorage implements IStorage {
   }
 }
 
-export const storage = new MemStorage();
+// Database implementation
+export class DatabaseStorage implements IStorage {
+  // User methods
+  async getUser(id: number): Promise<User | undefined> {
+    try {
+      const [user] = await db.select().from(users).where(eq(users.id, id));
+      return user;
+    } catch (error) {
+      console.error("Database error in getUser:", error);
+      return undefined;
+    }
+  }
+
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    try {
+      const [user] = await db.select().from(users).where(eq(users.email, email));
+      return user;
+    } catch (error) {
+      console.error("Database error in getUserByEmail:", error);
+      return undefined;
+    }
+  }
+  
+  async getUserByFirebaseId(firebaseUid: string): Promise<User | undefined> {
+    try {
+      console.log("Looking for user with Firebase UID:", firebaseUid);
+      const [user] = await db.select().from(users).where(eq(users.firebaseUid, firebaseUid));
+      console.log("Database result:", user);
+      return user;
+    } catch (error) {
+      console.error("Database error in getUserByFirebaseId:", error);
+      return undefined;
+    }
+  }
+
+  async createUser(userData: InsertUser): Promise<User> {
+    try {
+      const [user] = await db.insert(users).values(userData).returning();
+      return user;
+    } catch (error) {
+      console.error("Database error in createUser:", error);
+      throw error;
+    }
+  }
+
+  async updateUser(id: number, userData: Partial<User>): Promise<User | undefined> {
+    try {
+      const [updatedUser] = await db
+        .update(users)
+        .set(userData)
+        .where(eq(users.id, id))
+        .returning();
+      return updatedUser;
+    } catch (error) {
+      console.error("Database error in updateUser:", error);
+      return undefined;
+    }
+  }
+
+  async updateUserStripeInfo(id: number, stripeInfo: { customerId: string }): Promise<User | undefined> {
+    try {
+      const [updatedUser] = await db
+        .update(users)
+        .set({ stripeCustomerId: stripeInfo.customerId })
+        .where(eq(users.id, id))
+        .returning();
+      return updatedUser;
+    } catch (error) {
+      console.error("Database error in updateUserStripeInfo:", error);
+      return undefined;
+    }
+  }
+
+  async updateUserTwoFactorSecret(id: number, secret: string): Promise<User | undefined> {
+    try {
+      const [updatedUser] = await db
+        .update(users)
+        .set({ twoFactorSecret: secret })
+        .where(eq(users.id, id))
+        .returning();
+      return updatedUser;
+    } catch (error) {
+      console.error("Database error in updateUserTwoFactorSecret:", error);
+      return undefined;
+    }
+  }
+
+  async enableTwoFactor(id: number): Promise<User | undefined> {
+    try {
+      const [updatedUser] = await db
+        .update(users)
+        .set({ twoFactorEnabled: true })
+        .where(eq(users.id, id))
+        .returning();
+      return updatedUser;
+    } catch (error) {
+      console.error("Database error in enableTwoFactor:", error);
+      return undefined;
+    }
+  }
+
+  async disableTwoFactor(id: number): Promise<User | undefined> {
+    try {
+      const [updatedUser] = await db
+        .update(users)
+        .set({ twoFactorEnabled: false, twoFactorSecret: null })
+        .where(eq(users.id, id))
+        .returning();
+      return updatedUser;
+    } catch (error) {
+      console.error("Database error in disableTwoFactor:", error);
+      return undefined;
+    }
+  }
+
+  async getAllUsers(): Promise<User[]> {
+    try {
+      return await db.select().from(users);
+    } catch (error) {
+      console.error("Database error in getAllUsers:", error);
+      return [];
+    }
+  }
+
+  // We'll implement the bare minimum to get the admin panel working
+  // Category methods
+  async getCategory(id: number): Promise<Category | undefined> {
+    try {
+      const [category] = await db.select().from(categories).where(eq(categories.id, id));
+      return category;
+    } catch (error) {
+      console.error("Database error in getCategory:", error);
+      return undefined;
+    }
+  }
+
+  async getCategoryByName(name: string): Promise<Category | undefined> {
+    try {
+      const [category] = await db.select().from(categories).where(eq(categories.name, name));
+      return category;
+    } catch (error) {
+      console.error("Database error in getCategoryByName:", error);
+      return undefined;
+    }
+  }
+
+  async createCategory(categoryData: InsertCategory): Promise<Category> {
+    try {
+      const [category] = await db.insert(categories).values(categoryData).returning();
+      return category;
+    } catch (error) {
+      console.error("Database error in createCategory:", error);
+      throw error;
+    }
+  }
+
+  async updateCategory(id: number, categoryData: Partial<Category>): Promise<Category | undefined> {
+    try {
+      const [updatedCategory] = await db
+        .update(categories)
+        .set(categoryData)
+        .where(eq(categories.id, id))
+        .returning();
+      return updatedCategory;
+    } catch (error) {
+      console.error("Database error in updateCategory:", error);
+      return undefined;
+    }
+  }
+
+  async deleteCategory(id: number): Promise<boolean> {
+    try {
+      await db.delete(categories).where(eq(categories.id, id));
+      return true;
+    } catch (error) {
+      console.error("Database error in deleteCategory:", error);
+      return false;
+    }
+  }
+
+  async getAllCategories(): Promise<Category[]> {
+    try {
+      return await db.select().from(categories);
+    } catch (error) {
+      console.error("Database error in getAllCategories:", error);
+      return [];
+    }
+  }
+
+  async getFeaturedCategories(): Promise<Category[]> {
+    try {
+      return await db.select().from(categories).where(eq(categories.featured, true));
+    } catch (error) {
+      console.error("Database error in getFeaturedCategories:", error);
+      return [];
+    }
+  }
+
+  // Implementing stubs for the rest of the methods - we'll add real implementations later
+  // Product methods
+  async getProduct(id: number): Promise<Product | undefined> {
+    try {
+      const [product] = await db.select().from(products).where(eq(products.id, id));
+      return product;
+    } catch (error) {
+      console.error("Database error in getProduct:", error);
+      return undefined;
+    }
+  }
+
+  async createProduct(productData: InsertProduct): Promise<Product> {
+    try {
+      const [product] = await db.insert(products).values(productData).returning();
+      return product;
+    } catch (error) {
+      console.error("Database error in createProduct:", error);
+      throw error;
+    }
+  }
+
+  async updateProduct(id: number, productData: Partial<Product>): Promise<Product | undefined> {
+    try {
+      const [updatedProduct] = await db
+        .update(products)
+        .set(productData)
+        .where(eq(products.id, id))
+        .returning();
+      return updatedProduct;
+    } catch (error) {
+      console.error("Database error in updateProduct:", error);
+      return undefined;
+    }
+  }
+
+  async deleteProduct(id: number): Promise<boolean> {
+    try {
+      await db.delete(products).where(eq(products.id, id));
+      return true;
+    } catch (error) {
+      console.error("Database error in deleteProduct:", error);
+      return false;
+    }
+  }
+
+  async getAllProducts(): Promise<Product[]> {
+    try {
+      return await db.select().from(products);
+    } catch (error) {
+      console.error("Database error in getAllProducts:", error);
+      return [];
+    }
+  }
+
+  async getProductsByCategory(categoryId: number): Promise<Product[]> {
+    try {
+      return await db.select().from(products).where(eq(products.categoryId, categoryId));
+    } catch (error) {
+      console.error("Database error in getProductsByCategory:", error);
+      return [];
+    }
+  }
+
+  async getFeaturedProducts(): Promise<Product[]> {
+    try {
+      return await db.select().from(products).where(eq(products.featured, true));
+    } catch (error) {
+      console.error("Database error in getFeaturedProducts:", error);
+      return [];
+    }
+  }
+
+  async getTrendingProducts(): Promise<Product[]> {
+    try {
+      return await db.select().from(products).where(eq(products.trending, true));
+    } catch (error) {
+      console.error("Database error in getTrendingProducts:", error);
+      return [];
+    }
+  }
+
+  async searchProducts(query: string): Promise<Product[]> {
+    try {
+      return await db
+        .select()
+        .from(products)
+        .where(
+          or(
+            ilike(products.name, `%${query}%`),
+            ilike(products.description, `%${query}%`)
+          )
+        );
+    } catch (error) {
+      console.error("Database error in searchProducts:", error);
+      return [];
+    }
+  }
+
+  // Minimal implementations for other methods to satisfy the interface
+  async getReview(id: number): Promise<Review | undefined> {
+    try {
+      const [review] = await db.select().from(reviews).where(eq(reviews.id, id));
+      return review;
+    } catch (error) {
+      console.error("Database error in getReview:", error);
+      return undefined;
+    }
+  }
+
+  async createReview(reviewData: InsertReview): Promise<Review> {
+    try {
+      const [review] = await db.insert(reviews).values(reviewData).returning();
+      return review;
+    } catch (error) {
+      console.error("Database error in createReview:", error);
+      throw error;
+    }
+  }
+
+  async getProductReviews(productId: number): Promise<Review[]> {
+    try {
+      return await db.select().from(reviews).where(eq(reviews.productId, productId));
+    } catch (error) {
+      console.error("Database error in getProductReviews:", error);
+      return [];
+    }
+  }
+
+  async getUserReviews(userId: number): Promise<Review[]> {
+    try {
+      return await db.select().from(reviews).where(eq(reviews.userId, userId));
+    } catch (error) {
+      console.error("Database error in getUserReviews:", error);
+      return [];
+    }
+  }
+
+  async getOrder(id: number): Promise<Order | undefined> {
+    try {
+      const [order] = await db.select().from(orders).where(eq(orders.id, id));
+      return order;
+    } catch (error) {
+      console.error("Database error in getOrder:", error);
+      return undefined;
+    }
+  }
+
+  async createOrder(orderData: InsertOrder): Promise<Order> {
+    try {
+      const [order] = await db.insert(orders).values(orderData).returning();
+      return order;
+    } catch (error) {
+      console.error("Database error in createOrder:", error);
+      throw error;
+    }
+  }
+
+  async updateOrderStatus(id: number, status: string): Promise<Order | undefined> {
+    try {
+      const [updatedOrder] = await db
+        .update(orders)
+        .set({ status })
+        .where(eq(orders.id, id))
+        .returning();
+      return updatedOrder;
+    } catch (error) {
+      console.error("Database error in updateOrderStatus:", error);
+      return undefined;
+    }
+  }
+
+  async getUserOrders(userId: number): Promise<Order[]> {
+    try {
+      return await db.select().from(orders).where(eq(orders.userId, userId));
+    } catch (error) {
+      console.error("Database error in getUserOrders:", error);
+      return [];
+    }
+  }
+
+  async getAllOrders(): Promise<Order[]> {
+    try {
+      return await db.select().from(orders);
+    } catch (error) {
+      console.error("Database error in getAllOrders:", error);
+      return [];
+    }
+  }
+
+  async getHeroBanner(id: number): Promise<HeroBanner | undefined> {
+    try {
+      const [banner] = await db.select().from(heroBanners).where(eq(heroBanners.id, id));
+      return banner;
+    } catch (error) {
+      console.error("Database error in getHeroBanner:", error);
+      return undefined;
+    }
+  }
+
+  async createHeroBanner(bannerData: InsertHeroBanner): Promise<HeroBanner> {
+    try {
+      const [banner] = await db.insert(heroBanners).values(bannerData).returning();
+      return banner;
+    } catch (error) {
+      console.error("Database error in createHeroBanner:", error);
+      throw error;
+    }
+  }
+
+  async updateHeroBanner(id: number, bannerData: Partial<HeroBanner>): Promise<HeroBanner | undefined> {
+    try {
+      const [updatedBanner] = await db
+        .update(heroBanners)
+        .set(bannerData)
+        .where(eq(heroBanners.id, id))
+        .returning();
+      return updatedBanner;
+    } catch (error) {
+      console.error("Database error in updateHeroBanner:", error);
+      return undefined;
+    }
+  }
+
+  async deleteHeroBanner(id: number): Promise<boolean> {
+    try {
+      await db.delete(heroBanners).where(eq(heroBanners.id, id));
+      return true;
+    } catch (error) {
+      console.error("Database error in deleteHeroBanner:", error);
+      return false;
+    }
+  }
+
+  async getActiveHeroBanners(): Promise<HeroBanner[]> {
+    try {
+      return await db.select().from(heroBanners).where(eq(heroBanners.active, true));
+    } catch (error) {
+      console.error("Database error in getActiveHeroBanners:", error);
+      return [];
+    }
+  }
+
+  async getTestimonial(id: number): Promise<Testimonial | undefined> {
+    try {
+      const [testimonial] = await db.select().from(testimonials).where(eq(testimonials.id, id));
+      return testimonial;
+    } catch (error) {
+      console.error("Database error in getTestimonial:", error);
+      return undefined;
+    }
+  }
+
+  async createTestimonial(testimonialData: InsertTestimonial): Promise<Testimonial> {
+    try {
+      const [testimonial] = await db.insert(testimonials).values(testimonialData).returning();
+      return testimonial;
+    } catch (error) {
+      console.error("Database error in createTestimonial:", error);
+      throw error;
+    }
+  }
+
+  async getFeaturedTestimonials(): Promise<Testimonial[]> {
+    try {
+      return await db.select().from(testimonials).where(eq(testimonials.featured, true));
+    } catch (error) {
+      console.error("Database error in getFeaturedTestimonials:", error);
+      return [];
+    }
+  }
+
+  async getAllTestimonials(): Promise<Testimonial[]> {
+    try {
+      return await db.select().from(testimonials);
+    } catch (error) {
+      console.error("Database error in getAllTestimonials:", error);
+      return [];
+    }
+  }
+}
+
+// Import required operators
+import { eq, or, ilike } from "drizzle-orm";
+import { db } from "./db";
+
+// Uncomment to use DatabaseStorage
+export const storage = new DatabaseStorage();
+
+// Comment out to disable MemStorage
+// export const storage = new MemStorage();
