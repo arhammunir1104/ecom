@@ -214,12 +214,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       }
       
       try {
-        // Import Firebase authentication methods
-        const { signInWithEmailAndPassword } = await import("firebase/auth");
-        const { auth } = await import("@/lib/firebase");
-        
-        // Try to sign in with Firebase first
-        const userCredential = await signInWithEmailAndPassword(auth, email, password);
+        // Use the firebaseService signInWithEmail method instead of direct Firebase auth
+        const userCredential = await firebaseService.signInWithEmail(email, password);
         console.log("Firebase authentication successful for:", email);
         
         // Get Firebase UID
@@ -430,22 +426,10 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
   const loginWithGoogle = async () => {
     try {
-      console.log("Starting Google login process with simplified approach");
+      console.log("Starting Google login process with firebaseService");
       
-      // Use the direct Firebase approach without relying on firebaseService
-      const { signInWithPopup, GoogleAuthProvider } = await import("firebase/auth");
-      const { auth } = await import("@/lib/firebase");
-      
-      // Create a new instance of the Google provider
-      const provider = new GoogleAuthProvider();
-      
-      // Configure additional scopes if needed
-      provider.addScope('email');
-      provider.addScope('profile');
-      
-      // Sign in with Google directly
-      const result = await signInWithPopup(auth, provider);
-      const firebaseUser = result.user;
+      // Use the firebaseService signInWithGoogle method
+      const firebaseUser = await firebaseService.signInWithGoogle();
       
       console.log("Firebase user authenticated directly:", firebaseUser.email);
       
@@ -603,14 +587,10 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
   const logout = async () => {
     try {
-      console.log("Starting logout process with simplified approach");
+      console.log("Starting logout process with firebaseService");
       
-      // Use Firebase directly
-      const { signOut } = await import("firebase/auth");
-      const { auth } = await import("@/lib/firebase");
-      
-      // Sign out from Firebase Authentication
-      await signOut(auth);
+      // Use firebaseService signOut method
+      await firebaseService.signOut();
       
       // Clear local user state
       setUser(null);
