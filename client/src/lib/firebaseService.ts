@@ -413,3 +413,22 @@ export const setTwoFactorAuthentication = async (
     throw error;
   }
 };
+
+/**
+ * Update a user's role (admin or user)
+ */
+export const updateUserRole = async (
+  uid: string,
+  role: "admin" | "user"
+): Promise<void> => {
+  try {
+    console.log(`Updating user ${uid} role to ${role}`);
+    await updateUserProfile(uid, {
+      role: role
+    });
+    console.log(`User role updated successfully`);
+  } catch (error) {
+    console.error("Error updating user role:", error);
+    throw error;
+  }
+};

@@ -29,22 +29,50 @@ import {
 } from "lucide-react";
 
 export default function AdminDashboard() {
-  const { isAdmin, isAuthenticated } = useAuth();
-  const [, navigate] = useLocation();
+  const { user, isAdmin, isLoading: authLoading } = useAuth();
+  const isAuthenticated = !!user;
   
-  // Redirect if not admin
-  useEffect(() => {
-    if (isAuthenticated && !isAdmin) {
-      navigate("/");
-    }
-  }, [isAdmin, isAuthenticated, navigate]);
+  // We handle redirects in the AdminLayout component now
   
-  const { data: dashboardData, isLoading } = useQuery({
+  // Define the type for dashboard data
+  interface DashboardData {
+    totalRevenue: number;
+    totalOrders: number;
+    totalUsers: number;
+    totalProducts: number;
+    recentOrders: {
+      id: number;
+      status: string;
+      totalAmount: number;
+      createdAt: string;
+    }[];
+    topProducts: {
+      product: {
+        id: number;
+        name: string;
+        price: number;
+        images?: string[];
+      };
+      soldCount: number;
+    }[];
+  }
+
+  // Default dashboard data to handle null/undefined values
+  const defaultDashboardData: DashboardData = {
+    totalRevenue: 0,
+    totalOrders: 0,
+    totalUsers: 0,
+    totalProducts: 0,
+    recentOrders: [],
+    topProducts: []
+  };
+
+  const { data: dashboardData = defaultDashboardData, isLoading: dataLoading } = useQuery<DashboardData>({
     queryKey: ["/api/admin/dashboard"],
     enabled: isAdmin && isAuthenticated,
   });
   
-  if (isLoading) {
+  if (authLoading || dataLoading) {
     return (
       <div className="space-y-6">
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -89,28 +117,28 @@ export default function AdminDashboard() {
   const metrics = [
     {
       title: "Total Revenue",
-      value: dashboardData?.totalRevenue ? `$${dashboardData.totalRevenue.toFixed(2)}` : "$0.00",
+      value: `$${dashboardData.totalRevenue.toFixed(2)}`,
       icon: DollarSign,
       change: "+12.5%",
       trend: "up",
     },
     {
       title: "Total Orders",
-      value: dashboardData?.totalOrders || 0,
+      value: dashboardData.totalOrders,
       icon: ShoppingBag,
       change: "+7.2%",
       trend: "up",
     },
     {
       title: "Total Customers",
-      value: dashboardData?.totalUsers || 0,
+      value: dashboardData.totalUsers,
       icon: Users,
       change: "+4.6%",
       trend: "up",
     },
     {
       title: "Total Products",
-      value: dashboardData?.totalProducts || 0,
+      value: dashboardData.totalProducts,
       icon: Package,
       change: "+2.3%",
       trend: "up",
@@ -197,8 +225,8 @@ export default function AdminDashboard() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {dashboardData?.recentOrders?.length > 0 ? (
-                    dashboardData.recentOrders.map((order: any) => (
+                  {dashboardData.recentOrders.length > 0 ? (
+                    dashboardData.recentOrders.map((order) => (
                       <div key={order.id} className="flex items-center justify-between border-b pb-4">
                         <div>
                           <p className="font-medium">Order #{order.id}</p>
@@ -235,8 +263,8 @@ export default function AdminDashboard() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {dashboardData?.topProducts?.length > 0 ? (
-                    dashboardData.topProducts.map((item: any) => (
+                  {dashboardData.topProducts.length > 0 ? (
+                    dashboardData.topProducts.map((item) => (
                       <div key={item.product.id} className="flex items-center justify-between border-b pb-4">
                         <div className="flex items-center">
                           {item.product.images && item.product.images[0] && (

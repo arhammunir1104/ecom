@@ -56,6 +56,7 @@ interface AuthProviderProps {
 export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -79,10 +80,13 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
             };
             
             setUser(authUser);
+            // Check and set admin status
+            setIsAdmin(authUser.role === "admin");
             // Store both complete user object and firebaseUid separately for easier access
             localStorage.setItem('user', JSON.stringify(authUser));
             localStorage.setItem('firebaseUid', authUser.uid);
             console.log("User authenticated from Firestore:", authUser.username);
+            console.log("User role:", authUser.role);
           } else {
             console.log("No Firestore profile found for user:", firebaseUser.uid);
             setUser(null);
@@ -203,10 +207,10 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
             uid: firebaseUid,
             username: userCredential.user.displayName || email.split('@')[0],
             email: email,
-            fullName: userCredential.user.displayName,
+            fullName: userCredential.user.displayName || undefined,
             role: "user",
             twoFactorEnabled: false,
-            photoURL: userCredential.user.photoURL
+            photoURL: userCredential.user.photoURL || undefined
           };
           
           // Store authenticated user
@@ -338,10 +342,10 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         uid: userProfile.uid,
         username: userProfile.username,
         email: userProfile.email,
-        fullName: userProfile.fullName,
+        fullName: userProfile.fullName || undefined,
         role: userProfile.role,
         twoFactorEnabled: userProfile.twoFactorEnabled,
-        photoURL: userProfile.photoURL
+        photoURL: userProfile.photoURL || undefined
       };
       
       console.log("User authenticated successfully:", authUser.username);
@@ -399,10 +403,10 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         uid: userProfile.uid,
         username: userProfile.username,
         email: userProfile.email,
-        fullName: userProfile.fullName,
+        fullName: userProfile.fullName || undefined,
         role: userProfile.role,
         twoFactorEnabled: false,
-        photoURL: userProfile.photoURL
+        photoURL: userProfile.photoURL || undefined
       };
       
       setUser(authUser);
@@ -504,10 +508,10 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         uid: userProfile.uid,
         username: userProfile.username,
         email: userProfile.email,
-        fullName: userProfile.fullName,
+        fullName: userProfile.fullName || undefined,
         role: userProfile.role || "user",
         twoFactorEnabled: true,
-        photoURL: userProfile.photoURL
+        photoURL: userProfile.photoURL || undefined
       };
       
       setUser(authUser);

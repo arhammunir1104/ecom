@@ -22,15 +22,19 @@ interface AdminLayoutProps {
 
 const AdminLayout = ({ children }: AdminLayoutProps) => {
   const [location] = useLocation();
-  const { user, logout } = useAuth();
+  const { user, logout, isLoading } = useAuth();
   const [isMobileOpen, setIsMobileOpen] = useState(false);
 
-  // Redirect to login if not admin
+  // Redirect to home if authenticated but not admin
   useEffect(() => {
     if (user && user.role !== "admin") {
+      console.log("User is not an admin, redirecting to home page");
       window.location.href = "/";
+    } else if (!user && !isLoading) {
+      console.log("User is not authenticated, redirecting to login page");
+      window.location.href = "/login";
     }
-  }, [user]);
+  }, [user, isLoading]);
 
   const navigation = [
     { name: "Dashboard", href: "/admin", icon: LayoutDashboard },
