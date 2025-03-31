@@ -1224,7 +1224,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           categoryId: validation.data.categoryId || undefined,
           images: Array.isArray(validation.data.images) ? validation.data.images : [],
           sizes: Array.isArray(validation.data.sizes) ? validation.data.sizes : [],
-          colors: Array.isArray(validation.data.colors) ? validation.data.colors : [],
+          colors: Array.isArray(validation.data.colors) && validation.data.colors.length > 0 
+                  ? validation.data.colors 
+                  : [], // Ensure colors is always a valid array
           stock: validation.data.stock || 0,
           featured: !!validation.data.featured,
           trending: !!validation.data.trending
@@ -1282,7 +1284,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if ('categoryId' in validation.data) productData.categoryId = validation.data.categoryId;
         if ('images' in validation.data) productData.images = Array.isArray(validation.data.images) ? validation.data.images : [];
         if ('sizes' in validation.data) productData.sizes = Array.isArray(validation.data.sizes) ? validation.data.sizes : [];
-        if ('colors' in validation.data) productData.colors = Array.isArray(validation.data.colors) ? validation.data.colors : [];
+        if ('colors' in validation.data) productData.colors = Array.isArray(validation.data.colors) && validation.data.colors.length > 0 
+                                        ? validation.data.colors 
+                                        : [];
         if ('stock' in validation.data) productData.stock = validation.data.stock || 0;
         if ('featured' in validation.data) productData.featured = !!validation.data.featured;
         if ('trending' in validation.data) productData.trending = !!validation.data.trending;
