@@ -343,12 +343,21 @@ const PaymentForm = ({ address, amount, onPaymentSuccess }: PaymentFormProps) =>
   // Save order data to API and Firestore
   const saveOrderData = async (paymentIntent: any) => {
     try {
-      // Get items from local cart
-      const cart = JSON.parse(localStorage.getItem('cart') || '{}');
-      const cartItems = Object.entries(cart).map(([productId, quantity]) => ({
+      // Get cart from context hook
+      const { useCart } = await import('@/hooks/useCart');
+      const cartContext = useCart();
+      
+      // Get the cart items from context
+      const cartItems = Object.entries(cartContext.cart).map(([productId, item]) => ({
         productId: Number(productId),
-        quantity: Number(quantity)
+        quantity: item.quantity,
+        name: item.name,
+        price: item.price,
+        image: item.image
       }));
+      
+      console.log("Processing order with cart items:", cartItems);
+      console.log("Total amount:", amount);
       
       // Create order data object
       const orderData = {
@@ -383,56 +392,20 @@ const PaymentForm = ({ address, amount, onPaymentSuccess }: PaymentFormProps) =>
       const firebaseUid = localStorage.getItem('firebaseUid');
       if (firebaseUid) {
         try {
-          // Import Firebase services
-          const { doc, setDoc, collection, serverTimestamp, getDoc } = await import('firebase/firestore');
-          const { db } = await import('@/lib/firebase');
+          // Use the Firebase service function to save the order
+          const { saveOrder } = await import('@/lib/firebaseService');
           
-          // Create an orders collection reference and a new document
-          const ordersRef = collection(db, 'users', firebaseUid, 'orders');
-          const orderDoc = doc(ordersRef);
+          // Save the order to Firestore and clear the cart automatically
+          const savedOrder = await saveOrder(firebaseUid, {
+            items: cartItems,
+            totalAmount: amount,
+            status: "processing",
+            paymentStatus: "completed",
+            paymentIntent: paymentIntent.id,
+            shippingAddress: address
+          });
           
-          // Get product details for better order display
-          const orderItemsWithDetails = await Promise.all(
-            cartItems.map(async (item) => {
-              try {
-                // Try to get product details from the API
-                const response = await fetch(`/api/products/${item.productId}`);
-                if (response.ok) {
-                  const product = await response.json();
-                  return {
-                    productId: String(item.productId),
-                    quantity: Number(item.quantity),
-                    name: product.name,
-                    price: product.discountPrice || product.price,
-                    image: Array.isArray(product.images) && product.images.length > 0 ? 
-                      product.images[0] : null
-                  };
-                }
-              } catch (error) {
-                console.error('Error getting product details:', error);
-              }
-              
-              // Fallback with minimal data if needed
-              return {
-                productId: String(item.productId),
-                quantity: Number(item.quantity)
-              };
-            })
-          );
-          
-          // Prepare complete order data for Firestore
-          const firestoreOrderData = {
-            ...orderData,
-            id: orderDoc.id,
-            userId: firebaseUid,
-            createdAt: serverTimestamp(),
-            items: orderItemsWithDetails,
-            trackingNumber: null
-          };
-          
-          // Save to Firestore
-          await setDoc(orderDoc, firestoreOrderData);
-          console.log('Order saved to Firestore successfully:', orderDoc.id);
+          console.log('Order saved to Firestore successfully:', savedOrder.id);
         } catch (firestoreError) {
           console.error('Error saving order to Firestore:', firestoreError);
         }

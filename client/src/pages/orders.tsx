@@ -39,19 +39,44 @@ const Orders = () => {
         const uid = window.localStorage.getItem('firebaseUid');
         
         if (uid) {
-          const ordersRef = collection(db, 'users', uid, 'orders');
+          // First try to get orders from the top-level 'orders' collection
+          // where userId matches the current user's ID
+          const ordersRef = collection(db, 'orders');
           const q = query(ordersRef, orderBy('createdAt', 'desc'));
           const querySnapshot = await getDocs(q);
           
-          const orders = querySnapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data(),
-            // Convert Firestore Timestamp to Date
-            createdAt: doc.data().createdAt?.toDate() || new Date(),
-          }));
+          let userOrders = querySnapshot.docs
+            .filter(doc => {
+              const data = doc.data();
+              return data.userId === uid;
+            })
+            .map(doc => ({
+              id: doc.id,
+              ...doc.data(),
+              // Convert Firestore Timestamp to Date
+              createdAt: doc.data().createdAt?.toDate() || new Date(),
+              orderDate: doc.data().orderDate?.toDate() || new Date(),
+            }));
           
-          setFirestoreOrders(orders);
-          console.log('Fetched orders from Firestore:', orders);
+          // If no orders found in top-level collection, try the nested 'users/{uid}/orders' path
+          if (userOrders.length === 0) {
+            console.log('No orders found in top-level collection, trying user subcollection...');
+            
+            const userOrdersRef = collection(db, 'users', uid, 'orders');
+            const userOrdersQuery = query(userOrdersRef, orderBy('createdAt', 'desc'));
+            const userOrdersSnapshot = await getDocs(userOrdersQuery);
+            
+            userOrders = userOrdersSnapshot.docs.map(doc => ({
+              id: doc.id,
+              ...doc.data(),
+              // Convert Firestore Timestamp to Date
+              createdAt: doc.data().createdAt?.toDate() || new Date(),
+              orderDate: doc.data().orderDate?.toDate() || new Date(),
+            }));
+          }
+          
+          setFirestoreOrders(userOrders);
+          console.log('Fetched orders from Firestore:', userOrders);
         }
       } catch (error) {
         console.error('Error fetching orders from Firestore:', error);
@@ -260,12 +285,14 @@ const Orders = () => {
                               <div>
                                 <p className="font-medium">{item.name}</p>
                                 <p className="text-sm text-gray-500">
-                                  Qty: {item.quantity} x ${item.price ? item.price.toFixed(2) : '0.00'}
+                                  Qty: {item.quantity} x ${item.price ? Number(item.price).toFixed(2) : '0.00'}
                                 </p>
+                                {item.size && <p className="text-xs text-gray-500">Size: {item.size}</p>}
+                                {item.color && <p className="text-xs text-gray-500">Color: {item.color}</p>}
                               </div>
                             </div>
                             <p className="font-medium">
-                              ${(item.quantity * (item.price || 0)).toFixed(2)}
+                              ${(Number(item.quantity) * Number(item.price || 0)).toFixed(2)}
                             </p>
                           </div>
                         ))}

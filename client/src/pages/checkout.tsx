@@ -1,6 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, ReactNode } from "react";
 import { useLocation } from "wouter";
 import { useCart } from "@/hooks/useCart";
+import { CartItem } from "@/context/CartContext";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery } from "@tanstack/react-query";
@@ -73,12 +74,30 @@ const Checkout = () => {
   const cartProducts =
     products?.filter((product) => cartItemIds.includes(product.id)) || [];
 
-  // Calculate cart totals
-  const subtotal = cartProducts.reduce((sum, product) => {
-    const quantity = cart[product.id];
-    const price = product.discountPrice || product.price;
-    return sum + price * quantity;
+  // Calculate cart totals using cart context data
+  const subtotal = Object.entries(cart).reduce((sum, [productId, item]) => {
+    // Check if item is a CartItem object
+    const cartItem = item as CartItem | number;
+    
+    // If we have full cart data from context, use it
+    if (typeof cartItem === 'object' && cartItem.price && cartItem.quantity) {
+      return sum + (cartItem.price * cartItem.quantity);
+    }
+    
+    // Otherwise, try to find the product data from API products
+    const product = cartProducts.find(p => p.id.toString() === productId);
+    if (product) {
+      const quantity = typeof cartItem === 'object' ? cartItem.quantity : Number(cartItem);
+      const price = product.discountPrice || product.price;
+      return sum + (price * quantity);
+    }
+    
+    return sum;
   }, 0);
+
+  // Log for debugging
+  console.log('Cart items for checkout:', cart);
+  console.log('Calculated subtotal:', subtotal);
 
   const shipping = subtotal > 99 ? 0 : 7.99;
   const total = subtotal + shipping;
@@ -101,16 +120,71 @@ const Checkout = () => {
     try {
       console.log("Creating payment intent for total:", total);
 
+      // Validate that we have the required info
+      if (!user) {
+        toast({
+          title: "Authentication Required",
+          description: "Please sign in to complete your purchase.",
+          variant: "destructive",
+        });
+        setLocation("/auth");
+        return;
+      }
+
+      if (Object.keys(cart).length === 0) {
+        toast({
+          title: "Empty Cart",
+          description: "Your cart is empty. Please add items before checkout.",
+          variant: "destructive",
+        });
+        setLocation("/shop");
+        return;
+      }
+
       // Show loading toast
       toast({
         title: "Processing Payment",
         description: "Please wait while we set up the payment...",
       });
 
+      // Format order data to be stored after successful payment
+      const orderItems = Object.entries(cart).map(([productId, itemValue]) => {
+        const item = itemValue as CartItem | number;
+        
+        const isCartItem = typeof item === 'object' && 'name' in item;
+        const product = isCartItem ? null : cartProducts.find(p => p.id.toString() === productId);
+        
+        const name = isCartItem ? item.name : product?.name || 'Product';
+        const quantity = isCartItem ? item.quantity : (typeof item === 'number' ? item : 1);
+        const price = isCartItem ? item.price : (product?.discountPrice || product?.price || 0);
+        const image = isCartItem && 'image' in item ? item.image : 
+                     (product && Array.isArray(product.images) ? product.images[0] : null);
+        
+        // Calculate subtotal for this item
+        const subtotal = Number(price) * Number(quantity);
+        
+        return {
+          productId,
+          name,
+          price: Number(price),
+          quantity: Number(quantity),
+          image: image || undefined,
+          subtotal
+        };
+      });
+
       // Make sure we have a create-payment-intent endpoint available on the server
       console.log("Making API request to create payment intent");
       const res = await apiRequest("POST", "/api/create-payment-intent", {
         amount: total,
+        orderData: {
+          items: orderItems,
+          shippingAddress: {
+            ...address,
+            addressLine1: address.address, // Map to match Firebase Order type
+          },
+          totalAmount: total
+        }
       });
 
       if (!res.ok) {
@@ -148,14 +222,84 @@ const Checkout = () => {
     }
   };
 
-  // Handle successful payment
-  const handlePaymentSuccess = () => {
-    toast({
-      title: "Payment Successful",
-      description: "Your order has been placed successfully",
-    });
-    clearCart();
-    setLocation("/orders");
+  // Handle successful payment and save order
+  const handlePaymentSuccess = async () => {
+    try {
+      if (!user) {
+        // This shouldn't happen as we check before proceeding to payment, but just in case
+        throw new Error("User not authenticated");
+      }
+      
+      // Get the current items from the cart before clearing it
+      const orderItems = Object.entries(cart).map(([productId, itemValue]) => {
+        const item = itemValue as CartItem | number;
+        
+        const isCartItem = typeof item === 'object' && 'name' in item;
+        const product = isCartItem ? null : cartProducts.find(p => p.id.toString() === productId);
+        
+        const name = isCartItem ? item.name : product?.name || 'Product';
+        const quantity = isCartItem ? item.quantity : (typeof item === 'number' ? item : 1);
+        const price = isCartItem ? item.price : (product?.discountPrice || product?.price || 0);
+        const image = isCartItem && 'image' in item ? item.image : 
+                    (product && Array.isArray(product.images) ? product.images[0] : null);
+        
+        // Calculate subtotal for this item
+        const subtotal = Number(price) * Number(quantity);
+        
+        return {
+          productId,
+          name,
+          price: Number(price),
+          quantity: Number(quantity),
+          image: image || undefined,
+          subtotal
+        };
+      });
+      
+      // Create the completed order in Firebase
+      console.log("Saving order to Firebase...");
+      
+      // Call the server API to save the order with the user ID, shipping address, and payment details
+      const response = await apiRequest("POST", "/api/orders", {
+        userId: user.uid,
+        items: orderItems,
+        status: "processing", // Default status for new orders
+        paymentStatus: "paid", // Since payment was successful
+        shippingAddress: {
+          ...address,
+          addressLine1: address.address, // Map to match Firebase Order type
+        },
+        paymentMethod: "stripe",
+        totalAmount: total,
+        orderDate: new Date().toISOString()
+      });
+      
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.message || "Failed to save order");
+      }
+      
+      // Show success message
+      toast({
+        title: "Payment Successful",
+        description: "Your order has been placed successfully!",
+      });
+      
+      // Clear the cart and redirect to orders page
+      clearCart();
+      setActiveTab("confirmation");
+      
+    } catch (error: any) {
+      console.error("Error saving order:", error);
+      toast({
+        title: "Order Saved",
+        description: "Payment successful, but we encountered an issue saving your order details. Please check your order history or contact support.",
+        variant: "destructive",
+      });
+      // Even if order saving fails, still clear cart and show confirmation
+      clearCart();
+      setActiveTab("confirmation");
+    }
   };
 
   return (
@@ -283,33 +427,56 @@ const Checkout = () => {
             <CardContent className="space-y-4">
               {/* Order items */}
               <div className="space-y-3">
-                {cartProducts.map((product) => {
-                  const quantity = cart[product.id];
-                  const price = product.discountPrice || product.price;
+                {Object.entries(cart).map(([productId, itemValue]) => {
+                  // Cast the item to either CartItem or number type
+                  const item = itemValue as CartItem | number;
+                  
+                  // Find the product data either from cart context or API
+                  const isCartItem = typeof item === 'object' && 'name' in item;
+                  const product = isCartItem ? null : cartProducts.find(p => p.id.toString() === productId);
+                  
+                  // If we don't have data from either source, skip this item
+                  if (!isCartItem && !product) {
+                    return null;
+                  }
+                  
+                  const name = isCartItem ? item.name : product?.name || 'Product';
+                  const quantity = isCartItem ? item.quantity : (typeof item === 'number' ? item : 1);
+                  const price = isCartItem ? item.price : (product?.discountPrice || product?.price || 0);
+                  const image = isCartItem && 'image' in item ? item.image : 
+                                (product && Array.isArray(product.images) ? product.images[0] : null);
+                  
+                  // Calculate the subtotal for this item
+                  const itemSubtotal = Number(price) * Number(quantity);
+                  
                   return (
                     <div
-                      key={product.id}
+                      key={productId}
                       className="flex justify-between items-center"
                     >
                       <div className="flex gap-2">
                         <div className="w-16 h-16 rounded-md bg-gray-100 overflow-hidden">
-                          <img
-                            src={
-                              Array.isArray(product.images) && product.images[0]
-                            }
-                            alt={product.name}
-                            className="w-full h-full object-cover"
-                          />
+                          {image ? (
+                            <img
+                              src={image}
+                              alt={name}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center bg-gray-200 text-gray-500">
+                              No image
+                            </div>
+                          )}
                         </div>
                         <div>
-                          <p className="font-medium">{product.name}</p>
+                          <p className="font-medium">{name}</p>
                           <p className="text-sm text-gray-500">
                             Qty: {quantity}
                           </p>
                         </div>
                       </div>
                       <p className="font-medium">
-                        ${(price * quantity).toFixed(2)}
+                        ${itemSubtotal.toFixed(2)}
                       </p>
                     </div>
                   );

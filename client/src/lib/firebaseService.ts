@@ -880,7 +880,47 @@ export const createOrderFromCart = async (
  */
 export const getUserOrders = async (userId: string): Promise<Order[]> => {
   try {
-    // Simplify the query to avoid composite index requirements
+    // Step 1: Try to get orders from user subcollection (new structure)
+    console.log(`Fetching orders for user ${userId} from user subcollection...`);
+    const userOrdersRef = collection(db, 'users', userId, 'orders');
+    const userOrdersQuery = query(userOrdersRef);
+    
+    try {
+      const userOrdersSnapshot = await getDocs(userOrdersQuery);
+      
+      if (!userOrdersSnapshot.empty) {
+        console.log(`Found ${userOrdersSnapshot.size} orders in user subcollection`);
+        const orders: Order[] = [];
+        
+        userOrdersSnapshot.forEach((doc) => {
+          const data = doc.data();
+          orders.push({
+            id: doc.id,
+            ...data,
+            // Convert Timestamp to Date if needed
+            orderDate: data.orderDate instanceof Timestamp 
+              ? data.orderDate.toDate() 
+              : data.createdAt instanceof Timestamp 
+                ? data.createdAt.toDate() 
+                : new Date(),
+            items: data.items || []
+          } as Order);
+        });
+        
+        // Sort by date, newest first
+        return orders.sort((a, b) => {
+          const dateA = a.orderDate ? new Date(a.orderDate).getTime() : 0;
+          const dateB = b.orderDate ? new Date(b.orderDate).getTime() : 0;
+          return dateB - dateA;
+        });
+      }
+    } catch (subcollectionError) {
+      console.warn("Error accessing user subcollection orders:", subcollectionError);
+      // Continue to try other methods
+    }
+    
+    // Step 2: Try the root orders collection (old structure)
+    console.log(`Trying root orders collection for user ${userId}...`);
     const ordersQuery = query(
       collection(db, ORDERS_COLLECTION),
       where("userId", "==", userId)
@@ -889,17 +929,47 @@ export const getUserOrders = async (userId: string): Promise<Order[]> => {
     const ordersSnapshot = await getDocs(ordersQuery);
     const orders: Order[] = [];
     
-    ordersSnapshot.forEach((doc) => {
-      orders.push(doc.data() as Order);
-    });
+    if (!ordersSnapshot.empty) {
+      console.log(`Found ${ordersSnapshot.size} orders in root collection`);
+      
+      ordersSnapshot.forEach((doc) => {
+        const data = doc.data();
+        orders.push({
+          id: doc.id,
+          ...data,
+          // Convert Timestamp to Date if needed
+          orderDate: data.orderDate instanceof Timestamp 
+            ? data.orderDate.toDate() 
+            : data.createdAt instanceof Timestamp 
+              ? data.createdAt.toDate() 
+              : new Date(),
+          items: data.items || []
+        } as Order);
+      });
+      
+      // Sort by date, newest first
+      return orders.sort((a, b) => {
+        const dateA = a.orderDate ? new Date(a.orderDate).getTime() : 0;
+        const dateB = b.orderDate ? new Date(b.orderDate).getTime() : 0;
+        return dateB - dateA;
+      });
+    }
     
-    // Sort manually in memory to avoid needing a composite index - newest first (descending)
-    return orders.sort((a, b) => {
-      // Convert Timestamp to milliseconds for comparison
-      const dateA = a.orderDate instanceof Timestamp ? a.orderDate.toMillis() : a.orderDate;
-      const dateB = b.orderDate instanceof Timestamp ? b.orderDate.toMillis() : b.orderDate;
-      return dateB - dateA; // Descending order (newest first)
-    });
+    // Step 3: Try the API as a fallback for database orders
+    console.log("No orders found in Firebase, trying API...");
+    try {
+      const response = await fetch(`/api/users/${userId}/orders`);
+      if (response.ok) {
+        const apiOrders = await response.json();
+        console.log(`Found ${apiOrders.length} orders via API`);
+        return apiOrders;
+      }
+    } catch (apiError) {
+      console.warn("Error fetching orders from API:", apiError);
+    }
+    
+    console.log("No orders found for user");
+    return [];
   } catch (error) {
     console.error("Error getting user orders:", error);
     throw error;
@@ -909,6 +979,74 @@ export const getUserOrders = async (userId: string): Promise<Order[]> => {
 /**
  * Get order details
  */
+/**
+ * Save a new order to Firestore and clear the user's cart
+ */
+export const saveOrder = async (
+  userId: string, 
+  orderData: {
+    items: Array<{
+      productId: number | string;
+      quantity: number;
+      name?: string;
+      price?: number;
+      image?: string;
+    }>;
+    totalAmount: number;
+    status: string;
+    paymentStatus: string;
+    paymentIntent: string;
+    shippingAddress: {
+      fullName: string;
+      address: string;
+      city: string;
+      state: string;
+      postalCode: string;
+      country: string;
+      phone: string;
+    };
+  }
+): Promise<Order> => {
+  try {
+    console.log(`Saving order for user ${userId}`, orderData);
+    
+    // Create a reference to the user's orders subcollection
+    const userOrdersRef = collection(db, 'users', userId, 'orders');
+    const orderDocRef = doc(userOrdersRef);
+    
+    // Prepare the order data with timestamp and ID
+    const order: Order = {
+      id: orderDocRef.id,
+      userId,
+      items: orderData.items,
+      totalAmount: orderData.totalAmount,
+      status: orderData.status,
+      paymentStatus: orderData.paymentStatus,
+      paymentIntent: orderData.paymentIntent,
+      shippingAddress: orderData.shippingAddress,
+      orderDate: serverTimestamp() as any,
+      createdAt: serverTimestamp() as any,
+      updatedAt: serverTimestamp() as any,
+      trackingNumber: null
+    };
+    
+    // Save the order to Firestore
+    await setDoc(orderDocRef, order);
+    
+    // Also save to the root orders collection for backward compatibility
+    await setDoc(doc(db, ORDERS_COLLECTION, orderDocRef.id), order);
+    
+    // Clear the user's cart after successful order
+    await clearCart(userId);
+    
+    console.log(`Order saved successfully with ID: ${orderDocRef.id}`);
+    return order;
+  } catch (error) {
+    console.error("Error saving order:", error);
+    throw error;
+  }
+};
+
 export const getOrderDetails = async (orderId: string): Promise<Order | null> => {
   try {
     const orderDoc = await getDoc(doc(db, ORDERS_COLLECTION, orderId));

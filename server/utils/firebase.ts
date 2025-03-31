@@ -356,3 +356,80 @@ export const getAllCategories = async () => {
 export const getFeaturedCategories = async () => {
   return queryDocuments(CATEGORIES_COLLECTION, "featured", "==", true);
 };
+
+// Constants for order collections
+export const ORDERS_COLLECTION = "orders";
+
+// Order functions
+export const createOrder = async (orderData: any) => {
+  try {
+    console.log("Creating new order in Firestore (server-side)");
+    
+    // Make sure the data has required fields
+    if (!orderData.userId) {
+      throw new Error("Order must have a userId");
+    }
+    
+    // Validate and transform items if needed
+    if (Array.isArray(orderData.items)) {
+      // Make sure each item has a subtotal
+      orderData.items = orderData.items.map((item: any) => {
+        if (!item.subtotal && item.price && item.quantity) {
+          item.subtotal = Number(item.price) * Number(item.quantity);
+        }
+        return item;
+      });
+    }
+    
+    // Format shipping address if needed
+    if (orderData.shippingAddress) {
+      // Handle the common case where address is provided instead of addressLine1
+      if (orderData.shippingAddress.address && !orderData.shippingAddress.addressLine1) {
+        orderData.shippingAddress.addressLine1 = orderData.shippingAddress.address;
+        delete orderData.shippingAddress.address;
+      }
+    }
+    
+    // Create a unique order ID using timestamp
+    const timestamp = Date.now();
+    const orderId = `ORD${timestamp}`;
+    
+    // Format the order data
+    const newOrder = {
+      ...orderData,
+      id: orderId,
+      orderDate: new Date(),
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+    
+    // Save to Firestore with the ID as the document ID
+    await createDocument(ORDERS_COLLECTION, newOrder, orderId);
+    
+    console.log(`Order created successfully with ID: ${orderId}`);
+    return newOrder;
+  } catch (error) {
+    console.error("Error creating order (server-side):", error);
+    throw error;
+  }
+};
+
+export const getOrderById = async (id: string) => {
+  return getDocument(ORDERS_COLLECTION, id);
+};
+
+export const updateOrderStatus = async (id: string, status: string) => {
+  return updateDocument(ORDERS_COLLECTION, id, { status });
+};
+
+export const updatePaymentStatus = async (id: string, paymentStatus: string) => {
+  return updateDocument(ORDERS_COLLECTION, id, { paymentStatus });
+};
+
+export const getUserOrders = async (userId: string) => {
+  return queryDocuments(ORDERS_COLLECTION, "userId", "==", userId);
+};
+
+export const getAllOrders = async () => {
+  return getAllDocuments(ORDERS_COLLECTION);
+};

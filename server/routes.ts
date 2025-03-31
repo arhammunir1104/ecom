@@ -1454,7 +1454,78 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Get userId if authenticated, otherwise create as guest order
       let userId = req.user?.id;
       
-      // If user isn't authenticated, check if user ID was passed in the body (for guest checkout)
+      // If user isn't authenticated, check if Firebase UID was passed in the body (from the client app)
+      const firebaseUid = req.headers["firebase-uid"]?.toString() || req.body?.userId;
+      
+      if (firebaseUid) {
+        console.log(`Order request includes Firebase UID: ${firebaseUid}`);
+        
+        try {
+          // Try to save order to Firebase first
+          if (firebaseAdmin) {
+            console.log("Attempting to save order to Firebase");
+            
+            // Prepare order data for Firebase
+            const firebaseOrderData = {
+              userId: firebaseUid,
+              items: req.body.items || [],
+              status: req.body.status || "processing",
+              paymentStatus: req.body.paymentStatus || "paid",
+              totalAmount: req.body.totalAmount || 0,
+              shippingAddress: req.body.shippingAddress || {},
+              paymentMethod: req.body.paymentMethod || "stripe",
+              orderDate: new Date(),
+              notes: req.body.notes || "",
+              trackingNumber: req.body.trackingNumber || ""
+            };
+            
+            // Map the shippingAddress structure if needed
+            if (firebaseOrderData.shippingAddress.address && !firebaseOrderData.shippingAddress.addressLine1) {
+              firebaseOrderData.shippingAddress.addressLine1 = firebaseOrderData.shippingAddress.address;
+              delete firebaseOrderData.shippingAddress.address;
+            }
+            
+            // Calculate any missing subtotals for each item
+            if (Array.isArray(firebaseOrderData.items)) {
+              firebaseOrderData.items = firebaseOrderData.items.map(item => {
+                if (!item.subtotal && item.price && item.quantity) {
+                  item.subtotal = Number(item.price) * Number(item.quantity);
+                }
+                return item;
+              });
+            }
+            
+            // Save order to Firebase
+            const savedOrder = await firebaseAdmin.createOrder(firebaseOrderData);
+            
+            if (savedOrder) {
+              console.log("Order saved to Firebase successfully:", savedOrder.id);
+              return res.status(201).json(savedOrder);
+            } else {
+              console.log("Failed to save order to Firebase, falling back to database");
+            }
+          }
+        } catch (firebaseError) {
+          console.error("Firebase order creation error:", firebaseError);
+          console.log("Falling back to database storage for order");
+        }
+        
+        // If we reach here with a Firebase UID, try to find or create the user in our system
+        try {
+          const user = await storage.getUserByFirebaseId(firebaseUid);
+          if (user) {
+            userId = user.id;
+            console.log(`Found user ${userId} by Firebase UID ${firebaseUid}`);
+          } else {
+            console.log(`No user found for Firebase UID ${firebaseUid}, will create guest order`);
+          }
+        } catch (userLookupError) {
+          console.error("Error looking up user by Firebase UID:", userLookupError);
+        }
+      }
+      
+      // If user ID from Firebase lookup or traditional authentication isn't available, 
+      // check if a userId was passed in the body (for guest checkout)
       if (!userId && req.body.userId) {
         userId = req.body.userId;
       }
@@ -1465,7 +1536,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         userId: userId || null
       };
       
-      console.log("Processed order data:", orderData);
+      console.log("Processed order data for database storage:", orderData);
       
       const validation = insertOrderSchema.safeParse(orderData);
       
@@ -1477,9 +1548,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
       
-      console.log("Order validation successful, creating order");
+      console.log("Order validation successful, creating order in database");
       const order = await storage.createOrder(validation.data);
-      console.log("Order created successfully:", order.id);
+      console.log("Order created successfully in database:", order.id);
       
       res.status(201).json(order);
     } catch (error) {
@@ -1662,7 +1733,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/create-payment-intent", async (req, res) => {
     try {
       console.log("Creating payment intent, request body:", req.body);
-      const { amount } = req.body;
+      const { amount, orderData } = req.body;
       if (!amount || typeof amount !== "number" || amount <= 0) {
         return res.status(400).json({ message: "Valid amount is required" });
       }
@@ -1670,19 +1741,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Log the request to help with debugging
       console.log(`Creating payment intent for amount: $${amount}`);
       
+      // Store order data temporarily if provided
+      if (orderData) {
+        console.log("Order data received:", orderData);
+        
+        // You can store this in a temporary session or database for later retrieval
+        // when the payment is confirmed
+        
+        // For now, just log it
+        console.log("Order items count:", orderData.items?.length || 0);
+        console.log("Order shipping address:", orderData.shippingAddress);
+      }
+      
       if (!process.env.STRIPE_SECRET_KEY) {
         console.error("⚠️ STRIPE_SECRET_KEY is not set. Payment intent creation will fail.");
         return res.status(500).json({ message: "Stripe API key is not configured" });
       }
       
       try {
-        // Create a payment intent
+        // Create a payment intent with any additional metadata from the order
         const paymentIntent = await stripe.paymentIntents.create({
           amount: Math.round(amount * 100), // Convert to cents
           currency: "usd",
           payment_method_types: ['card'],
           metadata: {
             integration_check: 'accept_a_payment',
+            order_data: orderData ? 'provided' : 'not_provided',
+            total_amount: amount.toString()
           },
         });
         
