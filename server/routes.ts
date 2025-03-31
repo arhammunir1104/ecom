@@ -1436,6 +1436,179 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: "Server error" });
     }
   });
+  
+  // Wishlist routes
+  app.get("/api/users/wishlist", async (req, res) => {
+    try {
+      // Get Firebase UID from header
+      const firebaseUid = req.headers["firebase-uid"]?.toString();
+      
+      // Try to find user by Firebase UID if available
+      let userId = null;
+      if (firebaseUid) {
+        const user = await storage.getUserByFirebaseId(firebaseUid);
+        if (user) {
+          userId = user.id;
+        } else {
+          return res.status(401).json({ 
+            message: "User not found with Firebase UID and no fallback authentication available" 
+          });
+        }
+      } else if (req.user?.id) {
+        // If no Firebase UID but we have a session user ID
+        userId = req.user.id;
+      }
+      
+      // If no user authentication found at all, return an empty array
+      if (!userId) {
+        return res.json([]);
+      }
+
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      // Get wishlist items
+      const wishlistItems = Array.isArray(user.wishlistItems) ? user.wishlistItems : [];
+      
+      // Fetch product details for each wishlist item
+      const products = [];
+      for (const productId of wishlistItems) {
+        const product = await storage.getProduct(Number(productId));
+        if (product) {
+          products.push(product);
+        }
+      }
+      
+      res.json(products);
+    } catch (error) {
+      console.error("Error fetching wishlist:", error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  app.post("/api/users/wishlist", async (req, res) => {
+    try {
+      // Get Firebase UID from header or body
+      const firebaseUid = req.headers["firebase-uid"]?.toString() || req.body.firebaseUid;
+      
+      // Try to find user by Firebase UID if available
+      let userId = null;
+      if (firebaseUid) {
+        const user = await storage.getUserByFirebaseId(firebaseUid);
+        if (user) {
+          userId = user.id;
+        } else {
+          return res.status(401).json({ 
+            message: "User not found with Firebase UID and no fallback authentication available" 
+          });
+        }
+      } else if (req.user?.id) {
+        // If no Firebase UID but we have a session user ID
+        userId = req.user.id;
+      }
+      
+      // If no user authentication found at all, return an error
+      if (!userId) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
+
+      const { productId } = req.body;
+      if (!productId) {
+        return res.status(400).json({ message: "Product ID is required" });
+      }
+
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      // Check if product exists
+      const product = await storage.getProduct(Number(productId));
+      if (!product) {
+        return res.status(404).json({ message: "Product not found" });
+      }
+
+      // Initialize wishlistItems if it doesn't exist
+      const wishlistItems = Array.isArray(user.wishlistItems) ? user.wishlistItems : [];
+      
+      // Check if product is already in wishlist (as string or number)
+      if (wishlistItems.includes(productId.toString()) || wishlistItems.includes(Number(productId))) {
+        return res.status(200).json({ message: "Product already in wishlist" });
+      }
+
+      // Add product to wishlist
+      const updatedWishlist = [...wishlistItems, productId.toString()];
+      const updatedUser = await storage.updateUser(user.id, { wishlistItems: updatedWishlist });
+
+      if (!updatedUser) {
+        return res.status(500).json({ message: "Failed to update wishlist" });
+      }
+
+      res.status(201).json({ message: "Product added to wishlist" });
+    } catch (error) {
+      console.error("Error adding to wishlist:", error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  app.delete("/api/users/wishlist/:productId", async (req, res) => {
+    try {
+      // Get Firebase UID from header
+      const firebaseUid = req.headers["firebase-uid"]?.toString();
+      
+      // Try to find user by Firebase UID if available
+      let userId = null;
+      if (firebaseUid) {
+        const user = await storage.getUserByFirebaseId(firebaseUid);
+        if (user) {
+          userId = user.id;
+        } else {
+          return res.status(401).json({ 
+            message: "User not found with Firebase UID and no fallback authentication available" 
+          });
+        }
+      } else if (req.user?.id) {
+        // If no Firebase UID but we have a session user ID
+        userId = req.user.id;
+      }
+      
+      // If no user authentication found at all, return an error
+      if (!userId) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
+
+      const { productId } = req.params;
+      if (!productId) {
+        return res.status(400).json({ message: "Product ID is required" });
+      }
+
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      // Initialize wishlistItems if it doesn't exist
+      const wishlistItems = Array.isArray(user.wishlistItems) ? user.wishlistItems : [];
+      
+      // Remove product from wishlist (checking both string and number types)
+      const updatedWishlist = wishlistItems.filter(id => 
+        id !== productId && id !== Number(productId) && id !== productId.toString()
+      );
+      
+      const updatedUser = await storage.updateUser(user.id, { wishlistItems: updatedWishlist });
+
+      if (!updatedUser) {
+        return res.status(500).json({ message: "Failed to update wishlist" });
+      }
+
+      res.status(200).json({ message: "Product removed from wishlist" });
+    } catch (error) {
+      console.error("Error removing from wishlist:", error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
 
   app.get("/api/admin/orders", isAuthenticated, isAdmin, async (req, res) => {
     try {
