@@ -2,40 +2,47 @@ import { collection, addDoc, Timestamp } from "firebase/firestore";
 import { db } from "./firebase";
 
 /**
- * Send a password reset OTP email
- * This is a mock implementation that stores the OTP in Firestore
- * In a production app, this would send an actual email
+ * Send a password reset OTP email using the server's email service
  */
 export const sendPasswordResetOTP = async (email: string, otp: string): Promise<void> => {
   try {
-    console.log(`Sending password reset OTP to ${email}: ${otp}`);
+    console.log(`Initiating password reset OTP for ${email}`);
     
-    // For demonstration purposes, we're logging the OTP
-    // In a real app, we would use a service like SendGrid, Mailgun, etc.
-    
-    // Store email sending attempt in Firestore for demo purposes
+    // Log attempt in Firestore for tracking
     await addDoc(collection(db, "emailLogs"), {
       email,
       subject: "Your Password Reset Code",
-      otp, // We include this only for demo purposes
       type: "password_reset",
       sentAt: Timestamp.fromDate(new Date()),
-      status: "sent" // In a real implementation, we'd get this from the email service
+      status: "initiated" 
     });
     
-    // In development, we'd show the OTP in the console to facilitate testing
-    console.info(`[DEV ONLY] Password reset OTP for ${email}: ${otp}`);
+    // Call our backend API to send the actual email
+    const response = await fetch('/api/auth/send-reset-otp', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ email, otp })
+    });
     
-    // Display an alert in development to simulate email delivery
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.message || 'Failed to send verification code');
+    }
+    
+    // Update the log with success status
+    await addDoc(collection(db, "emailLogs"), {
+      email,
+      subject: "Your Password Reset Code",
+      type: "password_reset",
+      sentAt: Timestamp.fromDate(new Date()),
+      status: "sent" 
+    });
+    
+    // Log OTP in development for debugging, but don't show it to user
     if (process.env.NODE_ENV !== 'production') {
-      alert(`
-        DEVELOPMENT MODE: Password Reset OTP
-        ------------------------------
-        Email: ${email}
-        OTP: ${otp}
-        ------------------------------
-        This alert simulates an email delivery and is only shown in development mode.
-      `);
+      console.info(`[DEV ONLY] Password reset OTP for ${email}: ${otp}`);
     }
   } catch (error) {
     console.error("Error sending password reset OTP:", error);

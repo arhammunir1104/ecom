@@ -237,23 +237,29 @@ export default function VerifyResetCode() {
                   control={form.control}
                   name="otp"
                   render={({ field }) => (
-                    <FormItem className="mx-auto">
-                      <FormLabel className="text-center block">Verification Code</FormLabel>
+                    <FormItem className="flex flex-col items-center justify-center">
+                      <FormLabel className="text-center w-full mb-2">Verification Code</FormLabel>
                       <FormControl>
-                        <InputOTP 
-                          maxLength={6} 
-                          {...field} 
-                          disabled={isLoading}
-                          render={({ slots }) => (
-                            <InputOTPGroup>
-                              {slots.map((slot, index) => (
-                                <InputOTPSlot key={index} {...slot} />
-                              ))}
-                            </InputOTPGroup>
-                          )}
-                        />
+                        <div className="flex justify-center w-full">
+                          <InputOTP 
+                            maxLength={6} 
+                            {...field} 
+                            disabled={isLoading}
+                            render={({ slots }) => (
+                              <InputOTPGroup className="gap-2">
+                                {slots.map((slot, index) => (
+                                  <InputOTPSlot 
+                                    key={index} 
+                                    {...slot} 
+                                    className="w-10 h-12 text-lg font-medium border-border"
+                                  />
+                                ))}
+                              </InputOTPGroup>
+                            )}
+                          />
+                        </div>
                       </FormControl>
-                      <FormMessage />
+                      <FormMessage className="text-center mt-2" />
                     </FormItem>
                   )}
                 />

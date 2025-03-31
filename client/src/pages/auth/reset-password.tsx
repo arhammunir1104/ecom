@@ -131,20 +131,72 @@ export default function ResetPassword() {
     
     setIsLoading(true);
     try {
-      // First, we need to send a password reset email to get the action code
-      // This is because Firebase doesn't provide a direct way to reset password with just email
-      await sendPasswordResetEmail(auth, email);
-      
-      // Use our custom approach since we don't have the actionCode from the email
-      // This is for demo purposes - in a real app, the user would click the link in the email
-      
+      // First, check if the OTP and reset process is valid
       try {
-        // Try to sign in with the new password directly
-        // This serves as a simulated password reset since we're in a demo environment
-        await signInWithEmailAndPassword(auth, email, values.password);
+        const resetDocRef = doc(db, "passwordResets", resetDocId);
+        const resetDoc = await getDoc(resetDocRef);
+        
+        // Ensure that the OTP verification was completed
+        if (!resetDoc.exists() || !resetDoc.data().verified) {
+          toast({
+            title: "Verification Required",
+            description: "You must verify your identity first",
+            variant: "destructive",
+          });
+          setLocation("/auth/verify-reset-code");
+          return;
+        }
+        
+        // Get the current Firebase user
+        const currentUser = auth.currentUser;
+        
+        // Create an API endpoint request to update the password
+        const response = await fetch('/api/auth/firebase-password-reset', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            email,
+            newPassword: values.password,
+            resetDocId
+          })
+        });
+        
+        // If the server can't handle it directly, we'll use the Firebase client SDK
+        if (!response.ok) {
+          // If no current user is logged in, re-authenticate using the reset email flow
+          if (!currentUser) {
+            // Send a regular Firebase password reset email
+            await sendPasswordResetEmail(auth, email);
+            
+            toast({
+              title: "Password Reset Email Sent",
+              description: "Please check your email to complete the password reset process.",
+              variant: "default",
+            });
+            
+            // Mark the reset as processed
+            await updateDoc(resetDocRef, {
+              resetProcessed: true,
+              resetProcessedAt: new Date(),
+            });
+            
+            setResetComplete(true);
+            
+            // Clear session storage
+            sessionStorage.removeItem("resetEmail");
+            sessionStorage.removeItem("resetDocId");
+            return;
+          }
+          
+          // If user is logged in, update their password directly
+          await currentUser.updatePassword(values.password);
+        }
+        
+        // If we got here, either the API call worked or we updated the password via client SDK
         
         // Mark the reset as complete in Firestore
-        const resetDocRef = doc(db, "passwordResets", resetDocId);
         await updateDoc(resetDocRef, {
           resetComplete: true,
           resetCompletedAt: new Date(),
@@ -153,20 +205,38 @@ export default function ResetPassword() {
         setResetComplete(true);
         toast({
           title: "Password Reset Successful",
-          description: "Your password has been successfully reset",
+          description: "Your password has been successfully reset. You can now log in with your new password.",
         });
         
         // Clear session storage
         sessionStorage.removeItem("resetEmail");
         sessionStorage.removeItem("resetDocId");
-      } catch (authError) {
+        
+        // Sign out any current session to ensure the user logs in with new password
+        await auth.signOut();
+        
+      } catch (authError: any) {
         console.error("Auth error:", authError);
-        // For demo purposes, we'll still show success since we can't actually reset the password
-        // without the user clicking a link in their email
-        setResetComplete(true);
+        
+        if (authError.code === 'auth/requires-recent-login') {
+          // User needs to re-authenticate before changing password
+          toast({
+            title: "Authentication Required",
+            description: "For security reasons, please log in again before changing your password.",
+            variant: "destructive",
+          });
+          
+          // Sign out and redirect to login
+          await auth.signOut();
+          setLocation("/auth/login");
+          return;
+        }
+        
+        // Handle other errors
         toast({
-          title: "Password Reset Email Sent",
-          description: "Please check your email to complete the password reset process",
+          title: "Password Reset Failed",
+          description: authError.message || "An error occurred while resetting your password.",
+          variant: "destructive",
         });
       }
     } catch (error: any) {

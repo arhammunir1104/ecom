@@ -2706,6 +2706,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Password reset endpoints
+  // Handle OTP sending request from client-side
+  app.post("/api/auth/send-reset-otp", async (req, res) => {
+    try {
+      const { email, otp } = req.body;
+      
+      if (!email || !otp) {
+        return res.status(400).json({ message: "Email and OTP are required" });
+      }
+      
+      // Import the email sending utility
+      const { sendPasswordResetEmail } = await import("./utils/passwordResetEmail");
+      
+      // Send the email with the OTP
+      const emailSent = await sendPasswordResetEmail(email, otp);
+      
+      if (!emailSent) {
+        console.error("Failed to send password reset email to:", email);
+        return res.status(500).json({ message: "Failed to send password reset email" });
+      }
+      
+      return res.status(200).json({ 
+        success: true,
+        message: "Password reset code has been sent to your email" 
+      });
+    } catch (error) {
+      console.error("Error sending password reset OTP:", error);
+      return res.status(500).json({ message: "Internal server error" });
+    }
+  });
+  
   // Step 1: Request password reset (sends OTP)
   app.post("/api/auth/forgot-password", async (req, res) => {
     try {
@@ -2780,6 +2810,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error) {
       console.error("Error in verify-reset-code:", error);
+      return res.status(500).json({ message: "Internal server error" });
+    }
+  });
+  
+  // Firebase password reset endpoint
+  app.post("/api/auth/firebase-password-reset", async (req, res) => {
+    try {
+      const { email, newPassword, resetDocId } = req.body;
+      
+      if (!email || !newPassword || !resetDocId) {
+        return res.status(400).json({ message: "Email, new password, and reset document ID are required" });
+      }
+      
+      // Get the Firebase admin instance
+      const admin = await import('firebase-admin/app').then(() => import('firebase-admin/auth'))
+        .then(({ getAuth }) => getAuth());
+      
+      // Find the user by email
+      const userRecord = await admin.getUserByEmail(email)
+        .catch(() => null);
+      
+      if (!userRecord) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      // Update the password
+      await admin.updateUser(userRecord.uid, {
+        password: newPassword
+      });
+      
+      return res.status(200).json({ message: "Password has been reset successfully" });
+    } catch (error: any) {
+      console.error("Error in firebase-password-reset:", error);
+      
+      if (error.code === 'auth/requires-recent-login') {
+        return res.status(401).json({ message: "Recent authentication is required. Please log in again." });
+      }
+      
       return res.status(500).json({ message: "Internal server error" });
     }
   });
