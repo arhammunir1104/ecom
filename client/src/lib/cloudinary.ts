@@ -1,15 +1,13 @@
+import { compressAndGetDataURL } from "./imageUtils";
+
 const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME || "placeholder";
 const uploadPreset = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET || "feminine_elegance";
 
 // Mock function to handle image uploads without Cloudinary
 export async function uploadImage(file: File) {
   try {
-    // Create a data URL for the image
-    const reader = new FileReader();
-    const dataUrl = await new Promise<string>((resolve) => {
-      reader.onload = () => resolve(reader.result as string);
-      reader.readAsDataURL(file);
-    });
+    // Compress and create a data URL for the image
+    const dataUrl = await compressAndGetDataURL(file);
     
     // Return a mock response with the data URL
     return {

@@ -8,6 +8,7 @@ import { z } from "zod";
 import { insertProductSchema } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { uploadImage, uploadMultipleImages } from "@/lib/cloudinary";
+import { compressAndGetDataURL } from "@/lib/imageUtils";
 import { useToast } from "@/hooks/use-toast";
 import {
   Form,
@@ -161,15 +162,9 @@ export default function AdminAddProduct() {
     setIsSubmitting(true);
     
     try {
-      // Generate data URLs for the images instead of uploading to Cloudinary
+      // Compress images and generate data URLs
       const imageUrls = await Promise.all(
-        imageFiles.map(file => {
-          return new Promise<string>((resolve) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve(reader.result as string);
-            reader.readAsDataURL(file);
-          });
-        })
+        imageFiles.map(file => compressAndGetDataURL(file))
       );
       
       // Create product with image URLs

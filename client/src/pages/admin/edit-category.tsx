@@ -7,6 +7,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { insertCategorySchema } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { compressAndGetDataURL } from "@/lib/imageUtils";
 import { useToast } from "@/hooks/use-toast";
 import {
   Form,
@@ -135,12 +136,8 @@ export default function AdminEditCategory() {
       let imageUrl = data.image || "";
       
       if (imageFile) {
-        // Create a data URL for the image
-        const reader = new FileReader();
-        imageUrl = await new Promise((resolve) => {
-          reader.onload = () => resolve(reader.result as string);
-          reader.readAsDataURL(imageFile);
-        });
+        // Compress and create a data URL for the image
+        imageUrl = await compressAndGetDataURL(imageFile);
       }
       
       // Update category with image URL

@@ -7,6 +7,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { insertProductSchema } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { compressAndGetDataURL } from "@/lib/imageUtils";
 import { useToast } from "@/hooks/use-toast";
 import {
   Form,
@@ -213,15 +214,9 @@ export default function AdminEditProduct() {
     setIsSubmitting(true);
     
     try {
-      // Process any new image files
+      // Process and compress any new image files
       const newImageUrls = await Promise.all(
-        imageFiles.map(file => {
-          return new Promise<string>((resolve) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve(reader.result as string);
-            reader.readAsDataURL(file);
-          });
-        })
+        imageFiles.map(file => compressAndGetDataURL(file))
       );
       
       // Combine existing images (except ones that were replaced) with new ones

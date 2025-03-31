@@ -7,6 +7,7 @@ import { z } from "zod";
 import { insertCategorySchema } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { uploadImage } from "@/lib/cloudinary";
+import { compressAndGetDataURL } from "@/lib/imageUtils";
 import { useToast } from "@/hooks/use-toast";
 import {
   Form,
@@ -94,16 +95,12 @@ export default function AdminAddCategory() {
     setIsSubmitting(true);
     
     try {
-      // Instead of uploading to Cloudinary, we'll use a mock image URL or the data URL
+      // Instead of uploading to Cloudinary, we'll use a compressed data URL
       let imageUrl = "";
       
       if (imageFile) {
-        // Create a data URL for the image
-        const reader = new FileReader();
-        imageUrl = await new Promise((resolve) => {
-          reader.onload = () => resolve(reader.result as string);
-          reader.readAsDataURL(imageFile);
-        });
+        // Compress and create a data URL for the image
+        imageUrl = await compressAndGetDataURL(imageFile);
       } else {
         // Use a placeholder image URL
         imageUrl = "https://placehold.co/600x400";

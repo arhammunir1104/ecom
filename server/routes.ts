@@ -10,7 +10,6 @@ import * as firebaseAdmin from "./utils/firebase";
 import firebaseApp from "../client/src/lib/firebase";
 import * as firebaseAuth from "firebase/auth";
 import * as firebaseFirestore from "firebase/firestore";
-import * as firebaseService from "../client/src/lib/firebaseService";
 
 // Augment the Express Request type to include the user property
 declare global {
@@ -831,11 +830,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       try {
-        // Use the imported firebaseService
+        // Use the imported firebaseAdmin
         console.log(`Attempting to fetch category ${id} from Firebase`);
         
         // Try to get category from Firebase
-        const firebaseCategory = await firebaseService.getCategoryById(id);
+        const firebaseCategory = await firebaseAdmin.getCategoryById(id);
         
         if (firebaseCategory) {
           console.log(`Category ${id} found in Firebase`);
@@ -935,7 +934,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       try {
-        // Use the imported firebaseService
+        // Use the imported firebaseAdmin
         console.log(`Attempting to update category ${id} in Firebase`);
         
         // Prepare the category data with proper type handling
@@ -948,7 +947,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if ('featured' in validation.data) categoryData.featured = !!validation.data.featured;
         
         // Try to update the category in Firebase
-        const firebaseCategory = await firebaseService.updateCategory(id, categoryData);
+        const firebaseCategory = await firebaseAdmin.updateCategory(id, categoryData);
         
         if (firebaseCategory) {
           console.log(`Category ${id} updated successfully in Firebase:`, firebaseCategory);
@@ -988,11 +987,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log(`Attempting to delete category ${id}`);
       
       try {
-        // Use the imported firebaseService
+        // Use the imported firebaseAdmin
         console.log(`Attempting to delete category ${id} from Firebase`);
         
         // Try to delete from Firebase
-        const success = await firebaseService.deleteCategory(id);
+        const success = await firebaseAdmin.deleteCategory(id);
         
         if (success) {
           console.log(`Category ${id} deleted successfully from Firebase`);
@@ -1072,7 +1071,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Check Firebase environment variables before importing
         if (process.env.VITE_FIREBASE_PROJECT_ID && process.env.VITE_FIREBASE_API_KEY) {
           // Import Firebase functions
-          const firebaseService = await import("../client/src/lib/firebaseService");
+          // We're already importing firebaseAdmin at the top, no need for dynamic import
           console.log("Imported Firebase service for products");
           
           // Fetch base products based on primary filter from Firebase
@@ -1082,16 +1081,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
               return res.status(400).json({ message: "Invalid category ID" });
             }
             console.log(`Fetching products for category ${categoryId} from Firebase`);
-            products = await firebaseService.getProductsByCategory(categoryId);
+            products = await firebaseAdmin.getProductsByCategory(categoryId);
           } else if (featured === 'true') {
             console.log("Fetching featured products from Firebase");
-            products = await firebaseService.getFeaturedProducts();
+            products = await firebaseAdmin.getFeaturedProducts();
           } else if (trending === 'true') {
             console.log("Fetching trending products from Firebase");
-            products = await firebaseService.getTrendingProducts();
+            products = await firebaseAdmin.getTrendingProducts();
           } else {
             console.log("Fetching all products from Firebase");
-            products = await firebaseService.getAllProducts();
+            products = await firebaseAdmin.getAllProducts();
           }
           
           console.log(`Retrieved ${products.length} products from Firebase`);
@@ -1169,11 +1168,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       try {
-        // Use the imported firebaseService
+        // Use the imported firebaseAdmin
         console.log(`Attempting to fetch product ${id} from Firebase`);
         
         // Try to get product from Firebase
-        const firebaseProduct = await firebaseService.getProductById(id);
+        const firebaseProduct = await firebaseAdmin.getProductById(id);
         
         if (firebaseProduct) {
           console.log(`Product ${id} found in Firebase`);
@@ -1213,7 +1212,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       try {
-        // Use the imported firebaseService
+        // Use the imported firebaseAdmin
         console.log("Attempting to create product in Firebase");
         
         // Prepare the product data with proper type handling
@@ -1232,7 +1231,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         };
         
         // Try to create the product in Firebase
-        const firebaseProduct = await firebaseService.createProduct(productData);
+        const firebaseProduct = await firebaseAdmin.createProduct(productData);
         
         console.log("Product created successfully in Firebase:", firebaseProduct);
         return res.status(201).json(firebaseProduct);
@@ -1269,7 +1268,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       try {
-        // Use the imported firebaseService
+        // Use the imported firebaseAdmin
         console.log(`Attempting to update product ${id} in Firebase`);
         
         // Prepare the product data with proper type handling
@@ -1289,7 +1288,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if ('trending' in validation.data) productData.trending = !!validation.data.trending;
         
         // Try to update the product in Firebase
-        const firebaseProduct = await firebaseService.updateProduct(id, productData);
+        const firebaseProduct = await firebaseAdmin.updateProduct(id, productData);
         
         if (firebaseProduct) {
           console.log(`Product ${id} updated successfully in Firebase:`, firebaseProduct);
@@ -1329,11 +1328,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log(`Attempting to delete product ${id}`);
       
       try {
-        // Use the imported firebaseService
+        // Use the imported firebaseAdmin
         console.log(`Attempting to delete product ${id} from Firebase`);
         
         // Try to delete from Firebase
-        const success = await firebaseService.deleteProduct(id);
+        const success = await firebaseAdmin.deleteProduct(id);
         
         if (success) {
           console.log(`Product ${id} deleted successfully from Firebase`);

@@ -230,3 +230,129 @@ export const queryDocuments = async (collection: string, field: string, operator
     throw error;
   }
 };
+
+// Constants for collections
+export const PRODUCTS_COLLECTION = "products";
+export const CATEGORIES_COLLECTION = "categories";
+
+// Product functions
+export const createProduct = async (productData: any) => {
+  try {
+    console.log("Creating new product in Firestore (server-side)");
+    
+    // Get all products first to determine next ID
+    const products = await getAllDocuments(PRODUCTS_COLLECTION);
+    
+    let nextId = 1;
+    if (products.length > 0) {
+      // Find the highest ID manually
+      const highestId = products.reduce((max, product) => {
+        const productId = typeof product.id === 'string' ? parseInt(product.id, 10) : product.id;
+        return productId > max ? productId : max;
+      }, 0);
+      nextId = highestId + 1;
+    }
+    
+    // Create the product with auto-generated ID and timestamps
+    const newProduct = {
+      ...productData,
+      id: nextId,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+    
+    // Save to Firestore with the ID as the document ID
+    await createDocument(PRODUCTS_COLLECTION, newProduct, nextId.toString());
+    
+    console.log(`Product created successfully with ID: ${nextId}`);
+    return newProduct;
+  } catch (error) {
+    console.error("Error creating product (server-side):", error);
+    throw error;
+  }
+};
+
+export const getProductById = async (id: number | string) => {
+  return getDocument(PRODUCTS_COLLECTION, id.toString());
+};
+
+export const updateProduct = async (id: number | string, productData: any) => {
+  return updateDocument(PRODUCTS_COLLECTION, id.toString(), productData);
+};
+
+export const deleteProduct = async (id: number | string) => {
+  return deleteDocument(PRODUCTS_COLLECTION, id.toString());
+};
+
+export const getAllProducts = async () => {
+  return getAllDocuments(PRODUCTS_COLLECTION);
+};
+
+export const getProductsByCategory = async (categoryId: number | string) => {
+  return queryDocuments(PRODUCTS_COLLECTION, "categoryId", "==", categoryId);
+};
+
+export const getFeaturedProducts = async () => {
+  return queryDocuments(PRODUCTS_COLLECTION, "featured", "==", true);
+};
+
+export const getTrendingProducts = async () => {
+  return queryDocuments(PRODUCTS_COLLECTION, "trending", "==", true);
+};
+
+// Category functions
+export const createCategory = async (categoryData: any) => {
+  try {
+    console.log("Creating new category in Firestore (server-side)");
+    
+    // Get all categories first to determine next ID
+    const categories = await getAllDocuments(CATEGORIES_COLLECTION);
+    
+    let nextId = 1;
+    if (categories.length > 0) {
+      // Find the highest ID manually
+      const highestId = categories.reduce((max, category) => {
+        const categoryId = typeof category.id === 'string' ? parseInt(category.id, 10) : category.id;
+        return categoryId > max ? categoryId : max;
+      }, 0);
+      nextId = highestId + 1;
+    }
+    
+    // Create the category with auto-generated ID and timestamps
+    const newCategory = {
+      ...categoryData,
+      id: nextId,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+    
+    // Save to Firestore with the ID as the document ID
+    await createDocument(CATEGORIES_COLLECTION, newCategory, nextId.toString());
+    
+    console.log(`Category created successfully with ID: ${nextId}`);
+    return newCategory;
+  } catch (error) {
+    console.error("Error creating category (server-side):", error);
+    throw error;
+  }
+};
+
+export const getCategoryById = async (id: number | string) => {
+  return getDocument(CATEGORIES_COLLECTION, id.toString());
+};
+
+export const updateCategory = async (id: number | string, categoryData: any) => {
+  return updateDocument(CATEGORIES_COLLECTION, id.toString(), categoryData);
+};
+
+export const deleteCategory = async (id: number | string) => {
+  return deleteDocument(CATEGORIES_COLLECTION, id.toString());
+};
+
+export const getAllCategories = async () => {
+  return getAllDocuments(CATEGORIES_COLLECTION);
+};
+
+export const getFeaturedCategories = async () => {
+  return queryDocuments(CATEGORIES_COLLECTION, "featured", "==", true);
+};
