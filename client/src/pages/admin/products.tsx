@@ -22,13 +22,38 @@ import {
 } from "@/components/ui/pagination";
 import { Loader2, PlusCircle, Search } from "lucide-react";
 
+// Define our interfaces
+interface Product {
+  id: number;
+  name: string;
+  description: string;
+  price: number;
+  discountPrice?: number;
+  categoryId?: number;
+  images: string[];
+  sizes: string[];
+  colors: string[];
+  stock: number;
+  featured: boolean;
+  trending: boolean;
+  createdAt?: Date;
+}
+
+interface Category {
+  id: number;
+  name: string;
+  image: string | null;
+  description: string | null;
+  featured: boolean | null;
+}
+
 export default function AdminProducts() {
   const { isAdmin, isAuthenticated } = useAuth();
   const [, navigate] = useLocation();
   const [searchQuery, setSearchQuery] = useState("");
   const [page, setPage] = useState(1);
-  const [categoryFilter, setCategoryFilter] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
   
   // Redirect if not admin
   useEffect(() => {
@@ -36,21 +61,21 @@ export default function AdminProducts() {
       navigate("/");
     }
   }, [isAdmin, isAuthenticated, navigate]);
-  
+
   // Fetch products
-  const { data: products, isLoading } = useQuery({
+  const { data: products = [], isLoading } = useQuery<Product[]>({
     queryKey: ["/api/products"],
     enabled: isAdmin && isAuthenticated,
   });
   
   // Fetch categories for filter
-  const { data: categories } = useQuery({
+  const { data: categories = [] } = useQuery<Category[]>({
     queryKey: ["/api/categories"],
     enabled: isAdmin && isAuthenticated,
   });
   
   // Filter and paginate products
-  const filteredProducts = products?.filter(product => {
+  const filteredProducts = products.filter((product: Product) => {
     let match = true;
     
     if (searchQuery) {
@@ -197,8 +222,8 @@ export default function AdminProducts() {
                   <PaginationContent>
                     <PaginationItem>
                       <PaginationPrevious
-                        onClick={() => setPage(prev => Math.max(prev - 1, 1))}
-                        disabled={page === 1}
+                        onClick={() => page > 1 && setPage(page - 1)}
+                        className={page <= 1 ? "pointer-events-none opacity-50" : ""}
                       />
                     </PaginationItem>
                     
@@ -215,8 +240,8 @@ export default function AdminProducts() {
                     
                     <PaginationItem>
                       <PaginationNext
-                        onClick={() => setPage(prev => Math.min(prev + 1, totalPages))}
-                        disabled={page === totalPages}
+                        onClick={() => page < totalPages && setPage(page + 1)}
+                        className={page >= totalPages ? "pointer-events-none opacity-50" : ""}
                       />
                     </PaginationItem>
                   </PaginationContent>

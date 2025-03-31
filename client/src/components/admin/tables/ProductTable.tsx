@@ -2,7 +2,6 @@ import { useState } from "react";
 import { useLocation } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Product, Category } from "@shared/schema";
 import {
   Table,
   TableBody,
@@ -44,6 +43,31 @@ import {
   ArrowDown, 
   Loader2 
 } from "lucide-react";
+
+// Define Product and Category interfaces
+interface Product {
+  id: number;
+  name: string;
+  description: string;
+  price: number;
+  discountPrice?: number;
+  categoryId?: number;
+  images: string[];
+  sizes: string[];
+  colors: string[];
+  stock: number;
+  featured: boolean;
+  trending: boolean;
+  createdAt?: Date;
+}
+
+interface Category {
+  id: number;
+  name: string;
+  image: string | null;
+  description: string | null;
+  featured: boolean | null;
+}
 
 interface ProductTableProps {
   products: Product[];

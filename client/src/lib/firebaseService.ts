@@ -32,6 +32,9 @@ const USERS_COLLECTION = "users";
 const CARTS_COLLECTION = "carts";
 const ORDERS_COLLECTION = "orders";
 const WISHLIST_COLLECTION = "wishlists";
+const PRODUCTS_COLLECTION = "products";
+const CATEGORIES_COLLECTION = "categories";
+const HERO_BANNERS_COLLECTION = "hero-banners";
 
 // Types
 export interface UserProfile {
@@ -43,6 +46,33 @@ export interface UserProfile {
   twoFactorEnabled?: boolean;
   phoneNumber?: string;
   photoURL?: string;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
+export interface Product {
+  id: number;
+  name: string;
+  description: string;
+  price: number;
+  discountPrice?: number;
+  categoryId?: number;
+  images: string[];
+  sizes: string[];
+  colors: string[];
+  stock: number;
+  featured: boolean;
+  trending: boolean;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
+export interface Category {
+  id: number;
+  name: string;
+  image?: string;
+  description?: string;
+  featured: boolean;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
@@ -900,6 +930,366 @@ export const getAllOrders = async (
   } catch (error) {
     console.error("Error getting all orders:", error);
     throw error;
+  }
+};
+
+// ===================== PRODUCT FUNCTIONS =====================
+
+/**
+ * Helper function to get a product document reference
+ */
+const getProductDocRef = (productId: number | string) => doc(db, PRODUCTS_COLLECTION, productId.toString());
+
+/**
+ * Create a new product in Firestore
+ */
+export const createProduct = async (productData: Omit<Product, 'id' | 'createdAt' | 'updatedAt'>): Promise<Product> => {
+  try {
+    console.log("Creating new product in Firestore");
+    
+    // Get the next product ID by checking the current count
+    const productsQuery = query(collection(db, PRODUCTS_COLLECTION), orderBy("id", "desc"), limit(1));
+    const productsSnapshot = await getDocs(productsQuery);
+    
+    let nextId = 1;
+    if (!productsSnapshot.empty) {
+      const lastProduct = productsSnapshot.docs[0].data() as Product;
+      nextId = lastProduct.id + 1;
+    }
+    
+    // Create the product with auto-generated ID and timestamps
+    const newProduct: Product = {
+      ...productData,
+      id: nextId,
+      createdAt: serverTimestamp() as Timestamp,
+      updatedAt: serverTimestamp() as Timestamp
+    };
+    
+    // Save to Firestore with the ID as the document ID
+    const productDocRef = getProductDocRef(nextId);
+    await setDoc(productDocRef, newProduct);
+    
+    console.log(`Product created successfully with ID: ${nextId}`);
+    return newProduct;
+  } catch (error) {
+    console.error("Error creating product:", error);
+    throw error;
+  }
+};
+
+/**
+ * Get all products from Firestore
+ */
+export const getAllProducts = async (): Promise<Product[]> => {
+  try {
+    const productsQuery = query(collection(db, PRODUCTS_COLLECTION), orderBy("id", "asc"));
+    const productsSnapshot = await getDocs(productsQuery);
+    
+    const products: Product[] = [];
+    productsSnapshot.forEach((doc) => {
+      products.push(doc.data() as Product);
+    });
+    
+    return products;
+  } catch (error) {
+    console.error("Error getting all products:", error);
+    return [];
+  }
+};
+
+/**
+ * Get a single product by ID
+ */
+export const getProductById = async (productId: number): Promise<Product | null> => {
+  try {
+    const productDocRef = getProductDocRef(productId);
+    const productDoc = await getDoc(productDocRef);
+    
+    if (productDoc.exists()) {
+      return productDoc.data() as Product;
+    }
+    
+    return null;
+  } catch (error) {
+    console.error(`Error getting product ${productId}:`, error);
+    return null;
+  }
+};
+
+/**
+ * Get featured products
+ */
+export const getFeaturedProducts = async (): Promise<Product[]> => {
+  try {
+    const productsQuery = query(
+      collection(db, PRODUCTS_COLLECTION),
+      where("featured", "==", true),
+      orderBy("id", "asc")
+    );
+    
+    const productsSnapshot = await getDocs(productsQuery);
+    
+    const products: Product[] = [];
+    productsSnapshot.forEach((doc) => {
+      products.push(doc.data() as Product);
+    });
+    
+    return products;
+  } catch (error) {
+    console.error("Error getting featured products:", error);
+    return [];
+  }
+};
+
+/**
+ * Get trending products
+ */
+export const getTrendingProducts = async (): Promise<Product[]> => {
+  try {
+    const productsQuery = query(
+      collection(db, PRODUCTS_COLLECTION),
+      where("trending", "==", true),
+      orderBy("id", "asc")
+    );
+    
+    const productsSnapshot = await getDocs(productsQuery);
+    
+    const products: Product[] = [];
+    productsSnapshot.forEach((doc) => {
+      products.push(doc.data() as Product);
+    });
+    
+    return products;
+  } catch (error) {
+    console.error("Error getting trending products:", error);
+    return [];
+  }
+};
+
+/**
+ * Update a product
+ */
+export const updateProduct = async (
+  productId: number,
+  productData: Partial<Product>
+): Promise<Product | null> => {
+  try {
+    const productDocRef = getProductDocRef(productId);
+    const productDoc = await getDoc(productDocRef);
+    
+    if (!productDoc.exists()) {
+      console.error(`Product ${productId} not found`);
+      return null;
+    }
+    
+    const updatedProduct = {
+      ...productData,
+      updatedAt: serverTimestamp()
+    };
+    
+    await updateDoc(productDocRef, updatedProduct);
+    
+    // Get the updated document
+    const updatedDoc = await getDoc(productDocRef);
+    return updatedDoc.data() as Product;
+  } catch (error) {
+    console.error(`Error updating product ${productId}:`, error);
+    return null;
+  }
+};
+
+/**
+ * Delete a product
+ */
+export const deleteProduct = async (productId: number): Promise<boolean> => {
+  try {
+    const productDocRef = getProductDocRef(productId);
+    await deleteDoc(productDocRef);
+    console.log(`Product ${productId} deleted successfully`);
+    return true;
+  } catch (error) {
+    console.error(`Error deleting product ${productId}:`, error);
+    return false;
+  }
+};
+
+/**
+ * Get products by category
+ */
+export const getProductsByCategory = async (categoryId: number): Promise<Product[]> => {
+  try {
+    const productsQuery = query(
+      collection(db, PRODUCTS_COLLECTION),
+      where("categoryId", "==", categoryId),
+      orderBy("id", "asc")
+    );
+    
+    const productsSnapshot = await getDocs(productsQuery);
+    
+    const products: Product[] = [];
+    productsSnapshot.forEach((doc) => {
+      products.push(doc.data() as Product);
+    });
+    
+    return products;
+  } catch (error) {
+    console.error(`Error getting products for category ${categoryId}:`, error);
+    return [];
+  }
+};
+
+// ===================== CATEGORY FUNCTIONS =====================
+
+/**
+ * Helper function to get a category document reference
+ */
+const getCategoryDocRef = (categoryId: number | string) => doc(db, CATEGORIES_COLLECTION, categoryId.toString());
+
+/**
+ * Create a new category
+ */
+export const createCategory = async (categoryData: Omit<Category, 'id' | 'createdAt' | 'updatedAt'>): Promise<Category> => {
+  try {
+    console.log("Creating new category in Firestore");
+    
+    // Get the next category ID by checking the current count
+    const categoriesQuery = query(collection(db, CATEGORIES_COLLECTION), orderBy("id", "desc"), limit(1));
+    const categoriesSnapshot = await getDocs(categoriesQuery);
+    
+    let nextId = 1;
+    if (!categoriesSnapshot.empty) {
+      const lastCategory = categoriesSnapshot.docs[0].data() as Category;
+      nextId = lastCategory.id + 1;
+    }
+    
+    // Create the category with auto-generated ID and timestamps
+    const newCategory: Category = {
+      ...categoryData,
+      id: nextId,
+      createdAt: serverTimestamp() as Timestamp,
+      updatedAt: serverTimestamp() as Timestamp
+    };
+    
+    // Save to Firestore with the ID as the document ID
+    const categoryDocRef = getCategoryDocRef(nextId);
+    await setDoc(categoryDocRef, newCategory);
+    
+    console.log(`Category created successfully with ID: ${nextId}`);
+    return newCategory;
+  } catch (error) {
+    console.error("Error creating category:", error);
+    throw error;
+  }
+};
+
+/**
+ * Get all categories
+ */
+export const getAllCategories = async (): Promise<Category[]> => {
+  try {
+    const categoriesQuery = query(collection(db, CATEGORIES_COLLECTION), orderBy("id", "asc"));
+    const categoriesSnapshot = await getDocs(categoriesQuery);
+    
+    const categories: Category[] = [];
+    categoriesSnapshot.forEach((doc) => {
+      categories.push(doc.data() as Category);
+    });
+    
+    return categories;
+  } catch (error) {
+    console.error("Error getting all categories:", error);
+    return [];
+  }
+};
+
+/**
+ * Get featured categories
+ */
+export const getFeaturedCategories = async (): Promise<Category[]> => {
+  try {
+    const categoriesQuery = query(
+      collection(db, CATEGORIES_COLLECTION),
+      where("featured", "==", true),
+      orderBy("id", "asc")
+    );
+    
+    const categoriesSnapshot = await getDocs(categoriesQuery);
+    
+    const categories: Category[] = [];
+    categoriesSnapshot.forEach((doc) => {
+      categories.push(doc.data() as Category);
+    });
+    
+    return categories;
+  } catch (error) {
+    console.error("Error getting featured categories:", error);
+    return [];
+  }
+};
+
+/**
+ * Get a single category by ID
+ */
+export const getCategoryById = async (categoryId: number): Promise<Category | null> => {
+  try {
+    const categoryDocRef = getCategoryDocRef(categoryId);
+    const categoryDoc = await getDoc(categoryDocRef);
+    
+    if (categoryDoc.exists()) {
+      return categoryDoc.data() as Category;
+    }
+    
+    return null;
+  } catch (error) {
+    console.error(`Error getting category ${categoryId}:`, error);
+    return null;
+  }
+};
+
+/**
+ * Update a category
+ */
+export const updateCategory = async (
+  categoryId: number,
+  categoryData: Partial<Category>
+): Promise<Category | null> => {
+  try {
+    const categoryDocRef = getCategoryDocRef(categoryId);
+    const categoryDoc = await getDoc(categoryDocRef);
+    
+    if (!categoryDoc.exists()) {
+      console.error(`Category ${categoryId} not found`);
+      return null;
+    }
+    
+    const updatedCategory = {
+      ...categoryData,
+      updatedAt: serverTimestamp()
+    };
+    
+    await updateDoc(categoryDocRef, updatedCategory);
+    
+    // Get the updated document
+    const updatedDoc = await getDoc(categoryDocRef);
+    return updatedDoc.data() as Category;
+  } catch (error) {
+    console.error(`Error updating category ${categoryId}:`, error);
+    return null;
+  }
+};
+
+/**
+ * Delete a category
+ */
+export const deleteCategory = async (categoryId: number): Promise<boolean> => {
+  try {
+    const categoryDocRef = getCategoryDocRef(categoryId);
+    await deleteDoc(categoryDocRef);
+    console.log(`Category ${categoryId} deleted successfully`);
+    return true;
+  } catch (error) {
+    console.error(`Error deleting category ${categoryId}:`, error);
+    return false;
   }
 };
 

@@ -60,9 +60,10 @@ export default function AdminUsers() {
     let match = true;
     
     if (searchQuery) {
-      match = user.username.toLowerCase().includes(searchQuery.toLowerCase()) ||
-              user.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-              (user.fullName && user.fullName.toLowerCase().includes(searchQuery.toLowerCase()));
+      const searchLower = searchQuery.toLowerCase();
+      match = (user.username || '').toLowerCase().includes(searchLower) ||
+              (user.email || '').toLowerCase().includes(searchLower) ||
+              (user.fullName ? user.fullName.toLowerCase().includes(searchLower) : false);
     }
     
     if (match && roleFilter && roleFilter !== 'all') {

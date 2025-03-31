@@ -471,7 +471,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Category routes
   app.get("/api/categories", async (req, res) => {
     try {
+      try {
+        // Import Firebase function
+        const { getAllCategories } = await import("../client/src/lib/firebaseService");
+        console.log("Attempting to fetch categories from Firebase");
+        
+        // Try to get categories from Firebase
+        const firebaseCategories = await getAllCategories();
+        
+        console.log(`Fetched ${firebaseCategories.length} categories from Firebase`);
+        return res.json(firebaseCategories);
+      } catch (firebaseError) {
+        console.error("Firebase categories fetch error:", firebaseError);
+        console.log("Falling back to database storage");
+      }
+      
+      // If we got here, there was an error with Firebase
       const categories = await storage.getAllCategories();
+      console.log(`Fetched ${categories.length} categories from database`);
       res.json(categories);
     } catch (error) {
       console.error("Get categories error:", error);
@@ -481,7 +498,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/categories/featured", async (req, res) => {
     try {
+      try {
+        // Import Firebase function
+        const { getFeaturedCategories } = await import("../client/src/lib/firebaseService");
+        console.log("Attempting to fetch featured categories from Firebase");
+        
+        // Try to get featured categories from Firebase
+        const firebaseCategories = await getFeaturedCategories();
+        
+        console.log(`Fetched ${firebaseCategories.length} featured categories from Firebase`);
+        return res.json(firebaseCategories);
+      } catch (firebaseError) {
+        console.error("Firebase featured categories fetch error:", firebaseError);
+        console.log("Falling back to database storage");
+      }
+      
+      // If we got here, there was an error with Firebase
       const categories = await storage.getFeaturedCategories();
+      console.log(`Fetched ${categories.length} featured categories from database`);
       res.json(categories);
     } catch (error) {
       console.error("Get featured categories error:", error);
@@ -496,11 +530,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Invalid category ID" });
       }
       
+      try {
+        // Import Firebase function
+        const { getCategoryById } = await import("../client/src/lib/firebaseService");
+        console.log(`Attempting to fetch category ${id} from Firebase`);
+        
+        // Try to get category from Firebase
+        const firebaseCategory = await getCategoryById(id);
+        
+        if (firebaseCategory) {
+          console.log(`Category ${id} found in Firebase`);
+          return res.json(firebaseCategory);
+        } else {
+          console.log(`Category ${id} not found in Firebase, falling back to database`);
+        }
+      } catch (firebaseError) {
+        console.error(`Error fetching category ${id} from Firebase:`, firebaseError);
+        console.log(`Falling back to database storage for category ${id}`);
+      }
+      
+      // If we got here, there was either an error with Firebase or the category wasn't found
+      // Let's try from the local database storage
       const category = await storage.getCategory(id);
       if (!category) {
+        console.log(`Category ${id} not found in database either`);
         return res.status(404).json({ message: "Category not found" });
       }
       
+      console.log(`Category ${id} found in database`);
       res.json(category);
     } catch (error) {
       console.error("Get category error:", error);
@@ -510,12 +567,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/categories", isAuthenticated, isAdmin, async (req, res) => {
     try {
+      console.log("Creating new category with data:", req.body);
+      
       const validation = insertCategorySchema.safeParse(req.body);
       if (!validation.success) {
+        console.error("Category validation failed:", validation.error.flatten().fieldErrors);
         return res.status(400).json({ message: "Invalid data", errors: validation.error.flatten().fieldErrors });
       }
       
+      try {
+        // Import Firebase function
+        const { createCategory } = await import("../client/src/lib/firebaseService");
+        console.log("Attempting to create category in Firebase");
+        
+        // Prepare the category data with proper type handling
+        const categoryData = {
+          name: validation.data.name,
+          description: validation.data.description || "",
+          image: validation.data.image || undefined,
+          featured: !!validation.data.featured
+        };
+        
+        // Try to create the category in Firebase
+        const firebaseCategory = await createCategory(categoryData);
+        
+        console.log("Category created successfully in Firebase:", firebaseCategory);
+        return res.status(201).json(firebaseCategory);
+      } catch (firebaseError) {
+        console.error("Error creating category in Firebase:", firebaseError);
+        console.log("Falling back to database storage");
+      }
+      
+      // If we got here, there was an error with Firebase
+      // Let's try with the local database storage
+      console.log("Creating category in database");
       const category = await storage.createCategory(validation.data);
+      console.log("Category created successfully in database:", category.id);
       res.status(201).json(category);
     } catch (error) {
       console.error("Create category error:", error);
@@ -530,16 +617,52 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Invalid category ID" });
       }
       
+      console.log(`Updating category ${id} with data:`, req.body);
+      
       const validation = insertCategorySchema.partial().safeParse(req.body);
       if (!validation.success) {
+        console.error("Category update validation failed:", validation.error.flatten().fieldErrors);
         return res.status(400).json({ message: "Invalid data", errors: validation.error.flatten().fieldErrors });
       }
       
+      try {
+        // Import Firebase function
+        const { updateCategory } = await import("../client/src/lib/firebaseService");
+        console.log(`Attempting to update category ${id} in Firebase`);
+        
+        // Prepare the category data with proper type handling
+        const categoryData: Partial<any> = {};
+        
+        // Only include fields that were provided in the request
+        if ('name' in validation.data) categoryData.name = validation.data.name;
+        if ('description' in validation.data) categoryData.description = validation.data.description || "";
+        if ('image' in validation.data) categoryData.image = validation.data.image;
+        if ('featured' in validation.data) categoryData.featured = !!validation.data.featured;
+        
+        // Try to update the category in Firebase
+        const firebaseCategory = await updateCategory(id, categoryData);
+        
+        if (firebaseCategory) {
+          console.log(`Category ${id} updated successfully in Firebase:`, firebaseCategory);
+          return res.json(firebaseCategory);
+        } else {
+          console.log(`Category ${id} not found in Firebase, falling back to database`);
+        }
+      } catch (firebaseError) {
+        console.error(`Error updating category ${id} in Firebase:`, firebaseError);
+        console.log(`Falling back to database storage for category ${id} update`);
+      }
+      
+      // If we got here, there was either an error with Firebase or the category wasn't found
+      // Let's try with the local database storage
+      console.log(`Updating category ${id} in database`);
       const category = await storage.updateCategory(id, validation.data);
       if (!category) {
+        console.log(`Category ${id} not found in database either`);
         return res.status(404).json({ message: "Category not found" });
       }
       
+      console.log(`Category ${id} updated successfully in database`);
       res.json(category);
     } catch (error) {
       console.error("Update category error:", error);
@@ -554,11 +677,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Invalid category ID" });
       }
       
+      console.log(`Attempting to delete category ${id}`);
+      
+      try {
+        // Import Firebase function
+        const { deleteCategory } = await import("../client/src/lib/firebaseService");
+        console.log(`Attempting to delete category ${id} from Firebase`);
+        
+        // Try to delete from Firebase
+        const success = await deleteCategory(id);
+        
+        if (success) {
+          console.log(`Category ${id} deleted successfully from Firebase`);
+          return res.json({ message: "Category deleted successfully" });
+        } else {
+          console.log(`Category ${id} not found in Firebase, falling back to database`);
+        }
+      } catch (firebaseError) {
+        console.error(`Error deleting category ${id} from Firebase:`, firebaseError);
+        console.log(`Falling back to database storage for category ${id} deletion`);
+      }
+      
+      // If we got here, there was either an error with Firebase or the category wasn't found
+      // Let's try with the local database storage
+      console.log(`Deleting category ${id} from database`);
       const success = await storage.deleteCategory(id);
       if (!success) {
+        console.log(`Category ${id} not found in database either`);
         return res.status(404).json({ message: "Category not found" });
       }
       
+      console.log(`Category ${id} deleted successfully from database`);
       res.json({ message: "Category deleted successfully" });
     } catch (error) {
       console.error("Delete category error:", error);
@@ -569,7 +718,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Product routes
   app.get("/api/products", async (req, res) => {
     try {
-      let products;
+      let products = [];
       const { 
         category, 
         search, 
@@ -580,21 +729,64 @@ export async function registerRoutes(app: Express): Promise<Server> {
         maxPrice 
       } = req.query;
       
-      // Fetch base products based on primary filter
-      if (category) {
-        const categoryId = Number(category);
-        if (isNaN(categoryId)) {
-          return res.status(400).json({ message: "Invalid category ID" });
+      console.log("Product API request with params:", req.query);
+      
+      try {
+        // Import Firebase functions
+        const firebaseService = await import("../client/src/lib/firebaseService");
+        console.log("Imported Firebase service for products");
+        
+        // Fetch base products based on primary filter from Firebase
+        if (category) {
+          const categoryId = Number(category);
+          if (isNaN(categoryId)) {
+            return res.status(400).json({ message: "Invalid category ID" });
+          }
+          console.log(`Fetching products for category ${categoryId} from Firebase`);
+          products = await firebaseService.getProductsByCategory(categoryId);
+        } else if (featured === 'true') {
+          console.log("Fetching featured products from Firebase");
+          products = await firebaseService.getFeaturedProducts();
+        } else if (trending === 'true') {
+          console.log("Fetching trending products from Firebase");
+          products = await firebaseService.getTrendingProducts();
+        } else {
+          console.log("Fetching all products from Firebase");
+          products = await firebaseService.getAllProducts();
         }
-        products = await storage.getProductsByCategory(categoryId);
-      } else if (search) {
-        products = await storage.searchProducts(search as string);
-      } else if (featured === 'true') {
-        products = await storage.getFeaturedProducts();
-      } else if (trending === 'true') {
-        products = await storage.getTrendingProducts();
-      } else {
-        products = await storage.getAllProducts();
+        
+        console.log(`Retrieved ${products.length} products from Firebase`);
+      } catch (firebaseError) {
+        // Log the error but continue with local storage
+        console.error("Firebase products fetch error:", firebaseError);
+        console.log("Falling back to database storage");
+        
+        // Fetch base products based on primary filter from local storage
+        if (category) {
+          const categoryId = Number(category);
+          if (isNaN(categoryId)) {
+            return res.status(400).json({ message: "Invalid category ID" });
+          }
+          products = await storage.getProductsByCategory(categoryId);
+        } else if (search) {
+          products = await storage.searchProducts(search as string);
+        } else if (featured === 'true') {
+          products = await storage.getFeaturedProducts();
+        } else if (trending === 'true') {
+          products = await storage.getTrendingProducts();
+        } else {
+          products = await storage.getAllProducts();
+        }
+      }
+      
+      // Apply search filter (needs to be done server-side)
+      if (search && products.length > 0) {
+        const searchLower = (search as string).toLowerCase();
+        products = products.filter(product => 
+          product.name.toLowerCase().includes(searchLower) || 
+          (product.description && product.description.toLowerCase().includes(searchLower))
+        );
+        console.log(`Filtered to ${products.length} products matching search: ${search}`);
       }
       
       // Apply secondary filters if needed
@@ -607,6 +799,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           products = products.filter(product => 
             product.price >= min && product.price <= max
           );
+          console.log(`Filtered to ${products.length} products in price range: ${min} - ${max}`);
         }
         
         // Sale filter (has discount price)
@@ -614,9 +807,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           products = products.filter(product => 
             product.discountPrice && product.discountPrice > 0 && product.discountPrice < product.price
           );
+          console.log(`Filtered to ${products.length} products on sale`);
         }
       }
       
+      console.log(`Returning ${products.length} products to client`);
       res.json(products);
     } catch (error) {
       console.error("Get products error:", error);
@@ -631,11 +826,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Invalid product ID" });
       }
       
+      try {
+        // Import Firebase function
+        const { getProductById } = await import("../client/src/lib/firebaseService");
+        console.log(`Attempting to fetch product ${id} from Firebase`);
+        
+        // Try to get product from Firebase
+        const firebaseProduct = await getProductById(id);
+        
+        if (firebaseProduct) {
+          console.log(`Product ${id} found in Firebase`);
+          return res.json(firebaseProduct);
+        } else {
+          console.log(`Product ${id} not found in Firebase, falling back to database`);
+        }
+      } catch (firebaseError) {
+        console.error(`Error fetching product ${id} from Firebase:`, firebaseError);
+        console.log(`Falling back to database storage for product ${id}`);
+      }
+      
+      // If we got here, there was either an error with Firebase or the product wasn't found
+      // Let's try from the local database storage
       const product = await storage.getProduct(id);
       if (!product) {
+        console.log(`Product ${id} not found in database either`);
         return res.status(404).json({ message: "Product not found" });
       }
       
+      console.log(`Product ${id} found in database`);
       res.json(product);
     } catch (error) {
       console.error("Get product error:", error);
@@ -645,12 +863,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/products", isAuthenticated, isAdmin, async (req, res) => {
     try {
+      console.log("Creating new product with data:", req.body);
+      
       const validation = insertProductSchema.safeParse(req.body);
       if (!validation.success) {
+        console.error("Product validation failed:", validation.error.flatten().fieldErrors);
         return res.status(400).json({ message: "Invalid data", errors: validation.error.flatten().fieldErrors });
       }
       
+      try {
+        // Import Firebase function
+        const { createProduct } = await import("../client/src/lib/firebaseService");
+        console.log("Attempting to create product in Firebase");
+        
+        // Prepare the product data with proper type handling
+        const productData = {
+          name: validation.data.name,
+          description: validation.data.description || "",
+          price: validation.data.price,
+          discountPrice: validation.data.discountPrice || undefined,
+          categoryId: validation.data.categoryId || undefined,
+          images: Array.isArray(validation.data.images) ? validation.data.images : [],
+          sizes: Array.isArray(validation.data.sizes) ? validation.data.sizes : [],
+          colors: Array.isArray(validation.data.colors) ? validation.data.colors : [],
+          stock: validation.data.stock || 0,
+          featured: !!validation.data.featured,
+          trending: !!validation.data.trending
+        };
+        
+        // Try to create the product in Firebase
+        const firebaseProduct = await createProduct(productData);
+        
+        console.log("Product created successfully in Firebase:", firebaseProduct);
+        return res.status(201).json(firebaseProduct);
+      } catch (firebaseError) {
+        console.error("Error creating product in Firebase:", firebaseError);
+        console.log("Falling back to database storage");
+      }
+      
+      // If we got here, there was an error with Firebase
+      // Let's try with the local database storage
+      console.log("Creating product in database");
       const product = await storage.createProduct(validation.data);
+      console.log("Product created successfully in database:", product.id);
       res.status(201).json(product);
     } catch (error) {
       console.error("Create product error:", error);
@@ -665,16 +920,59 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Invalid product ID" });
       }
       
+      console.log(`Updating product ${id} with data:`, req.body);
+      
       const validation = insertProductSchema.partial().safeParse(req.body);
       if (!validation.success) {
+        console.error("Product update validation failed:", validation.error.flatten().fieldErrors);
         return res.status(400).json({ message: "Invalid data", errors: validation.error.flatten().fieldErrors });
       }
       
+      try {
+        // Import Firebase function
+        const { updateProduct } = await import("../client/src/lib/firebaseService");
+        console.log(`Attempting to update product ${id} in Firebase`);
+        
+        // Prepare the product data with proper type handling
+        const productData: Partial<any> = {};
+        
+        // Only include fields that were provided in the request
+        if ('name' in validation.data) productData.name = validation.data.name;
+        if ('description' in validation.data) productData.description = validation.data.description || "";
+        if ('price' in validation.data) productData.price = validation.data.price;
+        if ('discountPrice' in validation.data) productData.discountPrice = validation.data.discountPrice;
+        if ('categoryId' in validation.data) productData.categoryId = validation.data.categoryId;
+        if ('images' in validation.data) productData.images = Array.isArray(validation.data.images) ? validation.data.images : [];
+        if ('sizes' in validation.data) productData.sizes = Array.isArray(validation.data.sizes) ? validation.data.sizes : [];
+        if ('colors' in validation.data) productData.colors = Array.isArray(validation.data.colors) ? validation.data.colors : [];
+        if ('stock' in validation.data) productData.stock = validation.data.stock || 0;
+        if ('featured' in validation.data) productData.featured = !!validation.data.featured;
+        if ('trending' in validation.data) productData.trending = !!validation.data.trending;
+        
+        // Try to update the product in Firebase
+        const firebaseProduct = await updateProduct(id, productData);
+        
+        if (firebaseProduct) {
+          console.log(`Product ${id} updated successfully in Firebase:`, firebaseProduct);
+          return res.json(firebaseProduct);
+        } else {
+          console.log(`Product ${id} not found in Firebase, falling back to database`);
+        }
+      } catch (firebaseError) {
+        console.error(`Error updating product ${id} in Firebase:`, firebaseError);
+        console.log(`Falling back to database storage for product ${id} update`);
+      }
+      
+      // If we got here, there was either an error with Firebase or the product wasn't found
+      // Let's try with the local database storage
+      console.log(`Updating product ${id} in database`);
       const product = await storage.updateProduct(id, validation.data);
       if (!product) {
+        console.log(`Product ${id} not found in database either`);
         return res.status(404).json({ message: "Product not found" });
       }
       
+      console.log(`Product ${id} updated successfully in database`);
       res.json(product);
     } catch (error) {
       console.error("Update product error:", error);
@@ -689,11 +987,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Invalid product ID" });
       }
       
+      console.log(`Attempting to delete product ${id}`);
+      
+      try {
+        // Import Firebase function
+        const { deleteProduct } = await import("../client/src/lib/firebaseService");
+        console.log(`Attempting to delete product ${id} from Firebase`);
+        
+        // Try to delete from Firebase
+        const success = await deleteProduct(id);
+        
+        if (success) {
+          console.log(`Product ${id} deleted successfully from Firebase`);
+          return res.json({ message: "Product deleted successfully" });
+        } else {
+          console.log(`Product ${id} not found in Firebase, falling back to database`);
+        }
+      } catch (firebaseError) {
+        console.error(`Error deleting product ${id} from Firebase:`, firebaseError);
+        console.log(`Falling back to database storage for product ${id} deletion`);
+      }
+      
+      // If we got here, there was either an error with Firebase or the product wasn't found
+      // Let's try with the local database storage
+      console.log(`Deleting product ${id} from database`);
       const success = await storage.deleteProduct(id);
       if (!success) {
+        console.log(`Product ${id} not found in database either`);
         return res.status(404).json({ message: "Product not found" });
       }
       
+      console.log(`Product ${id} deleted successfully from database`);
       res.json({ message: "Product deleted successfully" });
     } catch (error) {
       console.error("Delete product error:", error);
