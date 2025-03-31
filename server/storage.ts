@@ -21,6 +21,13 @@ export interface IStorage {
   enableTwoFactor(id: number): Promise<User | undefined>;
   disableTwoFactor(id: number): Promise<User | undefined>;
   getAllUsers(): Promise<User[]>;
+  
+  // Password reset methods
+  savePasswordResetOTP(userId: number, otp: string, expiresAt: Date): Promise<void>;
+  verifyPasswordResetOTP(userId: number, otp: string): Promise<boolean>;
+  saveResetToken(userId: number, token: string): Promise<void>;
+  verifyResetToken(userId: number, token: string): Promise<boolean>;
+  clearResetToken(userId: number): Promise<void>;
 
   // Category methods
   getCategory(id: number): Promise<Category | undefined>;
@@ -78,6 +85,10 @@ export class MemStorage implements IStorage {
   private heroBanners: Map<number, HeroBanner>;
   private testimonials: Map<number, Testimonial>;
   
+  // Maps to store password reset related data
+  private passwordResetOTPs: Map<number, { otp: string, expiresAt: Date }>;
+  private passwordResetTokens: Map<number, string>;
+  
   private currentUserId: number;
   private currentCategoryId: number;
   private currentProductId: number;
@@ -94,6 +105,10 @@ export class MemStorage implements IStorage {
     this.orders = new Map();
     this.heroBanners = new Map();
     this.testimonials = new Map();
+    
+    // Initialize password reset maps
+    this.passwordResetOTPs = new Map();
+    this.passwordResetTokens = new Map();
     
     this.currentUserId = 1;
     this.currentCategoryId = 1;
@@ -352,6 +367,47 @@ export class MemStorage implements IStorage {
 
   async getAllUsers(): Promise<User[]> {
     return Array.from(this.users.values());
+  }
+
+  // Password reset methods
+  async savePasswordResetOTP(userId: number, otp: string, expiresAt: Date): Promise<void> {
+    this.passwordResetOTPs.set(userId, { otp, expiresAt });
+  }
+
+  async verifyPasswordResetOTP(userId: number, otp: string): Promise<boolean> {
+    const resetData = this.passwordResetOTPs.get(userId);
+    if (!resetData) return false;
+    
+    // Check if OTP is expired
+    if (new Date() > resetData.expiresAt) {
+      this.passwordResetOTPs.delete(userId);
+      return false;
+    }
+    
+    // Validate OTP
+    const isValid = resetData.otp === otp;
+    
+    // Delete OTP after use
+    if (isValid) {
+      this.passwordResetOTPs.delete(userId);
+    }
+    
+    return isValid;
+  }
+
+  async saveResetToken(userId: number, token: string): Promise<void> {
+    this.passwordResetTokens.set(userId, token);
+  }
+
+  async verifyResetToken(userId: number, token: string): Promise<boolean> {
+    const savedToken = this.passwordResetTokens.get(userId);
+    if (!savedToken) return false;
+    
+    return savedToken === token;
+  }
+
+  async clearResetToken(userId: number): Promise<void> {
+    this.passwordResetTokens.delete(userId);
   }
 
   // Category methods
@@ -751,6 +807,76 @@ export class DatabaseStorage implements IStorage {
     } catch (error) {
       console.error("Database error in getAllUsers:", error);
       return [];
+    }
+  }
+  
+  // Password reset methods - need to create tables or add to schema for production usage
+  // For now, we'll implement these in a way that will work for demonstration purposes
+  private passwordResetOTPs = new Map<number, { otp: string, expiresAt: Date }>();
+  private passwordResetTokens = new Map<number, string>();
+  
+  async savePasswordResetOTP(userId: number, otp: string, expiresAt: Date): Promise<void> {
+    try {
+      this.passwordResetOTPs.set(userId, { otp, expiresAt });
+      // In a real implementation, we would save this to the database
+    } catch (error) {
+      console.error("Error in savePasswordResetOTP:", error);
+    }
+  }
+
+  async verifyPasswordResetOTP(userId: number, otp: string): Promise<boolean> {
+    try {
+      const resetData = this.passwordResetOTPs.get(userId);
+      if (!resetData) return false;
+      
+      // Check if OTP is expired
+      if (new Date() > resetData.expiresAt) {
+        this.passwordResetOTPs.delete(userId);
+        return false;
+      }
+      
+      // Validate OTP
+      const isValid = resetData.otp === otp;
+      
+      // Delete OTP after use
+      if (isValid) {
+        this.passwordResetOTPs.delete(userId);
+      }
+      
+      return isValid;
+    } catch (error) {
+      console.error("Error in verifyPasswordResetOTP:", error);
+      return false;
+    }
+  }
+
+  async saveResetToken(userId: number, token: string): Promise<void> {
+    try {
+      this.passwordResetTokens.set(userId, token);
+      // In a real implementation, we would save this to the database
+    } catch (error) {
+      console.error("Error in saveResetToken:", error);
+    }
+  }
+
+  async verifyResetToken(userId: number, token: string): Promise<boolean> {
+    try {
+      const savedToken = this.passwordResetTokens.get(userId);
+      if (!savedToken) return false;
+      
+      return savedToken === token;
+    } catch (error) {
+      console.error("Error in verifyResetToken:", error);
+      return false;
+    }
+  }
+
+  async clearResetToken(userId: number): Promise<void> {
+    try {
+      this.passwordResetTokens.delete(userId);
+      // In a real implementation, we would remove this from the database
+    } catch (error) {
+      console.error("Error in clearResetToken:", error);
     }
   }
 

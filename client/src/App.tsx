@@ -21,6 +21,9 @@ import Orders from "./pages/orders";
 import Wishlist from "./pages/wishlist";
 import Login from "./pages/auth/login";
 import Signup from "./pages/auth/signup";
+import ForgotPassword from "./pages/auth/forgot-password";
+import VerifyResetCode from "./pages/auth/verify-reset-code";
+import ResetPassword from "./pages/auth/reset-password";
 // Direct authentication pages removed
 import VerifyTwoFactor from "./pages/auth/verify-2fa";
 import UserProfile from "./pages/user-profile";
@@ -80,6 +83,9 @@ function Router() {
       <Route path="/auth/login" component={Login} />
       <Route path="/auth/signup" component={Signup} />
       <Route path="/auth/verify-2fa" component={VerifyTwoFactor} />
+      <Route path="/auth/forgot-password" component={ForgotPassword} />
+      <Route path="/auth/verify-reset-code" component={VerifyResetCode} />
+      <Route path="/auth/reset-password" component={ResetPassword} />
       <Route path="/login" component={Login} />
       <Route path="/signup" component={Signup} />
 
