@@ -24,7 +24,6 @@ import DirectSignup from "./pages/auth/direct-signup";
 import VerifyTwoFactor from "./pages/auth/verify-2fa";
 import UserProfile from "./pages/user-profile";
 import NotFound from "@/pages/not-found";
-import AdminSetup from "./pages/admin-setup";
 
 // Admin Pages
 import AdminDashboard from "./pages/admin/dashboard";
@@ -132,13 +131,6 @@ function Router() {
         </AdminLayout>
       )} />
       
-      {/* Admin Setup Route */}
-      <Route path="/admin-setup" component={() => (
-        <MainLayout>
-          <AdminSetup />
-        </MainLayout>
-      )} />
-
       {/* Fallback to 404 */}
       <Route component={() => (
         <MainLayout>
