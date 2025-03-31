@@ -1,25 +1,35 @@
 import { createContext, useState, useEffect, ReactNode } from "react";
 import { useToast } from "@/hooks/use-toast";
-import { doc, getDoc, setDoc, collection } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { 
+  getUserCart, 
+  addToCart as addToFirestoreCart, 
+  removeFromCart as removeFromFirestoreCart, 
+  updateCartItemQuantity, 
+  clearCart as clearFirestoreCart,
+  CartItem as FirestoreCartItem
+} from "@/lib/firebaseService";
 
 // Type definitions
 export interface CartItem {
   productId: number;
   quantity: number;
+  name: string;
+  price: number;
+  image?: string;
 }
 
 interface CartContextType {
-  cart: Record<number, number>; // productId -> quantity
-  addToCart: (productId: number, quantity?: number) => void;
+  cart: Record<string, CartItem>; // productId (string) -> CartItem
+  addToCart: (product: { id: number; name: string; price: number; image?: string }, quantity?: number) => void;
   removeFromCart: (productId: number) => void;
   updateQuantity: (productId: number, quantity: number) => void;
   clearCart: () => void;
   getCartTotal: () => number;
   getCartCount: () => number;
+  isLoading: boolean;
 }
 
-// Create context
+// Create context with default values
 export const CartContext = createContext<CartContextType>({
   cart: {},
   addToCart: () => {},
@@ -28,6 +38,7 @@ export const CartContext = createContext<CartContextType>({
   clearCart: () => {},
   getCartTotal: () => 0,
   getCartCount: () => 0,
+  isLoading: false
 });
 
 interface CartProviderProps {
@@ -35,7 +46,8 @@ interface CartProviderProps {
 }
 
 export const CartProvider = ({ children }: CartProviderProps) => {
-  const [cart, setCart] = useState<Record<number, number>>({});
+  const [cart, setCart] = useState<Record<string, CartItem>>({});
+  const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
   const [userFirebaseId, setUserFirebaseId] = useState<string | null>(null);
 
@@ -66,12 +78,14 @@ export const CartProvider = ({ children }: CartProviderProps) => {
 
   // Load cart from localStorage or Firestore on initial render
   useEffect(() => {
+    setIsLoading(true);
     if (userFirebaseId) {
       // User is authenticated, load from Firestore
-      loadFirestoreCart(userFirebaseId);
+      loadFirestoreCart(userFirebaseId).finally(() => setIsLoading(false));
     } else {
       // User is not authenticated, load from localStorage
       loadLocalCart();
+      setIsLoading(false);
     }
   }, [userFirebaseId]);
 
@@ -80,31 +94,26 @@ export const CartProvider = ({ children }: CartProviderProps) => {
     const savedCart = localStorage.getItem("cart");
     if (savedCart) {
       try {
-        setCart(JSON.parse(savedCart));
+        const parsedCart = JSON.parse(savedCart);
+        setCart(parsedCart);
       } catch (e) {
         console.error("Error parsing cart from localStorage:", e);
         localStorage.removeItem("cart");
+        setCart({});
       }
+    } else {
+      setCart({});
     }
   };
 
   // Load cart from Firestore
   const loadFirestoreCart = async (uid: string) => {
     try {
-      const cartRef = doc(collection(db, "users", uid, "cart"), "current");
-      const cartDoc = await getDoc(cartRef);
+      const firestoreCart = await getUserCart(uid);
       
-      if (cartDoc.exists()) {
-        const cartData = cartDoc.data();
-        console.log("Loaded cart from Firestore:", cartData);
-        
-        // Convert string keys back to numbers
-        const convertedCart: Record<number, number> = {};
-        Object.entries(cartData).forEach(([key, value]) => {
-          convertedCart[Number(key)] = Number(value);
-        });
-        
-        setCart(convertedCart);
+      if (firestoreCart && firestoreCart.items) {
+        console.log("Loaded cart from Firestore:", firestoreCart.items);
+        setCart(firestoreCart.items);
       } else {
         // No cart exists in Firestore yet, use the local cart
         loadLocalCart();
@@ -116,83 +125,160 @@ export const CartProvider = ({ children }: CartProviderProps) => {
     }
   };
 
-  // Save cart to Firestore
-  const saveCartToFirestore = async (uid: string, cartData: Record<number, number>) => {
-    try {
-      const cartRef = doc(collection(db, "users", uid, "cart"), "current");
-      await setDoc(cartRef, cartData);
-      console.log("Cart saved to Firestore successfully");
-    } catch (error) {
-      console.error("Error saving cart to Firestore:", error);
-      // No action needed, user can still use local cart
-    }
-  };
-  
-  // Save cart to localStorage and Firestore when it changes
+  // Save cart to localStorage as backup
   useEffect(() => {
-    // Always save to localStorage for guest users and as backup
-    localStorage.setItem("cart", JSON.stringify(cart));
-    
-    // If user is authenticated, also save to Firestore
-    if (userFirebaseId) {
-      saveCartToFirestore(userFirebaseId, cart);
+    if (!isLoading) {
+      localStorage.setItem("cart", JSON.stringify(cart));
     }
-  }, [cart, userFirebaseId]);
+  }, [cart, isLoading]);
 
-  const addToCart = (productId: number, quantity = 1) => {
-    setCart(prevCart => {
-      const newCart = { ...prevCart };
-      newCart[productId] = (newCart[productId] || 0) + quantity;
-      return newCart;
-    });
+  const addToCart = async (
+    product: { id: number; name: string; price: number; image?: string },
+    quantity = 1
+  ) => {
+    const productId = product.id.toString();
+    
+    try {
+      // Update local state immediately for better UX
+      setCart(prevCart => {
+        const newCart = { ...prevCart };
+        
+        if (newCart[productId]) {
+          // Update existing item
+          newCart[productId] = {
+            ...newCart[productId],
+            quantity: newCart[productId].quantity + quantity
+          };
+        } else {
+          // Add new item
+          newCart[productId] = {
+            productId: product.id,
+            name: product.name,
+            price: product.price,
+            quantity,
+            image: product.image
+          };
+        }
+        
+        return newCart;
+      });
 
-    toast({
-      title: "Added to Cart",
-      description: `Item added to your shopping cart.`,
-    });
+      // Update Firestore if user is authenticated
+      if (userFirebaseId) {
+        await addToFirestoreCart(userFirebaseId, product, quantity);
+      }
+
+      toast({
+        title: "Added to Cart",
+        description: `${product.name} added to your shopping cart.`,
+      });
+    } catch (error) {
+      console.error("Error adding to cart:", error);
+      toast({
+        title: "Error",
+        description: "Failed to add item to cart. Please try again.",
+        variant: "destructive"
+      });
+    }
   };
 
-  const removeFromCart = (productId: number) => {
-    setCart(prevCart => {
-      const newCart = { ...prevCart };
-      delete newCart[productId];
-      return newCart;
-    });
+  const removeFromCart = async (productId: number) => {
+    const productIdStr = productId.toString();
+    
+    try {
+      // Update local state immediately for better UX
+      setCart(prevCart => {
+        const newCart = { ...prevCart };
+        delete newCart[productIdStr];
+        return newCart;
+      });
 
-    toast({
-      title: "Removed from Cart",
-      description: "Item removed from your shopping cart.",
-    });
+      // Update Firestore if user is authenticated
+      if (userFirebaseId) {
+        await removeFromFirestoreCart(userFirebaseId, productId);
+      }
+
+      toast({
+        title: "Removed from Cart",
+        description: "Item removed from your shopping cart.",
+      });
+    } catch (error) {
+      console.error("Error removing from cart:", error);
+      toast({
+        title: "Error",
+        description: "Failed to remove item from cart. Please try again.",
+        variant: "destructive"
+      });
+    }
   };
 
-  const updateQuantity = (productId: number, quantity: number) => {
+  const updateQuantity = async (productId: number, quantity: number) => {
+    const productIdStr = productId.toString();
+    
     if (quantity <= 0) {
       removeFromCart(productId);
       return;
     }
 
-    setCart(prevCart => ({
-      ...prevCart,
-      [productId]: quantity,
-    }));
+    try {
+      // Update local state immediately for better UX
+      setCart(prevCart => {
+        const newCart = { ...prevCart };
+        
+        if (newCart[productIdStr]) {
+          newCart[productIdStr] = {
+            ...newCart[productIdStr],
+            quantity
+          };
+        }
+        
+        return newCart;
+      });
+
+      // Update Firestore if user is authenticated
+      if (userFirebaseId) {
+        await updateCartItemQuantity(userFirebaseId, productId, quantity);
+      }
+    } catch (error) {
+      console.error("Error updating cart quantity:", error);
+      toast({
+        title: "Error",
+        description: "Failed to update quantity. Please try again.",
+        variant: "destructive"
+      });
+    }
   };
 
-  const clearCart = () => {
-    setCart({});
-    toast({
-      title: "Cart Cleared",
-      description: "All items have been removed from your cart.",
-    });
+  const clearCart = async () => {
+    try {
+      // Clear local state
+      setCart({});
+      
+      // Clear Firestore cart if user is authenticated
+      if (userFirebaseId) {
+        await clearFirestoreCart(userFirebaseId);
+      }
+      
+      toast({
+        title: "Cart Cleared",
+        description: "All items have been removed from your cart.",
+      });
+    } catch (error) {
+      console.error("Error clearing cart:", error);
+      toast({
+        title: "Error",
+        description: "Failed to clear cart. Please try again.",
+        variant: "destructive"
+      });
+    }
   };
 
   const getCartCount = () => {
-    return Object.values(cart).reduce((sum, quantity) => sum + quantity, 0);
+    return Object.values(cart).reduce((sum, item) => sum + item.quantity, 0);
   };
 
   const getCartTotal = () => {
-    // This is a placeholder since we need product data to calculate the total
-    // The actual calculation would happen in the cart component with product data
-    return 0;
+    return Object.values(cart).reduce((sum, item) => sum + (item.price * item.quantity), 0);
   };
 
   const value = {
@@ -203,6 +289,7 @@ export const CartProvider = ({ children }: CartProviderProps) => {
     clearCart,
     getCartTotal,
     getCartCount,
+    isLoading
   };
 
   return (
