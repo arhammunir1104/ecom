@@ -355,22 +355,14 @@ export const signInWithEmail = async (
 export const signInWithGoogle = async (): Promise<FirebaseUser> => {
   try {
     console.log("Starting Google sign-in process...");
-    const provider = new GoogleAuthProvider();
     
-    // Add scopes for additional information
-    provider.addScope('email');
-    provider.addScope('profile');
+    // Use the signInWithGoogle implementation from firebase.ts
+    // which uses the proper environment variables
+    const user = await import("./firebase").then(module => module.signInWithGoogle());
     
-    provider.setCustomParameters({
-      prompt: "select_account"
-    });
-    
-    console.log("Opening Google sign-in popup...");
-    // Get current domain for debugging
-    console.log("Current domain:", window.location.origin);
-    
-    const result = await signInWithPopup(auth, provider);
-    const user = result.user;
+    if (!user) {
+      throw new Error("Failed to sign in with Google - no user returned");
+    }
     
     console.log("Google sign-in successful:", user.email);
     

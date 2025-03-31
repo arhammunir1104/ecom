@@ -1,0 +1,65 @@
+firebaseService.ts:372 
+            
+            
+           GET https://identitytoolkit.googleapis.com/v1/projects?key=AIzaSyC7KLf8dP_WYbr0wQdVsrHY3LCRWDaEgV0 400 (Bad Request)
+(anonymous) @ firebase_auth.js?v=48828b99:1084
+await in (anonymous)
+_performFetchWithErrorHandling @ firebase_auth.js?v=48828b99:1093
+_performApiRequest @ firebase_auth.js?v=48828b99:1053
+_getProjectConfig @ firebase_auth.js?v=48828b99:7167
+_validateOrigin @ firebase_auth.js?v=48828b99:7175
+_originValidation @ firebase_auth.js?v=48828b99:7565
+onExecution @ firebase_auth.js?v=48828b99:6870
+await in onExecution
+(anonymous) @ firebase_auth.js?v=48828b99:6734
+await in (anonymous)
+execute @ firebase_auth.js?v=48828b99:6730
+executeNotNull @ firebase_auth.js?v=48828b99:6850
+signInWithPopup @ firebase_auth.js?v=48828b99:6815
+signInWithGoogle @ firebaseService.ts:372
+loginWithGoogle @ AuthContext.tsx:340
+handleGoogleLogin @ signup.tsx:113
+callCallback2 @ chunk-RPCDYKBN.js?v=48828b99:3674
+invokeGuardedCallbackDev @ chunk-RPCDYKBN.js?v=48828b99:3699
+invokeGuardedCallback @ chunk-RPCDYKBN.js?v=48828b99:3733
+invokeGuardedCallbackAndCatchFirstError @ chunk-RPCDYKBN.js?v=48828b99:3736
+executeDispatch @ chunk-RPCDYKBN.js?v=48828b99:7014
+processDispatchQueueItemsInOrder @ chunk-RPCDYKBN.js?v=48828b99:7034
+processDispatchQueue @ chunk-RPCDYKBN.js?v=48828b99:7043
+dispatchEventsForPlugins @ chunk-RPCDYKBN.js?v=48828b99:7051
+(anonymous) @ chunk-RPCDYKBN.js?v=48828b99:7174
+batchedUpdates$1 @ chunk-RPCDYKBN.js?v=48828b99:18913
+batchedUpdates @ chunk-RPCDYKBN.js?v=48828b99:3579
+dispatchEventForPluginEventSystem @ chunk-RPCDYKBN.js?v=48828b99:7173
+dispatchEventWithEnableCapturePhaseSelectiveHydrationWithoutDiscreteEventReplay @ chunk-RPCDYKBN.js?v=48828b99:5478
+dispatchEvent @ chunk-RPCDYKBN.js?v=48828b99:5472
+dispatchDiscreteEvent @ chunk-RPCDYKBN.js?v=48828b99:5449Understand this errorAI
+firebaseService.ts:442 Error signing in with Google: FirebaseError: Firebase: Error (auth/api-key-not-valid.-please-pass-a-valid-api-key.).
+    at createErrorInternal (firebase_auth.js?v=48828b99:694:37)
+    at _fail (firebase_auth.js?v=48828b99:659:9)
+    at _performFetchWithErrorHandling (firebase_auth.js?v=48828b99:1117:9)
+    at async _validateOrigin (firebase_auth.js?v=48828b99:7175:33)
+signInWithGoogle @ firebaseService.ts:442
+await in signInWithGoogle
+loginWithGoogle @ AuthContext.tsx:340
+handleGoogleLogin @ signup.tsx:113
+callCallback2 @ chunk-RPCDYKBN.js?v=48828b99:3674
+invokeGuardedCallbackDev @ chunk-RPCDYKBN.js?v=48828b99:3699
+invokeGuardedCallback @ chunk-RPCDYKBN.js?v=48828b99:3733
+invokeGuardedCallbackAndCatchFirstError @ chunk-RPCDYKBN.js?v=48828b99:3736
+executeDispatch @ chunk-RPCDYKBN.js?v=48828b99:7014
+processDispatchQueueItemsInOrder @ chunk-RPCDYKBN.js?v=48828b99:7034
+processDispatchQueue @ chunk-RPCDYKBN.js?v=48828b99:7043
+dispatchEventsForPlugins @ chunk-RPCDYKBN.js?v=48828b99:7051
+(anonymous) @ chunk-RPCDYKBN.js?v=48828b99:7174
+batchedUpdates$1 @ chunk-RPCDYKBN.js?v=48828b99:18913
+batchedUpdates @ chunk-RPCDYKBN.js?v=48828b99:3579
+dispatchEventForPluginEventSystem @ chunk-RPCDYKBN.js?v=48828b99:7173
+dispatchEventWithEnableCapturePhaseSelectiveHydrationWithoutDiscreteEventReplay @ chunk-RPCDYKBN.js?v=48828b99:5478
+dispatchEvent @ chunk-RPCDYKBN.js?v=48828b99:5472
+dispatchDiscreteEvent @ chunk-RPCDYKBN.js?v=48828b99:5449Understand this errorAI
+AuthContext.tsx:418 Google login error: FirebaseError: Firebase: Error (auth/api-key-not-valid.-please-pass-a-valid-api-key.).
+    at createErrorInternal (firebase_auth.js?v=48828b99:694:37)
+    at _fail (firebase_auth.js?v=48828b99:659:9)
+    at _performFetchWithErrorHandling (firebase_auth.js?v=48828b99:1117:9)
+    at async _validateOrigin (firebase_auth.js?v=48828b99:7175:33)

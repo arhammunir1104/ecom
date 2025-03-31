@@ -3,14 +3,25 @@ import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChang
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 
-// Default Firebase configuration - Use a fallback configuration
+// Firebase configuration using environment variables or fallback
+// Safe access to environment variables with fallbacks
+const getEnvVar = (key: string, fallback: string) => {
+  try {
+    return import.meta.env?.[key] || fallback;
+  } catch (e) {
+    console.warn(`Failed to access environment variable ${key}, using fallback value`);
+    return fallback;
+  }
+};
+
+// Your Firebase configuration
 const firebaseConfig = {
-  apiKey: "AIzaSyC7KLf8dP_WYbr0wQdVsrHY3LCRWDaEgV0",
-  authDomain: "burger-c0af3.firebaseapp.com",
-  projectId: "burger-c0af3",
-  storageBucket: "burger-c0af3.appspot.com",
-  messagingSenderId: "442391454320",
-  appId: "1:442391454320:web:eb5e1c3c83e19ebf43ff88"
+  apiKey: getEnvVar('VITE_FIREBASE_API_KEY', "AIzaSyC7KLf8dP_WYbr0wQdVsrHY3LCRWDaEgV0"),
+  authDomain: `${getEnvVar('VITE_FIREBASE_PROJECT_ID', "burger-c0af3")}.firebaseapp.com`,
+  projectId: getEnvVar('VITE_FIREBASE_PROJECT_ID', "burger-c0af3"),
+  storageBucket: `${getEnvVar('VITE_FIREBASE_PROJECT_ID', "burger-c0af3")}.appspot.com`,
+  messagingSenderId: "442391454320", // This is usually not sensitive
+  appId: getEnvVar('VITE_FIREBASE_APP_ID', "1:442391454320:web:eb5e1c3c83e19ebf43ff88")
 };
 
 // Log Firebase configuration for debugging
