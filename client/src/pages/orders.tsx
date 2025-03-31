@@ -9,90 +9,156 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { Download, Truck, CheckCircle, Clock, AlertTriangle } from "lucide-react";
+import { Download, Truck, CheckCircle, Clock, AlertTriangle, RefreshCw } from "lucide-react";
 import { format } from "date-fns";
 import { generateInvoice } from "@/utils/invoiceGenerator";
 import type { InvoiceItem, ShippingAddress, OrderData } from "@/utils/invoiceGenerator";
 
 // Firebase imports
-import { collection, getDocs, query, orderBy } from "firebase/firestore";
+import { collection, getDocs, query, orderBy, where, Timestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { apiRequest } from "@/lib/queryClient";
 
 const Orders = () => {
   const { user, isAuthenticated } = useAuth();
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState("all");
-  const [firestoreOrders, setFirestoreOrders] = useState<any[]>([]);
-  const [isFirestoreLoading, setIsFirestoreLoading] = useState(true);
+  const [combinedOrders, setCombinedOrders] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   
-  // Fetch from API (kept for backward compatibility)
-  const { data: apiOrders, isLoading: isApiLoading } = useQuery<Order[]>({
-    queryKey: ["/api/orders"],
-    enabled: isAuthenticated,
-  });
-  
-  // Fetch orders from Firestore
-  useEffect(() => {
-    async function fetchOrders() {
-      try {
-        setIsFirestoreLoading(true);
-        const uid = window.localStorage.getItem('firebaseUid');
+  // Fetch all orders (from both API and Firestore)
+  const fetchAllOrders = async () => {
+    try {
+      setIsLoading(true);
+      const allOrders = [];
+      
+      // 1. Try to get Firebase UID
+      const uid = window.localStorage.getItem('firebaseUid') || user?.uid;
+      
+      if (uid) {
+        console.log('Fetching orders for Firebase UID:', uid);
         
-        if (uid) {
-          // First try to get orders from the top-level 'orders' collection
-          // where userId matches the current user's ID
+        try {
+          // 2. Fetch from top-level 'orders' collection
           const ordersRef = collection(db, 'orders');
-          const q = query(ordersRef, orderBy('createdAt', 'desc'));
+          const q = query(ordersRef, where('userId', '==', uid), orderBy('orderDate', 'desc'));
           const querySnapshot = await getDocs(q);
           
-          let userOrders = querySnapshot.docs
-            .filter(doc => {
+          if (!querySnapshot.empty) {
+            console.log(`Found ${querySnapshot.docs.length} orders in top-level collection`);
+            
+            const firebaseOrders = querySnapshot.docs.map(doc => {
               const data = doc.data();
-              return data.userId === uid;
-            })
-            .map(doc => ({
-              id: doc.id,
-              ...doc.data(),
-              // Convert Firestore Timestamp to Date
-              createdAt: doc.data().createdAt?.toDate() || new Date(),
-              orderDate: doc.data().orderDate?.toDate() || new Date(),
-            }));
-          
-          // If no orders found in top-level collection, try the nested 'users/{uid}/orders' path
-          if (userOrders.length === 0) {
-            console.log('No orders found in top-level collection, trying user subcollection...');
+              return {
+                id: doc.id,
+                ...data,
+                // Convert Firestore Timestamp to Date
+                createdAt: data.createdAt?.toDate() || data.orderDate?.toDate() || new Date(),
+                orderDate: data.orderDate?.toDate() || data.createdAt?.toDate() || new Date(),
+                source: 'firebase'
+              };
+            });
             
-            const userOrdersRef = collection(db, 'users', uid, 'orders');
-            const userOrdersQuery = query(userOrdersRef, orderBy('createdAt', 'desc'));
-            const userOrdersSnapshot = await getDocs(userOrdersQuery);
-            
-            userOrders = userOrdersSnapshot.docs.map(doc => ({
-              id: doc.id,
-              ...doc.data(),
-              // Convert Firestore Timestamp to Date
-              createdAt: doc.data().createdAt?.toDate() || new Date(),
-              orderDate: doc.data().orderDate?.toDate() || new Date(),
-            }));
+            allOrders.push(...firebaseOrders);
+          } else {
+            console.log('No orders found in top-level collection');
           }
           
-          setFirestoreOrders(userOrders);
-          console.log('Fetched orders from Firestore:', userOrders);
+          // 3. Also try user subcollection path as fallback
+          const userOrdersRef = collection(db, 'users', uid, 'orders');
+          const userOrdersQuery = query(userOrdersRef, orderBy('createdAt', 'desc'));
+          const userOrdersSnapshot = await getDocs(userOrdersQuery);
+          
+          if (!userOrdersSnapshot.empty) {
+            console.log(`Found ${userOrdersSnapshot.docs.length} orders in user subcollection`);
+            
+            const userOrders = userOrdersSnapshot.docs.map(doc => {
+              const data = doc.data();
+              return {
+                id: doc.id,
+                ...data,
+                // Convert Firestore Timestamp to Date
+                createdAt: data.createdAt?.toDate() || data.orderDate?.toDate() || new Date(),
+                orderDate: data.orderDate?.toDate() || data.createdAt?.toDate() || new Date(),
+                source: 'firebase-user'
+              };
+            });
+            
+            // Only add orders that aren't already in the array (by ID)
+            const existingIds = allOrders.map(o => o.id);
+            const newUserOrders = userOrders.filter(o => !existingIds.includes(o.id));
+            
+            allOrders.push(...newUserOrders);
+          }
+        } catch (firebaseError) {
+          console.error('Error fetching from Firebase:', firebaseError);
         }
-      } catch (error) {
-        console.error('Error fetching orders from Firestore:', error);
-      } finally {
-        setIsFirestoreLoading(false);
       }
+      
+      // 4. Also fetch from API
+      try {
+        const response = await apiRequest('GET', '/api/orders');
+        if (response.ok) {
+          const apiOrders = await response.json();
+          
+          if (Array.isArray(apiOrders) && apiOrders.length > 0) {
+            console.log(`Found ${apiOrders.length} orders from API`);
+            
+            // Format API orders and add source
+            const formattedApiOrders = apiOrders.map(order => ({
+              ...order,
+              source: 'api',
+              // Ensure dates are Date objects
+              createdAt: order.createdAt ? new Date(order.createdAt) : new Date(),
+              orderDate: order.orderDate ? new Date(order.orderDate) : order.createdAt ? new Date(order.createdAt) : new Date()
+            }));
+            
+            // Only add orders that aren't already in the array (by ID)
+            const existingIds = allOrders.map(o => o.id);
+            const newApiOrders = formattedApiOrders.filter(o => !existingIds.includes(o.id));
+            
+            allOrders.push(...newApiOrders);
+          }
+        }
+      } catch (apiError) {
+        console.error('Error fetching from API:', apiError);
+      }
+      
+      // Sort all orders by date (newest first)
+      allOrders.sort((a, b) => {
+        const dateA = a.orderDate || a.createdAt;
+        const dateB = b.orderDate || b.createdAt;
+        return dateB.getTime() - dateA.getTime();
+      });
+      
+      console.log('Combined orders:', allOrders);
+      setCombinedOrders(allOrders);
+    } catch (error) {
+      console.error('Error fetching all orders:', error);
+      toast({
+        title: 'Error fetching orders',
+        description: 'An error occurred while fetching your orders.',
+        variant: 'destructive'
+      });
+    } finally {
+      setIsLoading(false);
+      setIsRefreshing(false);
     }
-    
+  };
+  
+  // Fetch orders when component mounts or authentication changes
+  useEffect(() => {
     if (isAuthenticated) {
-      fetchOrders();
+      fetchAllOrders();
     }
   }, [isAuthenticated]);
   
-  // Combine orders from both sources, prioritizing Firestore orders
-  const orders = firestoreOrders.length > 0 ? firestoreOrders : apiOrders;
-  const isLoading = isApiLoading && isFirestoreLoading;
+  // Refresh orders
+  const handleRefresh = () => {
+    setIsRefreshing(true);
+    fetchAllOrders();
+  };
   
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -124,13 +190,13 @@ const Orders = () => {
     }
   };
   
-  const filterOrders = (orders: Order[] | undefined, filter: string) => {
-    if (!orders) return [];
+  const filterOrders = (orders: any[] | undefined, filter: string) => {
+    if (!orders || !Array.isArray(orders)) return [];
     if (filter === "all") return orders;
-    return orders.filter(order => order.status === filter);
+    return orders.filter(order => order.status === filter || order.status?.toLowerCase() === filter.toLowerCase());
   };
   
-  const filteredOrders = filterOrders(orders, activeTab);
+  const filteredOrders = filterOrders(combinedOrders, activeTab);
   
   if (!isAuthenticated) {
     return (
@@ -151,7 +217,19 @@ const Orders = () => {
   
   return (
     <div className="container mx-auto px-4 py-8">
-      <h1 className="text-3xl font-playfair font-bold mb-8">My Orders</h1>
+      <div className="flex justify-between items-center mb-8">
+        <h1 className="text-3xl font-playfair font-bold">My Orders</h1>
+        <Button 
+          variant="outline" 
+          size="sm" 
+          onClick={handleRefresh}
+          disabled={isRefreshing}
+          className="flex items-center gap-1"
+        >
+          <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+          {isRefreshing ? 'Refreshing...' : 'Refresh'}
+        </Button>
+      </div>
       
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="mb-6">
