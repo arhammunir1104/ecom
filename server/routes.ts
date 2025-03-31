@@ -334,9 +334,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "reCAPTCHA verification failed" });
       }
       
-      const existingUser = await storage.getUserByEmail(validation.data.email);
+      const email = validation.data.email;
+      console.log("Checking if email exists in our database:", email);
+      const existingUser = await storage.getUserByEmail(email);
+      
       if (existingUser) {
+        console.log("Email found in database:", email);
         return res.status(409).json({ message: "Email already in use" });
+      }
+      
+      // Also check if the email exists in Firebase
+      try {
+        // Import the initialized Firebase admin auth from our utility file
+        const { auth } = await import('./utils/firebase');
+        const firebaseAuth = auth();
+        
+        try {
+          // Try to get the user by email from Firebase
+          console.log("Checking if email exists in Firebase Auth:", email);
+          const userRecord = await firebaseAuth.getUserByEmail(email);
+          
+          if (userRecord) {
+            console.log("Email exists in Firebase Auth but not in our database:", email);
+            return res.status(409).json({ message: "Email already registered in authentication system" });
+          }
+        } catch (fbError: any) {
+          if (fbError.code === 'auth/user-not-found') {
+            console.log("Email not found in Firebase Auth:", email);
+          } else {
+            console.error("Firebase auth error:", fbError);
+            // If it's not a user-not-found error, there might be an issue with Firebase configuration
+            console.log("Firebase error details:", fbError.code, fbError.message);
+          }
+        }
+      } catch (adminError) {
+        console.error("Error loading Firebase admin:", adminError);
+        console.log("Admin error details:", adminError);
+        // Continue with registration if we can't check Firebase
       }
       
       // Generate and send OTP for email verification
@@ -539,7 +573,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           if (user) {
             console.log(`Successfully updated user with Firebase UID: ${user.username} (${email})`);
           } else {
-            console.error(`Failed to update user ${user.id} with Firebase UID`);
+            // Get the user again since the updateUser operation might have failed
+            const updatedUser = await storage.getUserByEmail(email);
+            if (updatedUser) {
+              // Use the existing user data
+              user = updatedUser;
+              console.log(`Using existing user data for ${email}`);
+            } else {
+              console.error(`Failed to update user with Firebase UID for ${email}`);
+            }
           }
         } catch (updateError) {
           console.error("Error updating user with Firebase UID:", updateError);

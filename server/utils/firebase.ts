@@ -14,8 +14,8 @@ let isFirebaseInitialized = false;
 export const initializeFirebase = () => {
   if (getApps().length === 0) {
     try {
-      // Hard-coded Firebase configuration for development
-      const projectId = "burger-c0af3";
+      // Use project ID from environment variables or fallback to a default for development
+      const projectId = process.env.VITE_FIREBASE_PROJECT_ID || "softgirlfashion";
       
       // Initialize the app with explicit project configuration for Replit environment
       const app = initializeApp({
