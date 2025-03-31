@@ -511,8 +511,16 @@ export const createUserProfile = async (
   userData: Partial<UserProfile>
 ): Promise<void> => {
   try {
+    // Remove undefined values to prevent Firestore errors
+    const cleanUserData: Record<string, any> = {};
+    Object.entries(userData).forEach(([key, value]) => {
+      if (value !== undefined) {
+        cleanUserData[key] = value;
+      }
+    });
+    
     const userDocRef = getUserDocRef(uid);
-    await setDoc(userDocRef, userData);
+    await setDoc(userDocRef, cleanUserData);
     
     // Synchronize with backend server if we have enough data
     if (userData.email) {
@@ -524,10 +532,10 @@ export const createUserProfile = async (
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            displayName: userData.fullName || userData.username,
+            displayName: userData.fullName || userData.username || "",
             email: userData.email,
             uid: uid,
-            photoURL: userData.photoURL
+            photoURL: userData.photoURL || null
           }),
         });
         
@@ -555,9 +563,17 @@ export const updateUserProfile = async (
   userData: Partial<UserProfile>
 ): Promise<void> => {
   try {
+    // Remove undefined values to prevent Firestore errors
+    const cleanUserData: Record<string, any> = {};
+    Object.entries(userData).forEach(([key, value]) => {
+      if (value !== undefined) {
+        cleanUserData[key] = value;
+      }
+    });
+    
     const userDocRef = getUserDocRef(uid);
     await updateDoc(userDocRef, {
-      ...userData,
+      ...cleanUserData,
       updatedAt: serverTimestamp()
     });
   } catch (error) {

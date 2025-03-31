@@ -4,6 +4,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "../lib/queryClient";
 import { queryClient } from "../lib/queryClient";
 import * as firebaseService from "../lib/firebaseService";
+import { UserProfile } from "../lib/firebaseService";
 import { User as FirebaseUser } from "firebase/auth";
 
 interface AuthUser {
@@ -114,17 +115,23 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
               const displayName = firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'user';
               
               // Create new user profile in Firestore
-              await firebaseService.createUserProfile(firebaseUser.uid, {
+              const userProfileData: Partial<UserProfile> = {
                 uid: firebaseUser.uid,
                 email: firebaseUser.email || '',
                 username: displayName,
                 fullName: firebaseUser.displayName || displayName,
                 role: "user",
                 twoFactorEnabled: false,
-                photoURL: firebaseUser.photoURL || undefined,
                 createdAt: new Date() as any,
                 updatedAt: new Date() as any
-              });
+              };
+              
+              // Only add photoURL if it exists
+              if (firebaseUser.photoURL) {
+                userProfileData.photoURL = firebaseUser.photoURL;
+              }
+              
+              await firebaseService.createUserProfile(firebaseUser.uid, userProfileData);
               
               // Now fetch the profile we just created
               const newUserProfile = await firebaseService.getUserProfile(firebaseUser.uid);
@@ -158,9 +165,13 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
                 username: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'user',
                 email: firebaseUser.email || '',
                 role: "user",
-                twoFactorEnabled: false,
-                photoURL: firebaseUser.photoURL || undefined
+                twoFactorEnabled: false
               };
+              
+              // Only add photoURL if it exists
+              if (firebaseUser.photoURL) {
+                basicUser['photoURL'] = firebaseUser.photoURL;
+              }
               
               setUser(basicUser);
               setIsAdmin(false);
@@ -179,9 +190,13 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
             username: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'user',
             email: firebaseUser.email || '',
             role: "user",
-            twoFactorEnabled: false,
-            photoURL: firebaseUser.photoURL || undefined
+            twoFactorEnabled: false
           };
+          
+          // Only add photoURL if it exists
+          if (firebaseUser.photoURL) {
+            fallbackUser['photoURL'] = firebaseUser.photoURL;
+          }
           
           setUser(fallbackUser);
           setIsAdmin(false);
@@ -215,11 +230,11 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       
       try {
         // Use the firebaseService signInWithEmail method instead of direct Firebase auth
-        const userCredential = await firebaseService.signInWithEmail(email, password);
+        const firebaseUser = await firebaseService.signInWithEmail(email, password);
         console.log("Firebase authentication successful for:", email);
         
         // Get Firebase UID
-        const firebaseUid = userCredential.user.uid;
+        const firebaseUid = firebaseUser.uid;
         
         // Use our backend login endpoint with the Firebase UID
         try {
@@ -268,7 +283,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
             fullName: userData.fullName,
             role: userData.role || "user",
             twoFactorEnabled: userData.twoFactorEnabled || false,
-            photoURL: userData.photoURL || userCredential.user.photoURL
+            photoURL: userData.photoURL || firebaseUser.photoURL
           };
           
           // Store authenticated user
@@ -296,10 +311,10 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
-                displayName: userCredential.user.displayName,
-                email: userCredential.user.email,
+                displayName: firebaseUser.displayName,
+                email: firebaseUser.email,
                 uid: firebaseUid,
-                photoURL: userCredential.user.photoURL
+                photoURL: firebaseUser.photoURL
               }),
             });
             
@@ -321,7 +336,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
               fullName: syncUserData.fullName,
               role: syncUserData.role || "user",
               twoFactorEnabled: syncUserData.twoFactorEnabled || false,
-              photoURL: syncUserData.photoURL || userCredential.user.photoURL
+              photoURL: syncUserData.photoURL || firebaseUser.photoURL
             };
             
             // Store authenticated user
@@ -342,12 +357,12 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
             // Create minimal AuthUser from Firebase data
             const authUser: AuthUser = {
               uid: firebaseUid,
-              username: userCredential.user.displayName || email.split('@')[0],
+              username: firebaseUser.displayName || email.split('@')[0],
               email: email,
-              fullName: userCredential.user.displayName || undefined,
+              fullName: firebaseUser.displayName || undefined,
               role: "user",
               twoFactorEnabled: false,
-              photoURL: userCredential.user.photoURL || undefined
+              photoURL: firebaseUser.photoURL || undefined
             };
             
             // Store authenticated user
