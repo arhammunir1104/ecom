@@ -147,10 +147,12 @@ const Navbar = () => {
             </DropdownMenu>
             
             {/* Wishlist button */}
-            <Button variant="ghost" size="icon" className="hover:text-purple transition">
-              <Heart className="h-5 w-5" />
-              <span className="sr-only">Wishlist</span>
-            </Button>
+            <Link href="/wishlist">
+              <Button variant="ghost" size="icon" className="hover:text-purple transition">
+                <Heart className="h-5 w-5" />
+                <span className="sr-only">Wishlist</span>
+              </Button>
+            </Link>
             
             {/* Cart button */}
             <Link href="/cart">

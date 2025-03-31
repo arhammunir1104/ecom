@@ -4,7 +4,7 @@ import { Product } from "@shared/schema";
 import { useCart } from "@/hooks/useCart";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Heart, Search, ShoppingBag } from "lucide-react";
+import { Heart, ShoppingBag } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
   Card,
@@ -192,7 +192,7 @@ const ProductCard = ({ product }: ProductCardProps) => {
             <Button 
               size="icon" 
               variant="secondary" 
-              className={`w-8 h-8 rounded-full ${isInWishlistState ? 'bg-pink-light' : 'bg-white'} hover:bg-pink-lighter shadow-sm`}
+              className={`w-8 h-8 rounded-full ${isInWishlistState ? 'bg-pink-light' : 'bg-white/90'} hover:bg-pink-light shadow-md`}
               onClick={handleAddToWishlist}
               disabled={isAddingToWishlist}
             >
@@ -201,21 +201,12 @@ const ProductCard = ({ product }: ProductCardProps) => {
                 {isInWishlistState ? "Remove from wishlist" : "Add to wishlist"}
               </span>
             </Button>
-            <Button 
-              size="icon" 
-              variant="secondary" 
-              className="w-8 h-8 rounded-full bg-white hover:bg-pink-lighter shadow-sm"
-              onClick={handleQuickView}
-            >
-              <Search className="h-4 w-4 text-purple" />
-              <span className="sr-only">Quick view</span>
-            </Button>
           </div>
           
           {/* Quick shop button */}
           <div className={`absolute bottom-3 inset-x-3 transition-opacity duration-200 ${isHovered ? "opacity-100" : "opacity-0"}`}>
             <Button 
-              className="w-full bg-purple hover:bg-purple/90 text-white shadow-sm"
+              className="w-full bg-purple/90 hover:bg-purple text-white shadow-md font-medium"
               onClick={handleAddToCart}
             >
               <ShoppingBag className="h-4 w-4 mr-2" />

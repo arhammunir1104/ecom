@@ -261,7 +261,7 @@ const Wishlist = () => {
               
               <div 
                 className="relative h-64 overflow-hidden cursor-pointer"
-                onClick={() => navigate(`/products/${item.id}`)}
+                onClick={() => navigate(`/product/${item.id}`)}
               >
                 {item.images && Array.isArray(item.images) && item.images.length > 0 ? (
                   <img 
@@ -285,7 +285,7 @@ const Wishlist = () => {
               <CardContent className="p-4">
                 <h3 
                   className="font-medium text-lg mb-1 cursor-pointer hover:text-purple-600 transition-colors"
-                  onClick={() => navigate(`/products/${item.id}`)}
+                  onClick={() => navigate(`/product/${item.id}`)}
                 >
                   {item.name}
                 </h3>
