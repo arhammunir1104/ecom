@@ -29,8 +29,10 @@ import NotFound from "@/pages/not-found";
 import AdminDashboard from "./pages/admin/dashboard";
 import AdminProducts from "./pages/admin/products";
 import AdminAddProduct from "./pages/admin/add-product";
+import AdminEditProduct from "./pages/admin/edit-product";
 import AdminCategories from "./pages/admin/categories";
 import AdminAddCategory from "./pages/admin/add-category";
+import AdminEditCategory from "./pages/admin/edit-category";
 import AdminUsers from "./pages/admin/users";
 import AdminHeroBanners from "./pages/admin/hero-banners";
 
@@ -110,6 +112,11 @@ function Router() {
           <AdminAddProduct />
         </AdminLayout>
       )} />
+      <Route path="/admin/products/edit/:id" component={() => (
+        <AdminLayout>
+          <AdminEditProduct />
+        </AdminLayout>
+      )} />
       <Route path="/admin/categories" component={() => (
         <AdminLayout>
           <AdminCategories />
@@ -118,6 +125,11 @@ function Router() {
       <Route path="/admin/categories/add" component={() => (
         <AdminLayout>
           <AdminAddCategory />
+        </AdminLayout>
+      )} />
+      <Route path="/admin/categories/edit/:id" component={() => (
+        <AdminLayout>
+          <AdminEditCategory />
         </AdminLayout>
       )} />
       <Route path="/admin/users" component={() => (

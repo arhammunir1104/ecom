@@ -1,29 +1,23 @@
 const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME || "placeholder";
 const uploadPreset = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET || "feminine_elegance";
 
-// Function to upload an image to Cloudinary
+// Mock function to handle image uploads without Cloudinary
 export async function uploadImage(file: File) {
-  const formData = new FormData();
-  formData.append("file", file);
-  formData.append("upload_preset", uploadPreset);
-
   try {
-    const response = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
-      method: "POST",
-      body: formData,
+    // Create a data URL for the image
+    const reader = new FileReader();
+    const dataUrl = await new Promise<string>((resolve) => {
+      reader.onload = () => resolve(reader.result as string);
+      reader.readAsDataURL(file);
     });
-
-    if (!response.ok) {
-      throw new Error(`Upload failed with status: ${response.status}`);
-    }
-
-    const data = await response.json();
+    
+    // Return a mock response with the data URL
     return {
-      url: data.secure_url,
-      publicId: data.public_id,
+      url: dataUrl,
+      publicId: `local_${Date.now()}`,
     };
   } catch (error) {
-    console.error("Error uploading image to Cloudinary:", error);
+    console.error("Error handling local image:", error);
     throw error;
   }
 }

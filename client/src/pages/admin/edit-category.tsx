@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
-import { useLocation } from "wouter";
+import { useLocation, useRoute } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { insertCategorySchema } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { uploadImage } from "@/lib/cloudinary";
 import { useToast } from "@/hooks/use-toast";
 import {
   Form,
@@ -44,9 +44,11 @@ const categorySchema = insertCategorySchema.extend({
 
 type CategoryFormValues = z.infer<typeof categorySchema>;
 
-export default function AdminAddCategory() {
+export default function AdminEditCategory() {
   const { isAdmin, isAuthenticated } = useAuth();
   const [, navigate] = useLocation();
+  const [, params] = useRoute("/admin/categories/edit/:id");
+  const categoryId = params ? parseInt(params.id) : null;
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -58,6 +60,17 @@ export default function AdminAddCategory() {
       navigate("/");
     }
   }, [isAdmin, isAuthenticated, navigate]);
+
+  // Fetch category data
+  const { data: category, isLoading: categoryLoading } = useQuery({
+    queryKey: ["/api/categories", categoryId],
+    queryFn: async () => {
+      if (!categoryId) return null;
+      const res = await apiRequest("GET", `/api/categories/${categoryId}`);
+      return await res.json();
+    },
+    enabled: isAdmin && isAuthenticated && !!categoryId,
+  });
   
   const form = useForm<CategoryFormValues>({
     resolver: zodResolver(categorySchema),
@@ -68,6 +81,23 @@ export default function AdminAddCategory() {
       featured: false,
     },
   });
+  
+  // Set form values when category data is loaded
+  useEffect(() => {
+    if (category) {
+      form.reset({
+        name: category.name || "",
+        description: category.description || "",
+        featured: category.featured || false,
+        image: category.image || "",
+      });
+      
+      // Set image preview if there's an image
+      if (category.image) {
+        setImagePreview(category.image);
+      }
+    }
+  }, [category, form]);
   
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -84,18 +114,25 @@ export default function AdminAddCategory() {
     setImageFile(null);
     
     if (imagePreview) {
-      // Revoke object URL to free memory
-      URL.revokeObjectURL(imagePreview);
+      // Revoke object URL to free memory if it's a local preview
+      if (!imagePreview.startsWith('http')) {
+        URL.revokeObjectURL(imagePreview);
+      }
       setImagePreview(null);
     }
+    
+    // Clear the image field in the form
+    form.setValue("image", "");
   };
   
   async function onSubmit(data: CategoryFormValues) {
+    if (!categoryId) return;
+    
     setIsSubmitting(true);
     
     try {
-      // Instead of uploading to Cloudinary, we'll use a mock image URL or the data URL
-      let imageUrl = "";
+      // Handle image
+      let imageUrl = data.image || "";
       
       if (imageFile) {
         // Create a data URL for the image
@@ -104,25 +141,23 @@ export default function AdminAddCategory() {
           reader.onload = () => resolve(reader.result as string);
           reader.readAsDataURL(imageFile);
         });
-      } else {
-        // Use a placeholder image URL
-        imageUrl = "https://placehold.co/600x400";
       }
       
-      // Create category with image URL
+      // Update category with image URL
       const categoryData = {
         ...data,
         image: imageUrl,
       };
       
-      await apiRequest("POST", "/api/categories", categoryData);
+      await apiRequest("PUT", `/api/categories/${categoryId}`, categoryData);
       
       // Invalidate categories query to refresh the list
       queryClient.invalidateQueries({ queryKey: ["/api/categories"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/categories", categoryId] });
       
       toast({
         title: "Success",
-        description: "Category created successfully",
+        description: "Category updated successfully",
       });
       
       // Navigate to categories list
@@ -130,12 +165,32 @@ export default function AdminAddCategory() {
     } catch (error: any) {
       toast({
         title: "Error",
-        description: error.message || "Failed to create category",
+        description: error.message || "Failed to update category",
         variant: "destructive",
       });
     } finally {
       setIsSubmitting(false);
     }
+  }
+  
+  if (categoryLoading) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-purple" />
+      </div>
+    );
+  }
+  
+  if (!category && !categoryLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64">
+        <h2 className="text-xl font-medium mb-2">Category Not Found</h2>
+        <p className="text-muted-foreground mb-4">The category you're looking for doesn't exist.</p>
+        <Button onClick={() => navigate("/admin/categories")}>
+          Back to Categories
+        </Button>
+      </div>
+    );
   }
   
   return (
@@ -150,9 +205,9 @@ export default function AdminAddCategory() {
           Back to Categories
         </Button>
         <div>
-          <h2 className="text-3xl font-playfair font-bold tracking-tight">Add New Category</h2>
+          <h2 className="text-3xl font-playfair font-bold tracking-tight">Edit Category</h2>
           <p className="text-muted-foreground">
-            Create a new category to organize your products
+            Update the details for this category
           </p>
         </div>
       </div>
@@ -165,7 +220,7 @@ export default function AdminAddCategory() {
               <CardHeader>
                 <CardTitle>Category Information</CardTitle>
                 <CardDescription>
-                  Enter the details about your category
+                  Update the details about your category
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
@@ -239,12 +294,12 @@ export default function AdminAddCategory() {
                   {isSubmitting ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Creating...
+                      Updating...
                     </>
                   ) : (
                     <>
                       <CheckCircle className="mr-2 h-4 w-4" />
-                      Create Category
+                      Update Category
                     </>
                   )}
                 </Button>
@@ -256,7 +311,7 @@ export default function AdminAddCategory() {
               <CardHeader>
                 <CardTitle>Category Image</CardTitle>
                 <CardDescription>
-                  Upload an image for this category
+                  Update or upload a new image for this category
                 </CardDescription>
               </CardHeader>
               <CardContent>

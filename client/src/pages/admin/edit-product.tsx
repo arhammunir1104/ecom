@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useLocation } from "wouter";
+import { useLocation, useRoute } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { useForm } from "react-hook-form";
@@ -7,7 +7,6 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { insertProductSchema } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { uploadImage, uploadMultipleImages } from "@/lib/cloudinary";
 import { useToast } from "@/hooks/use-toast";
 import {
   Form,
@@ -59,9 +58,11 @@ const productSchema = insertProductSchema.extend({
 
 type ProductFormValues = z.infer<typeof productSchema>;
 
-export default function AdminAddProduct() {
+export default function AdminEditProduct() {
   const { isAdmin, isAuthenticated } = useAuth();
   const [, navigate] = useLocation();
+  const [, params] = useRoute("/admin/products/edit/:id");
+  const productId = params ? parseInt(params.id) : null;
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [imageFiles, setImageFiles] = useState<File[]>([]);
@@ -83,6 +84,17 @@ export default function AdminAddProduct() {
     enabled: isAdmin && isAuthenticated,
   });
   
+  // Fetch product data
+  const { data: product, isLoading: productLoading } = useQuery({
+    queryKey: ["/api/products", productId],
+    queryFn: async () => {
+      if (!productId) return null;
+      const res = await apiRequest("GET", `/api/products/${productId}`);
+      return await res.json();
+    },
+    enabled: isAdmin && isAuthenticated && !!productId,
+  });
+  
   const form = useForm<ProductFormValues>({
     resolver: zodResolver(productSchema),
     defaultValues: {
@@ -100,8 +112,38 @@ export default function AdminAddProduct() {
     },
   });
   
+  // Set form values when product data is loaded
+  useEffect(() => {
+    if (product) {
+      form.reset({
+        name: product.name || "",
+        description: product.description || "",
+        price: product.price || 0,
+        discountPrice: product.discountPrice,
+        categoryId: product.categoryId || 0,
+        images: product.images || [],
+        sizes: product.sizes || [],
+        colors: product.colors || [],
+        stock: product.stock || 0,
+        featured: !!product.featured,
+        trending: !!product.trending,
+      });
+      
+      // Set sizes and colors
+      setSizeOptions(product.sizes || []);
+      setColorOptions(product.colors || []);
+    }
+  }, [product, form]);
+  
   // Preview images
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
+  
+  // Set image previews when product data is loaded
+  useEffect(() => {
+    if (product?.images?.length) {
+      setImagePreviews(product.images);
+    }
+  }, [product]);
   
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
@@ -115,11 +157,19 @@ export default function AdminAddProduct() {
   };
   
   const removeImage = (index: number) => {
-    setImageFiles(prev => prev.filter((_, i) => i !== index));
+    // If it's a File (new upload), revoke the object URL
+    if (index < imageFiles.length) {
+      setImageFiles(prev => prev.filter((_, i) => i !== index));
+      URL.revokeObjectURL(imagePreviews[index]);
+    }
     
-    // Revoke object URL to free memory
-    URL.revokeObjectURL(imagePreviews[index]);
+    // Remove from previews
     setImagePreviews(prev => prev.filter((_, i) => i !== index));
+    
+    // Update the form value
+    const updatedImages = [...imagePreviews];
+    updatedImages.splice(index, 1);
+    form.setValue("images", updatedImages);
   };
   
   const addSize = () => {
@@ -149,7 +199,9 @@ export default function AdminAddProduct() {
   };
   
   async function onSubmit(data: ProductFormValues) {
-    if (imageFiles.length === 0) {
+    if (!productId) return;
+    
+    if (imagePreviews.length === 0) {
       toast({
         title: "Missing Images",
         description: "Please upload at least one product image",
@@ -161,8 +213,8 @@ export default function AdminAddProduct() {
     setIsSubmitting(true);
     
     try {
-      // Generate data URLs for the images instead of uploading to Cloudinary
-      const imageUrls = await Promise.all(
+      // Process any new image files
+      const newImageUrls = await Promise.all(
         imageFiles.map(file => {
           return new Promise<string>((resolve) => {
             const reader = new FileReader();
@@ -172,22 +224,30 @@ export default function AdminAddProduct() {
         })
       );
       
-      // Create product with image URLs
+      // Combine existing images (except ones that were replaced) with new ones
+      const existingImages = product?.images || [];
+      const remainingImages = imagePreviews.filter(preview => 
+        existingImages.includes(preview) && 
+        !preview.startsWith('blob:')
+      );
+      
+      // Create product with updated data
       const productData = {
         ...data,
-        images: imageUrls,
+        images: [...remainingImages, ...newImageUrls],
         sizes: sizeOptions,
         colors: colorOptions,
       };
       
-      await apiRequest("POST", "/api/products", productData);
+      await apiRequest("PUT", `/api/products/${productId}`, productData);
       
       // Invalidate products query to refresh the list
       queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/products", productId] });
       
       toast({
         title: "Success",
-        description: "Product created successfully",
+        description: "Product updated successfully",
       });
       
       // Navigate to products list
@@ -195,12 +255,32 @@ export default function AdminAddProduct() {
     } catch (error: any) {
       toast({
         title: "Error",
-        description: error.message || "Failed to create product",
+        description: error.message || "Failed to update product",
         variant: "destructive",
       });
     } finally {
       setIsSubmitting(false);
     }
+  }
+  
+  if (productLoading) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-purple" />
+      </div>
+    );
+  }
+  
+  if (!product && !productLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64">
+        <h2 className="text-xl font-medium mb-2">Product Not Found</h2>
+        <p className="text-muted-foreground mb-4">The product you're looking for doesn't exist.</p>
+        <Button onClick={() => navigate("/admin/products")}>
+          Back to Products
+        </Button>
+      </div>
+    );
   }
   
   return (
@@ -215,9 +295,9 @@ export default function AdminAddProduct() {
           Back to Products
         </Button>
         <div>
-          <h2 className="text-3xl font-playfair font-bold tracking-tight">Add New Product</h2>
+          <h2 className="text-3xl font-playfair font-bold tracking-tight">Edit Product</h2>
           <p className="text-muted-foreground">
-            Create a new product to add to your store
+            Update the details for this product
           </p>
         </div>
       </div>
@@ -230,7 +310,7 @@ export default function AdminAddProduct() {
               <CardHeader>
                 <CardTitle>Product Information</CardTitle>
                 <CardDescription>
-                  Enter the basic details about your product
+                  Update the details about your product
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
@@ -458,7 +538,7 @@ export default function AdminAddProduct() {
                 <CardHeader>
                   <CardTitle>Product Media</CardTitle>
                   <CardDescription>
-                    Upload images for this product
+                    Update or add new images for this product
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -478,30 +558,35 @@ export default function AdminAddProduct() {
                             type="button"
                             variant="destructive"
                             size="icon"
-                            className="absolute top-1 right-1 h-6 w-6 rounded-full"
+                            className="absolute top-2 right-2 h-8 w-8 rounded-full"
                             onClick={() => removeImage(index)}
                           >
-                            <Trash2 className="h-3 w-3" />
+                            <Trash2 className="h-4 w-4" />
                           </Button>
                         </div>
                       ))}
-                      {imagePreviews.length < 4 && (
-                        <div className="border border-dashed rounded-md flex items-center justify-center aspect-square">
-                          <label className="cursor-pointer flex flex-col items-center p-4">
-                            <ImagePlus className="mb-2 h-6 w-6 text-gray-400" />
-                            <span className="text-sm text-gray-500">Add Image</span>
-                            <input
-                              type="file"
-                              accept="image/*"
-                              className="hidden"
-                              onChange={handleImageChange}
-                            />
-                          </label>
-                        </div>
-                      )}
+                    </div>
+                    <div className="border border-dashed rounded-md p-4">
+                      <label className="cursor-pointer flex flex-col items-center">
+                        <ImagePlus className="mb-2 h-8 w-8 text-gray-400" />
+                        <span className="text-sm font-medium mb-1">Upload Images</span>
+                        <span className="text-xs text-gray-500 text-center mb-2">
+                          Drag and drop or click to browse
+                        </span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          multiple
+                          className="hidden"
+                          onChange={handleImageChange}
+                        />
+                        <Button type="button" variant="secondary" size="sm">
+                          Select Files
+                        </Button>
+                      </label>
                     </div>
                     <FormDescription>
-                      Upload up to 4 product images. First image will be the main product image.
+                      Upload high-quality images of your product. You can add multiple images.
                     </FormDescription>
                   </div>
                 </CardContent>
@@ -510,8 +595,11 @@ export default function AdminAddProduct() {
               <Card>
                 <CardHeader>
                   <CardTitle>Product Settings</CardTitle>
+                  <CardDescription>
+                    Configure additional product options
+                  </CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-4">
+                <CardContent className="space-y-6">
                   <FormField
                     control={form.control}
                     name="featured"
@@ -525,7 +613,7 @@ export default function AdminAddProduct() {
                         </div>
                         <FormControl>
                           <Switch
-                            checked={field.value || false}
+                            checked={!!field.value}
                             onCheckedChange={field.onChange}
                           />
                         </FormControl>
@@ -546,7 +634,7 @@ export default function AdminAddProduct() {
                         </div>
                         <FormControl>
                           <Switch
-                            checked={field.value || false}
+                            checked={!!field.value}
                             onCheckedChange={field.onChange}
                           />
                         </FormControl>
@@ -558,9 +646,7 @@ export default function AdminAddProduct() {
             </div>
           </div>
           
-          <Separator />
-          
-          <div className="flex justify-end gap-4">
+          <div className="flex justify-end space-x-4">
             <Button 
               type="button" 
               variant="outline" 
@@ -576,12 +662,12 @@ export default function AdminAddProduct() {
               {isSubmitting ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Creating...
+                  Updating...
                 </>
               ) : (
                 <>
                   <CheckCircle className="mr-2 h-4 w-4" />
-                  Create Product
+                  Update Product
                 </>
               )}
             </Button>
