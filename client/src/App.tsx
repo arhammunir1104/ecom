@@ -18,6 +18,7 @@ import Cart from "./pages/cart";
 import Checkout from "./pages/checkout";
 import Categories from "./pages/categories";
 import Orders from "./pages/orders";
+import Wishlist from "./pages/wishlist";
 import Login from "./pages/auth/login";
 import Signup from "./pages/auth/signup";
 // Direct authentication pages removed
@@ -91,6 +92,11 @@ function Router() {
       <Route path="/orders" component={() => (
         <MainLayout>
           <Orders />
+        </MainLayout>
+      )} />
+      <Route path="/wishlist" component={() => (
+        <MainLayout>
+          <Wishlist />
         </MainLayout>
       )} />
 

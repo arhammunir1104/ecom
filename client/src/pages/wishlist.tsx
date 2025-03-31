@@ -11,21 +11,16 @@ import { useToast } from "@/hooks/use-toast";
 import { useCart } from "@/hooks/useCart";
 import { useLocation } from "wouter";
 
-// Firebase imports
+// Import fixed wishlist functions
 import { 
-  getFirestore,
-  collection, 
-  query, 
-  where, 
-  getDocs, 
-  doc, 
-  getDoc, 
-  deleteDoc,
-  updateDoc,
-  arrayRemove
-} from "firebase/firestore";
-import { db } from "@/lib/firebase";
+  getUserWishlist, 
+  removeFromWishlist as removeItemFromWishlist,
+  isInWishlist,
+  clearWishlist
+} from "@/lib/firebaseService";
 import { apiRequest } from "@/lib/queryClient";
+import { db } from "@/lib/firebase";
+import { doc, getDoc, updateDoc, arrayRemove } from "firebase/firestore";
 
 const Wishlist = () => {
   const { user, isAuthenticated } = useAuth();
@@ -41,41 +36,32 @@ const Wishlist = () => {
     fetchWishlistItems();
   }, [isAuthenticated, user]);
 
-  // Function to fetch wishlist items from both Firebase and API
+  // Function to fetch wishlist items using the fixed wishlist functions
   const fetchWishlistItems = async () => {
     try {
       setIsLoading(true);
       const items: Array<any> = [];
       
-      // If user is authenticated, try to fetch from Firebase first
+      // If user is authenticated, fetch from Firebase using our fixed function
       if (isAuthenticated) {
         const uid = window.localStorage.getItem('firebaseUid') || user?.uid;
         
         if (uid) {
           try {
-            // Try to get wishlist items from Firebase
-            const userRef = doc(db, 'users', uid);
-            const userDoc = await getDoc(userRef);
+            // Get wishlist using the fixed function
+            const wishlist = await getUserWishlist(uid);
             
-            if (userDoc.exists() && userDoc.data().wishlist && Array.isArray(userDoc.data().wishlist)) {
-              const wishlistIds = userDoc.data().wishlist;
-              
-              // Fetch each product from the products collection
-              for (const productId of wishlistIds) {
-                try {
-                  const productRef = doc(db, 'products', productId);
-                  const productDoc = await getDoc(productRef);
-                  
-                  if (productDoc.exists()) {
-                    items.push({
-                      id: productDoc.id,
-                      ...productDoc.data(),
-                      source: 'firebase'
-                    });
-                  }
-                } catch (err) {
-                  console.error('Error fetching product:', err);
-                }
+            if (wishlist && wishlist.items && Array.isArray(wishlist.items)) {
+              // Process wishlist items - they already contain the product info
+              for (const item of wishlist.items) {
+                items.push({
+                  id: item.productId,
+                  name: item.name,
+                  price: item.price,
+                  images: item.image ? [item.image] : [],
+                  addedAt: item.addedAt,
+                  source: 'firebase'
+                });
               }
             }
           } catch (firebaseError) {
@@ -117,7 +103,7 @@ const Wishlist = () => {
     }
   };
 
-  // Remove from wishlist
+  // Remove from wishlist using the fixed function
   const removeFromWishlist = async (productId: string) => {
     try {
       setRemovingItemIds(prev => new Set(prev).add(productId));
@@ -127,12 +113,9 @@ const Wishlist = () => {
         const uid = window.localStorage.getItem('firebaseUid') || user?.uid;
         
         if (uid) {
-          // Remove from Firebase
+          // Remove from Firebase using our fixed function
           try {
-            const userRef = doc(db, 'users', uid);
-            await updateDoc(userRef, {
-              wishlist: arrayRemove(productId)
-            });
+            await removeItemFromWishlist(uid, productId);
           } catch (err) {
             console.error('Error removing from Firebase wishlist:', err);
           }
