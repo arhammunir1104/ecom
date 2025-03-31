@@ -1587,7 +1587,7 @@ export const getUserWishlist = async (userId: string): Promise<Wishlist | null> 
     const newWishlist: Wishlist = {
       userId,
       items: [],
-      updatedAt: serverTimestamp() as Timestamp
+      updatedAt: Timestamp.fromDate(new Date()) // Use client-side timestamp instead of serverTimestamp()
     };
     
     await setDoc(wishlistDocRef, newWishlist);
@@ -1626,7 +1626,7 @@ export const addToWishlist = async (
       wishlist = {
         userId,
         items: [],
-        updatedAt: serverTimestamp() as Timestamp
+        updatedAt: Timestamp.fromDate(new Date()) // Use client-side timestamp
       };
     }
     
@@ -1634,16 +1634,16 @@ export const addToWishlist = async (
     const existingItem = wishlist.items.find(item => item.productId === product.id);
     
     if (!existingItem) {
-      // Add new item to wishlist
+      // Add new item to wishlist with a JavaScript Date instead of serverTimestamp()
       wishlist.items.push({
         productId: product.id,
         name: product.name,
         price: product.price,
         image: product.image,
-        addedAt: serverTimestamp() as Timestamp
+        addedAt: Timestamp.fromDate(new Date()) // Use client-side timestamp instead of serverTimestamp()
       });
       
-      // Update wishlist in Firestore
+      // Update wishlist in Firestore (document-level timestamp is fine)
       await setDoc(wishlistDocRef, {
         ...wishlist,
         updatedAt: serverTimestamp()
@@ -1727,7 +1727,7 @@ export const clearWishlist = async (userId: string): Promise<void> => {
     const emptyWishlist: Wishlist = {
       userId,
       items: [],
-      updatedAt: serverTimestamp() as Timestamp
+      updatedAt: Timestamp.fromDate(new Date()) // Use client-side timestamp
     };
     
     await setDoc(wishlistDocRef, emptyWishlist);
