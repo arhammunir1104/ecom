@@ -1,15 +1,20 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { Product } from "@shared/schema";
 import { useCart } from "@/hooks/useCart";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Heart, Search, ShoppingBag } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 import {
   Card,
   CardContent,
   CardFooter,
 } from "@/components/ui/card";
+import { 
+  addToWishlist, 
+  isInWishlist 
+} from "@/lib/firebaseService";
 
 interface ProductCardProps {
   product: Product;
@@ -17,7 +22,10 @@ interface ProductCardProps {
 
 const ProductCard = ({ product }: ProductCardProps) => {
   const [isHovered, setIsHovered] = useState(false);
+  const [isInWishlistState, setIsInWishlistState] = useState(false);
+  const [isAddingToWishlist, setIsAddingToWishlist] = useState(false);
   const { addToCart } = useCart();
+  const { toast } = useToast();
   
   const { 
     id, 
@@ -44,6 +52,11 @@ const ProductCard = ({ product }: ProductCardProps) => {
       price,
       image: imageUrl
     });
+    
+    toast({
+      title: "Added to cart",
+      description: `${name} has been added to your cart`,
+    });
   };
   
   const [, setLocation] = useLocation();
@@ -54,6 +67,91 @@ const ProductCard = ({ product }: ProductCardProps) => {
     // Navigate to product page using wouter
     setLocation(`/product/${id}`);
   };
+  
+  const handleAddToWishlist = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    try {
+      setIsAddingToWishlist(true);
+      
+      // Get user ID from localStorage (set during authentication)
+      const uid = window.localStorage.getItem('firebaseUid');
+      
+      if (!uid) {
+        toast({
+          title: "Authentication required",
+          description: "Please sign in to add items to your wishlist",
+          variant: "destructive"
+        });
+        return;
+      }
+      
+      // Check if already in wishlist to prevent duplicates
+      if (isInWishlistState) {
+        toast({
+          title: "Already in wishlist",
+          description: `${name} is already in your wishlist`,
+        });
+        return;
+      }
+      
+      // Add to Firebase wishlist
+      await addToWishlist(uid, {
+        id: id,
+        name: name,
+        price: price,
+        image: imageUrl
+      });
+      
+      // Also add to API wishlist for backend persistence
+      try {
+        await fetch('/api/users/wishlist', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'firebase-uid': uid
+          },
+          body: JSON.stringify({ productId: id })
+        });
+      } catch (apiError) {
+        console.error('Error syncing with API wishlist:', apiError);
+      }
+      
+      setIsInWishlistState(true);
+      
+      toast({
+        title: "Added to wishlist",
+        description: `${name} has been added to your wishlist`,
+      });
+    } catch (error) {
+      console.error('Error adding to wishlist:', error);
+      toast({
+        title: "Error",
+        description: "Failed to add item to wishlist. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsAddingToWishlist(false);
+    }
+  };
+  
+  // Check if product is in wishlist on component mount
+  useEffect(() => {
+    const checkWishlistStatus = async () => {
+      try {
+        const uid = window.localStorage.getItem('firebaseUid');
+        if (uid) {
+          const inWishlist = await isInWishlist(uid, id);
+          setIsInWishlistState(inWishlist);
+        }
+      } catch (error) {
+        console.error('Error checking wishlist status:', error);
+      }
+    };
+    
+    checkWishlistStatus();
+  }, [id]);
 
   return (
     <Card 
@@ -66,7 +164,7 @@ const ProductCard = ({ product }: ProductCardProps) => {
           <img 
             src={imageUrl} 
             alt={name} 
-            className="w-full h-80 object-cover"
+            className="w-full h-60 sm:h-64 md:h-72 lg:h-80 object-cover"
             loading="lazy"
           />
           
@@ -94,16 +192,19 @@ const ProductCard = ({ product }: ProductCardProps) => {
             <Button 
               size="icon" 
               variant="secondary" 
-              className="w-8 h-8 rounded-full bg-white hover:bg-pink-lighter"
-              onClick={(e) => e.preventDefault()}
+              className={`w-8 h-8 rounded-full ${isInWishlistState ? 'bg-pink-light' : 'bg-white'} hover:bg-pink-lighter shadow-sm`}
+              onClick={handleAddToWishlist}
+              disabled={isAddingToWishlist}
             >
-              <Heart className="h-4 w-4 text-purple" />
-              <span className="sr-only">Add to wishlist</span>
+              <Heart className={`h-4 w-4 ${isInWishlistState ? 'text-red-500 fill-current' : 'text-purple'}`} />
+              <span className="sr-only">
+                {isInWishlistState ? "Remove from wishlist" : "Add to wishlist"}
+              </span>
             </Button>
             <Button 
               size="icon" 
               variant="secondary" 
-              className="w-8 h-8 rounded-full bg-white hover:bg-pink-lighter"
+              className="w-8 h-8 rounded-full bg-white hover:bg-pink-lighter shadow-sm"
               onClick={handleQuickView}
             >
               <Search className="h-4 w-4 text-purple" />
@@ -114,9 +215,10 @@ const ProductCard = ({ product }: ProductCardProps) => {
           {/* Quick shop button */}
           <div className={`absolute bottom-3 inset-x-3 transition-opacity duration-200 ${isHovered ? "opacity-100" : "opacity-0"}`}>
             <Button 
-              className="w-full bg-purple hover:bg-purple/90 text-white"
+              className="w-full bg-purple hover:bg-purple/90 text-white shadow-sm"
               onClick={handleAddToCart}
             >
+              <ShoppingBag className="h-4 w-4 mr-2" />
               Add to Cart
             </Button>
           </div>
@@ -135,7 +237,7 @@ const ProductCard = ({ product }: ProductCardProps) => {
           {/* Product name */}
           <h3 className="font-medium text-lg mb-1 text-gray-800 line-clamp-1">{name}</h3>
           
-          {/* Ratings - static for now */}
+          {/* Ratings */}
           <div className="flex items-center mb-2">
             <div className="flex text-gold">
               <i className="fas fa-star text-xs"></i>
@@ -144,7 +246,7 @@ const ProductCard = ({ product }: ProductCardProps) => {
               <i className="fas fa-star text-xs"></i>
               <i className="fas fa-star-half-alt text-xs"></i>
             </div>
-            <span className="text-xs text-gray-500 ml-2">(24)</span>
+            <span className="text-xs text-gray-500 ml-2">(0)</span>
           </div>
         </CardContent>
         <CardFooter className="p-4 pt-0 flex items-center justify-between">

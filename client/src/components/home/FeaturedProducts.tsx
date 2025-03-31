@@ -19,10 +19,10 @@ const FeaturedProducts = ({ products, isLoading }: FeaturedProductsProps) => {
             <Skeleton className="h-6 w-24" />
           </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {Array.from({ length: 4 }).map((_, index) => (
               <div key={index} className="bg-white rounded-lg overflow-hidden shadow-sm">
-                <Skeleton className="h-80 w-full" />
+                <Skeleton className="h-60 sm:h-64 md:h-72 lg:h-80 w-full" />
                 <div className="p-4 space-y-3">
                   <Skeleton className="h-4 w-20" />
                   <Skeleton className="h-6 w-full" />
@@ -58,7 +58,7 @@ const FeaturedProducts = ({ products, isLoading }: FeaturedProductsProps) => {
           </Link>
         </div>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {products.slice(0, 4).map(product => (
             <ProductCard key={product.id} product={product} />
           ))}
