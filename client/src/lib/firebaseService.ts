@@ -1635,10 +1635,15 @@ export const addToWishlist = async (
     
     if (!existingItem) {
       // Add new item to wishlist with a JavaScript Date instead of serverTimestamp()
+      // Ensure price is stored as a number value
+      const numericPrice = typeof product.price === 'string' 
+        ? parseFloat(product.price) 
+        : (typeof product.price === 'number' ? product.price : 0);
+      
       wishlist.items.push({
         productId: product.id,
         name: product.name,
-        price: product.price,
+        price: numericPrice,
         image: product.image,
         addedAt: Timestamp.fromDate(new Date()) // Use client-side timestamp instead of serverTimestamp()
       });
