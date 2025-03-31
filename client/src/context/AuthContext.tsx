@@ -429,6 +429,30 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     try {
       console.log("Starting user registration");
       
+      // First check if the user already exists in our backend
+      try {
+        const response = await fetch('/api/auth/check-user', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email }),
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          if (data.exists) {
+            throw new Error("This email is already in use. Please try logging in instead.");
+          }
+        }
+      } catch (checkError: any) {
+        // If it's our own error message about email in use, throw it
+        if (checkError.message === "This email is already in use. Please try logging in instead.") {
+          throw checkError;
+        }
+        // Otherwise, continue with registration attempt 
+        // (this might be a network error or the endpoint doesn't exist)
+        console.warn("Could not check if user exists:", checkError);
+      }
+      
       // Register the user with Firebase and create their Firestore profile
       const firebaseUser = await firebaseService.registerWithEmailAndPassword(
         email,
@@ -481,6 +505,14 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       
       let errorMessage = "Unable to create account. Please try again.";
       
+      // Check if it's our own error first
+      if (typeof error.message === 'string') {
+        if (error.message.includes("email is already in use") || 
+            error.message.includes("Email already in use")) {
+          errorMessage = "This email is already in use. Please try logging in instead.";
+        }
+      }
+      
       // Provide more specific error messages for common Firebase errors
       if (error.code === 'auth/email-already-in-use') {
         errorMessage = "This email is already in use. Please try logging in instead.";
@@ -488,6 +520,10 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         errorMessage = "The email address is not valid.";
       } else if (error.code === 'auth/weak-password') {
         errorMessage = "The password is too weak. Please choose a stronger password.";
+      } else if (error.code === 'auth/network-request-failed') {
+        errorMessage = "Network error. Please check your internet connection and try again.";
+      } else if (error.code === 'auth/too-many-requests') {
+        errorMessage = "Too many requests. Please try again later.";
       }
       
       toast({

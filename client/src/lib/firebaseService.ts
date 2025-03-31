@@ -149,7 +149,39 @@ export const registerWithEmailAndPassword = async (
   fullName?: string
 ): Promise<FirebaseUser> => {
   try {
-    console.log("Creating new user in Firebase Authentication:", email);
+    // First check if the email already exists in Firebase
+    try {
+      // We'll attempt to authenticate with a dummy password to see if the user exists
+      // This will fail with auth/wrong-password if the user exists, or auth/user-not-found if they don't
+      await signInWithEmailAndPassword(auth, email, "dummy-password-for-check-only");
+      
+      // If we get here, the password was wrong but the user exists
+      throw new Error("Email already exists in Firebase");
+    } catch (checkError: any) {
+      // If we get auth/user-not-found, the email is available
+      if (checkError.code !== 'auth/user-not-found') {
+        console.log("Email check result:", checkError.code);
+        
+        // If it's auth/wrong-password, the user exists
+        if (checkError.code === 'auth/wrong-password' || checkError.code === 'auth/invalid-credential') {
+          const error = new Error("Email already in use");
+          // @ts-ignore
+          error.code = 'auth/email-already-in-use';
+          throw error;
+        }
+        
+        // For other errors, continue with registration as they're likely unrelated
+        if (checkError.message === "Email already exists in Firebase") {
+          const error = new Error("Email already in use");
+          // @ts-ignore
+          error.code = 'auth/email-already-in-use';
+          throw error;
+        }
+      }
+    }
+    
+    console.log("Email is available, creating new user in Firebase Authentication:", email);
+    
     // Create the user in Firebase Authentication
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
     const user = userCredential.user;
@@ -222,16 +254,37 @@ export const registerWithEmailAndPassword = async (
         if (loginResponse.ok) {
           console.log("User synchronized with backend server successfully via login endpoint");
         } else {
-          console.warn("Failed to sync user with backend server:", await loginResponse.json());
+          const errorData = await loginResponse.json();
+          console.warn("Failed to sync user with backend server:", errorData);
+          // If the backend says the email already exists, we need to clean up the Firebase user
+          if (errorData.message === "Email already in use") {
+            console.error("Email already exists in backend but not in Firebase, cleaning up Firebase user");
+            // Delete the Firebase user if backend sync fails with email already in use
+            try {
+              await user.delete();
+            } catch (deleteError) {
+              console.error("Failed to delete Firebase user after sync failure:", deleteError);
+            }
+            throw new Error("Email already in use in the system");
+          }
         }
       }
-    } catch (syncError) {
+    } catch (syncError: any) {
       console.error("Error syncing with backend:", syncError);
-      // Non-critical, continue with signup
+      
+      // If this is a critical error about email already in use, propagate it
+      if (syncError.message === "Email already in use in the system") {
+        const error = new Error("Email already in use");
+        // @ts-ignore
+        error.code = 'auth/email-already-in-use';
+        throw error;
+      }
+      
+      // Otherwise, continue with signup as this sync is non-critical
     }
     
     return user;
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error registering user:", error);
     throw error;
   }
