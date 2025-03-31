@@ -777,6 +777,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Product routes
+  // Endpoint to get products for cart items by IDs
+  app.get("/api/products/cart", async (req, res) => {
+    try {
+      const productIds = req.query.ids;
+      
+      if (!productIds) {
+        return res.status(400).json({ message: "Invalid product ID" });
+      }
+
+      // Convert to array if it's a single value
+      const ids = Array.isArray(productIds) ? productIds : [productIds];
+      
+      console.log("Cart product request for IDs:", ids);
+      
+      // Get products from Firebase or Database
+      const allProducts = await storage.getAllProducts();
+      
+      // Filter products by the requested IDs
+      const cartProducts = allProducts.filter(product => 
+        ids.includes(product.id.toString())
+      );
+      
+      console.log(`Found ${cartProducts.length} products for cart`);
+      return res.json(cartProducts);
+    } catch (error) {
+      console.error("Error fetching cart products:", error);
+      return res.status(500).json({ message: "Failed to fetch cart products" });
+    }
+  });
+
   app.get("/api/products", async (req, res) => {
     try {
       let products = [];

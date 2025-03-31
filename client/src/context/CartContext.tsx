@@ -113,7 +113,22 @@ export const CartProvider = ({ children }: CartProviderProps) => {
       
       if (firestoreCart && firestoreCart.items) {
         console.log("Loaded cart from Firestore:", firestoreCart.items);
-        setCart(firestoreCart.items);
+        
+        // Make sure all items have the required properties
+        const validatedCart: Record<string, CartItem> = {};
+        
+        // Process each item to ensure it has all required fields
+        Object.entries(firestoreCart.items).forEach(([id, item]) => {
+          validatedCart[id] = {
+            productId: item.productId,
+            name: item.name || 'Unknown Product',
+            price: item.price || 0,
+            quantity: item.quantity || 1,
+            image: item.image || '',
+          };
+        });
+        
+        setCart(validatedCart);
       } else {
         // No cart exists in Firestore yet, use the local cart
         loadLocalCart();

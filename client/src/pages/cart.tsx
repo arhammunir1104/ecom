@@ -20,7 +20,16 @@ const Cart = () => {
   // Fetch product details for all cart items
   const cartItemIds = Object.keys(cart).map(id => Number(id));
   const productQueries = useQuery<Product[]>({
-    queryKey: ["/api/products"],
+    queryKey: ["/api/products/cart", cartItemIds],
+    queryFn: async () => {
+      // Make a specific request to get only the products in the cart
+      if (cartItemIds.length === 0) return [];
+      const queryParams = new URLSearchParams();
+      cartItemIds.forEach(id => queryParams.append('ids', id.toString()));
+      const response = await fetch(`/api/products/cart?${queryParams.toString()}`);
+      if (!response.ok) throw new Error('Failed to fetch cart products');
+      return response.json();
+    },
     enabled: cartItemIds.length > 0,
   });
 
