@@ -6,6 +6,7 @@ import { z } from "zod";
 import Stripe from "stripe";
 import { verifyRecaptcha } from "./utils/recaptcha";
 import { setupTwoFactor, verifyToken } from "./utils/twoFactor";
+import * as firebaseAdmin from "./utils/firebase";
 
 // Augment the Express Request type to include the user property
 declare global {
@@ -472,26 +473,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/categories", async (req, res) => {
     try {
       try {
-        // Check Firebase environment variables before importing
-        if (process.env.VITE_FIREBASE_PROJECT_ID && process.env.VITE_FIREBASE_API_KEY) {
-          // Import Firebase function
-          const { getAllCategories } = await import("../client/src/lib/firebaseService");
-          console.log("Attempting to fetch categories from Firebase");
+        // Try to use server-side Firebase utils
+        console.log("Attempting to fetch categories from Firebase");
+        
+        // Get all categories from Firestore 'categories' collection
+        const firebaseCategories = await firebaseAdmin.getAllDocuments('categories');
+        
+        if (firebaseCategories && firebaseCategories.length > 0) {
+          // Transform the Firebase data to match our API format
+          const formattedCategories = firebaseCategories.map(category => ({
+            id: parseInt(category.id),
+            name: category.name,
+            description: category.description || '',
+            image: category.image || null,
+            featured: category.featured || false
+          }));
           
-          // Try to get categories from Firebase
-          const firebaseCategories = await getAllCategories();
-          
-          console.log(`Fetched ${firebaseCategories.length} categories from Firebase`);
-          return res.json(firebaseCategories);
+          console.log(`Fetched ${formattedCategories.length} categories from Firebase`);
+          return res.json(formattedCategories);
         } else {
-          throw new Error("Missing required Firebase environment variables");
+          console.log("No categories found in Firebase");
         }
       } catch (firebaseError) {
         console.error("Firebase categories fetch error:", firebaseError);
         console.log("Falling back to database storage");
       }
       
-      // If we got here, there was an error with Firebase
+      // If we got here, there was an error with Firebase or no categories found
       const categories = await storage.getAllCategories();
       console.log(`Fetched ${categories.length} categories from database`);
       res.json(categories);
@@ -504,26 +512,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/categories/featured", async (req, res) => {
     try {
       try {
-        // Check Firebase environment variables before importing
-        if (process.env.VITE_FIREBASE_PROJECT_ID && process.env.VITE_FIREBASE_API_KEY) {
-          // Import Firebase function
-          const { getFeaturedCategories } = await import("../client/src/lib/firebaseService");
-          console.log("Attempting to fetch featured categories from Firebase");
+        // Try to use server-side Firebase utils
+        console.log("Attempting to fetch featured categories from Firebase");
+        
+        // Attempt to query featured categories
+        const firebaseCategories = await firebaseAdmin.queryDocuments('categories', 'featured', '==', true);
+        
+        if (firebaseCategories && firebaseCategories.length > 0) {
+          // Transform the Firebase data to match our API format
+          const formattedCategories = firebaseCategories.map(category => ({
+            id: parseInt(category.id),
+            name: category.name,
+            description: category.description || '',
+            image: category.image || null,
+            featured: true
+          }));
           
-          // Try to get featured categories from Firebase
-          const firebaseCategories = await getFeaturedCategories();
-          
-          console.log(`Fetched ${firebaseCategories.length} featured categories from Firebase`);
-          return res.json(firebaseCategories);
+          console.log(`Fetched ${formattedCategories.length} featured categories from Firebase`);
+          return res.json(formattedCategories);
         } else {
-          throw new Error("Missing required Firebase environment variables");
+          console.log("No featured categories found in Firebase");
         }
       } catch (firebaseError) {
         console.error("Firebase featured categories fetch error:", firebaseError);
         console.log("Falling back to database storage");
       }
       
-      // If we got here, there was an error with Firebase
+      // If we got here, there was an error with Firebase or no featured categories found
       const categories = await storage.getFeaturedCategories();
       console.log(`Fetched ${categories.length} featured categories from database`);
       res.json(categories);
@@ -586,23 +601,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       try {
-        // Import Firebase function
-        const { createCategory } = await import("../client/src/lib/firebaseService");
+        // Attempt to use server-side Firebase utils
         console.log("Attempting to create category in Firebase");
         
-        // Prepare the category data with proper type handling
         const categoryData = {
           name: validation.data.name,
           description: validation.data.description || "",
           image: validation.data.image || undefined,
-          featured: !!validation.data.featured
+          featured: !!validation.data.featured,
+          id: Date.now(), // Generate a numeric ID (timestamp)
+          createdAt: new Date(),
+          updatedAt: new Date()
         };
         
-        // Try to create the category in Firebase
-        const firebaseCategory = await createCategory(categoryData);
+        // Try to create the category in Firestore
+        const firebaseCategory = await firebaseAdmin.createDocument('categories', categoryData, categoryData.id.toString());
         
-        console.log("Category created successfully in Firebase:", firebaseCategory);
-        return res.status(201).json(firebaseCategory);
+        if (firebaseCategory) {
+          console.log("Category created successfully in Firebase:", firebaseCategory);
+          return res.status(201).json({
+            id: parseInt(firebaseCategory.id),
+            name: firebaseCategory.name,
+            description: firebaseCategory.description,
+            image: firebaseCategory.image,
+            featured: firebaseCategory.featured
+          });
+        }
       } catch (firebaseError) {
         console.error("Error creating category in Firebase:", firebaseError);
         console.log("Falling back to database storage");

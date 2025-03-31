@@ -3,10 +3,10 @@ import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChang
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 
-// Firebase configuration - use fallback values for development if env vars aren't available
-const projectId = import.meta.env.VITE_FIREBASE_PROJECT_ID || "soft-girl-fashion";
-const apiKey = import.meta.env.VITE_FIREBASE_API_KEY || "dummy-api-key";
-const appId = import.meta.env.VITE_FIREBASE_APP_ID || "1:dummy:app:id";
+// Firebase configuration - get environment variables correctly
+const projectId = import.meta.env.VITE_FIREBASE_PROJECT_ID;
+const apiKey = import.meta.env.VITE_FIREBASE_API_KEY;
+const appId = import.meta.env.VITE_FIREBASE_APP_ID;
 
 // Log Firebase configuration for debugging
 console.log("Firebase Config - Project ID:", projectId);
