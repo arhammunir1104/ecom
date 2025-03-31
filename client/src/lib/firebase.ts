@@ -21,6 +21,11 @@ console.log("Firebase Config - App ID available:", !!firebaseConfig.appId);
 // Initialize Firebase - handle hot module reloading by checking if app already exists
 const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 
+// Function to get the Firebase app instance (for server-side use)
+export const getFirebaseApp = () => {
+  return getApps().length ? getApp() : initializeApp(firebaseConfig);
+};
+
 // Initialize Firebase services
 export const auth = getAuth(app);
 export const db = getFirestore(app);

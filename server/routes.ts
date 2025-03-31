@@ -7,6 +7,10 @@ import Stripe from "stripe";
 import { verifyRecaptcha } from "./utils/recaptcha";
 import { setupTwoFactor, verifyToken } from "./utils/twoFactor";
 import * as firebaseAdmin from "./utils/firebase";
+import firebaseApp from "../client/src/lib/firebase";
+import * as firebaseAuth from "firebase/auth";
+import * as firebaseFirestore from "firebase/firestore";
+import * as firebaseService from "../client/src/lib/firebaseService";
 
 // Augment the Express Request type to include the user property
 declare global {
@@ -211,6 +215,64 @@ const isAdmin = async (req: Request, res: Response, next: Function) => {
   next();
 };
 
+// Helper functions for Firebase Auth
+const getFirebaseAuth = () => {
+  try {
+    const { getAuth } = require("firebase/auth");
+    const app = require("../client/src/lib/firebase").default;
+    return getAuth(app);
+  } catch (error) {
+    console.error("Error initializing Firebase Auth:", error);
+    return null;
+  }
+};
+
+const createFirebaseUser = async (email: string, password: string) => {
+  try {
+    const { createUserWithEmailAndPassword } = require("firebase/auth");
+    const auth = getFirebaseAuth();
+    if (!auth) return null;
+    
+    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+    return userCredential?.user || null;
+  } catch (error: any) {
+    console.error("Error creating Firebase user:", error.code, error.message);
+    return null;
+  }
+};
+
+const signInWithFirebase = async (email: string, password: string) => {
+  try {
+    const { signInWithEmailAndPassword } = require("firebase/auth");
+    const auth = getFirebaseAuth();
+    if (!auth) return null;
+    
+    const userCredential = await signInWithEmailAndPassword(auth, email, password);
+    return userCredential?.user || null;
+  } catch (error: any) {
+    console.error("Error signing in with Firebase:", error.code, error.message);
+    return null;
+  }
+};
+
+const createFirestoreUser = async (uid: string, userData: any) => {
+  try {
+    const { getFirestore, collection, doc, setDoc } = require("firebase/firestore");
+    const app = require("../client/src/lib/firebase").default;
+    const db = getFirestore(app);
+    
+    await setDoc(doc(collection(db, "users"), uid), {
+      ...userData,
+      uid,
+      createdAt: new Date()
+    });
+    return true;
+  } catch (error) {
+    console.error("Error creating Firestore user:", error);
+    return false;
+  }
+};
+
 export async function registerRoutes(app: Express): Promise<Server> {
   // Auth routes
   app.post("/api/auth/login", async (req, res) => {
@@ -253,9 +315,54 @@ export async function registerRoutes(app: Express): Promise<Server> {
         user = await storage.updateUser(user.id, { firebaseUid });
       }
       
-      // If not using Firebase authentication, check password
-      if (!firebaseUid && (!user || user.password !== password)) {
-        return res.status(401).json({ message: "Invalid credentials" });
+      // If not using Firebase authentication directly (no Firebase UID provided), 
+      // we need to authenticate via Firebase Auth ourselves
+      if (!firebaseUid) {
+        console.log("Attempting to authenticate with Firebase using email/password");
+        
+        // Try to sign in with Firebase
+        const firebaseUser = await signInWithFirebase(email, password);
+        
+        if (firebaseUser) {
+          // Successfully signed in with Firebase
+          console.log(`Successfully authenticated with Firebase: ${firebaseUser.uid}`);
+          
+          // If we don't have a user record yet, or it doesn't have the Firebase UID, update it
+          if (!user) {
+            console.log(`User not found in database, creating new record with Firebase UID: ${firebaseUser.uid}`);
+            user = await storage.createUser({
+              username: email.split('@')[0],
+              email: email,
+              password: password,
+              fullName: null,
+              role: "user",
+              firebaseUid: firebaseUser.uid
+            });
+            
+            // Create user in Firestore as well
+            await createFirestoreUser(firebaseUser.uid, {
+              email: email,
+              username: email.split('@')[0],
+              role: "user",
+              twoFactorEnabled: false
+            });
+            
+          } else if (!user.firebaseUid) {
+            // Update existing user with Firebase UID
+            console.log(`Updating existing user ${user.id} with Firebase UID: ${firebaseUser.uid}`);
+            user = await storage.updateUser(user.id, { 
+              firebaseUid: firebaseUser.uid 
+            });
+          }
+        } else {
+          // Firebase Auth failed, check our local database as a fallback
+          if (!user || user.password !== password) {
+            return res.status(401).json({ 
+              message: "Invalid credentials",
+              details: "Email or password is incorrect" 
+            });
+          }
+        }
       }
       
       // If user still not found, create them if we have a Firebase UID
@@ -457,6 +564,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (firebaseUid) {
         newUserData.firebaseUid = firebaseUid;
         console.log(`Creating new user with Firebase UID: ${firebaseUid}`);
+      } else {
+        // No Firebase UID provided, so create a Firebase Auth account
+        console.log("Creating user in Firebase Authentication:", email);
+        
+        const userPassword = userData?.password || "temporaryPassword";
+        console.log(`Attempting to create Firebase Auth account for: ${email}`);
+        
+        // Create user in Firebase Authentication
+        const firebaseUser = await createFirebaseUser(email, userPassword);
+        
+        if (firebaseUser) {
+          // Add the Firebase UID to our database record
+          newUserData.firebaseUid = firebaseUser.uid;
+          console.log(`Created Firebase Auth user with UID: ${firebaseUser.uid}`);
+          
+          // Create user in Firestore as well
+          const firestoreResult = await createFirestoreUser(firebaseUser.uid, {
+            email: email,
+            username: newUserData.username,
+            fullName: newUserData.fullName,
+            role: "user",
+            createdAt: new Date(),
+            twoFactorEnabled: false
+          });
+          
+          if (firestoreResult) {
+            console.log(`Created user document in Firestore: ${firebaseUser.uid}`);
+          }
+        } else {
+          console.log("No Firebase user created, continuing with database-only user");
+        }
       }
       
       const user = await storage.createUser(newUserData);
@@ -693,12 +831,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       try {
-        // Import Firebase function
-        const { getCategoryById } = await import("../client/src/lib/firebaseService");
+        // Use the imported firebaseService
         console.log(`Attempting to fetch category ${id} from Firebase`);
         
         // Try to get category from Firebase
-        const firebaseCategory = await getCategoryById(id);
+        const firebaseCategory = await firebaseService.getCategoryById(id);
         
         if (firebaseCategory) {
           console.log(`Category ${id} found in Firebase`);
@@ -798,8 +935,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       try {
-        // Import Firebase function
-        const { updateCategory } = await import("../client/src/lib/firebaseService");
+        // Use the imported firebaseService
         console.log(`Attempting to update category ${id} in Firebase`);
         
         // Prepare the category data with proper type handling
@@ -812,7 +948,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if ('featured' in validation.data) categoryData.featured = !!validation.data.featured;
         
         // Try to update the category in Firebase
-        const firebaseCategory = await updateCategory(id, categoryData);
+        const firebaseCategory = await firebaseService.updateCategory(id, categoryData);
         
         if (firebaseCategory) {
           console.log(`Category ${id} updated successfully in Firebase:`, firebaseCategory);
@@ -852,12 +988,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log(`Attempting to delete category ${id}`);
       
       try {
-        // Import Firebase function
-        const { deleteCategory } = await import("../client/src/lib/firebaseService");
+        // Use the imported firebaseService
         console.log(`Attempting to delete category ${id} from Firebase`);
         
         // Try to delete from Firebase
-        const success = await deleteCategory(id);
+        const success = await firebaseService.deleteCategory(id);
         
         if (success) {
           console.log(`Category ${id} deleted successfully from Firebase`);
@@ -1034,12 +1169,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       try {
-        // Import Firebase function
-        const { getProductById } = await import("../client/src/lib/firebaseService");
+        // Use the imported firebaseService
         console.log(`Attempting to fetch product ${id} from Firebase`);
         
         // Try to get product from Firebase
-        const firebaseProduct = await getProductById(id);
+        const firebaseProduct = await firebaseService.getProductById(id);
         
         if (firebaseProduct) {
           console.log(`Product ${id} found in Firebase`);
@@ -1079,8 +1213,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       try {
-        // Import Firebase function
-        const { createProduct } = await import("../client/src/lib/firebaseService");
+        // Use the imported firebaseService
         console.log("Attempting to create product in Firebase");
         
         // Prepare the product data with proper type handling
@@ -1099,7 +1232,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         };
         
         // Try to create the product in Firebase
-        const firebaseProduct = await createProduct(productData);
+        const firebaseProduct = await firebaseService.createProduct(productData);
         
         console.log("Product created successfully in Firebase:", firebaseProduct);
         return res.status(201).json(firebaseProduct);
@@ -1136,8 +1269,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       try {
-        // Import Firebase function
-        const { updateProduct } = await import("../client/src/lib/firebaseService");
+        // Use the imported firebaseService
         console.log(`Attempting to update product ${id} in Firebase`);
         
         // Prepare the product data with proper type handling
@@ -1157,7 +1289,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if ('trending' in validation.data) productData.trending = !!validation.data.trending;
         
         // Try to update the product in Firebase
-        const firebaseProduct = await updateProduct(id, productData);
+        const firebaseProduct = await firebaseService.updateProduct(id, productData);
         
         if (firebaseProduct) {
           console.log(`Product ${id} updated successfully in Firebase:`, firebaseProduct);
@@ -1197,12 +1329,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log(`Attempting to delete product ${id}`);
       
       try {
-        // Import Firebase function
-        const { deleteProduct } = await import("../client/src/lib/firebaseService");
+        // Use the imported firebaseService
         console.log(`Attempting to delete product ${id} from Firebase`);
         
         // Try to delete from Firebase
-        const success = await deleteProduct(id);
+        const success = await firebaseService.deleteProduct(id);
         
         if (success) {
           console.log(`Product ${id} deleted successfully from Firebase`);
