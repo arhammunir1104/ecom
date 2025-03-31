@@ -3,22 +3,29 @@ import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChang
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 
-// Firebase configuration
-const projectId = import.meta.env.VITE_FIREBASE_PROJECT_ID;
+// Firebase configuration - use fallback values for development if env vars aren't available
+const projectId = import.meta.env.VITE_FIREBASE_PROJECT_ID || "soft-girl-fashion";
+const apiKey = import.meta.env.VITE_FIREBASE_API_KEY || "dummy-api-key";
+const appId = import.meta.env.VITE_FIREBASE_APP_ID || "1:dummy:app:id";
+
+// Log Firebase configuration for debugging
+console.log("Firebase Config - Project ID:", projectId);
+console.log("Firebase Config - API Key available:", !!apiKey);
+console.log("Firebase Config - App ID available:", !!appId);
 
 // Check if we have the required Firebase environment variables
-if (!projectId || !import.meta.env.VITE_FIREBASE_API_KEY || !import.meta.env.VITE_FIREBASE_APP_ID) {
+if (!projectId || !apiKey || !appId) {
   console.warn("Missing required Firebase configuration environment variables!");
 }
 
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  apiKey: apiKey,
   // Generate authDomain from projectId if not provided
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || `${projectId}.firebaseapp.com`,
   projectId: projectId,
   storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || `${projectId}.appspot.com`,
   messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID
+  appId: appId
 };
 
 // Initialize Firebase

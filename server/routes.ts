@@ -472,15 +472,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/categories", async (req, res) => {
     try {
       try {
-        // Import Firebase function
-        const { getAllCategories } = await import("../client/src/lib/firebaseService");
-        console.log("Attempting to fetch categories from Firebase");
-        
-        // Try to get categories from Firebase
-        const firebaseCategories = await getAllCategories();
-        
-        console.log(`Fetched ${firebaseCategories.length} categories from Firebase`);
-        return res.json(firebaseCategories);
+        // Check Firebase environment variables before importing
+        if (process.env.VITE_FIREBASE_PROJECT_ID && process.env.VITE_FIREBASE_API_KEY) {
+          // Import Firebase function
+          const { getAllCategories } = await import("../client/src/lib/firebaseService");
+          console.log("Attempting to fetch categories from Firebase");
+          
+          // Try to get categories from Firebase
+          const firebaseCategories = await getAllCategories();
+          
+          console.log(`Fetched ${firebaseCategories.length} categories from Firebase`);
+          return res.json(firebaseCategories);
+        } else {
+          throw new Error("Missing required Firebase environment variables");
+        }
       } catch (firebaseError) {
         console.error("Firebase categories fetch error:", firebaseError);
         console.log("Falling back to database storage");
@@ -499,15 +504,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/categories/featured", async (req, res) => {
     try {
       try {
-        // Import Firebase function
-        const { getFeaturedCategories } = await import("../client/src/lib/firebaseService");
-        console.log("Attempting to fetch featured categories from Firebase");
-        
-        // Try to get featured categories from Firebase
-        const firebaseCategories = await getFeaturedCategories();
-        
-        console.log(`Fetched ${firebaseCategories.length} featured categories from Firebase`);
-        return res.json(firebaseCategories);
+        // Check Firebase environment variables before importing
+        if (process.env.VITE_FIREBASE_PROJECT_ID && process.env.VITE_FIREBASE_API_KEY) {
+          // Import Firebase function
+          const { getFeaturedCategories } = await import("../client/src/lib/firebaseService");
+          console.log("Attempting to fetch featured categories from Firebase");
+          
+          // Try to get featured categories from Firebase
+          const firebaseCategories = await getFeaturedCategories();
+          
+          console.log(`Fetched ${firebaseCategories.length} featured categories from Firebase`);
+          return res.json(firebaseCategories);
+        } else {
+          throw new Error("Missing required Firebase environment variables");
+        }
       } catch (firebaseError) {
         console.error("Firebase featured categories fetch error:", firebaseError);
         console.log("Falling back to database storage");
@@ -732,30 +742,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log("Product API request with params:", req.query);
       
       try {
-        // Import Firebase functions
-        const firebaseService = await import("../client/src/lib/firebaseService");
-        console.log("Imported Firebase service for products");
-        
-        // Fetch base products based on primary filter from Firebase
-        if (category) {
-          const categoryId = Number(category);
-          if (isNaN(categoryId)) {
-            return res.status(400).json({ message: "Invalid category ID" });
+        // Check Firebase environment variables before importing
+        if (process.env.VITE_FIREBASE_PROJECT_ID && process.env.VITE_FIREBASE_API_KEY) {
+          // Import Firebase functions
+          const firebaseService = await import("../client/src/lib/firebaseService");
+          console.log("Imported Firebase service for products");
+          
+          // Fetch base products based on primary filter from Firebase
+          if (category) {
+            const categoryId = Number(category);
+            if (isNaN(categoryId)) {
+              return res.status(400).json({ message: "Invalid category ID" });
+            }
+            console.log(`Fetching products for category ${categoryId} from Firebase`);
+            products = await firebaseService.getProductsByCategory(categoryId);
+          } else if (featured === 'true') {
+            console.log("Fetching featured products from Firebase");
+            products = await firebaseService.getFeaturedProducts();
+          } else if (trending === 'true') {
+            console.log("Fetching trending products from Firebase");
+            products = await firebaseService.getTrendingProducts();
+          } else {
+            console.log("Fetching all products from Firebase");
+            products = await firebaseService.getAllProducts();
           }
-          console.log(`Fetching products for category ${categoryId} from Firebase`);
-          products = await firebaseService.getProductsByCategory(categoryId);
-        } else if (featured === 'true') {
-          console.log("Fetching featured products from Firebase");
-          products = await firebaseService.getFeaturedProducts();
-        } else if (trending === 'true') {
-          console.log("Fetching trending products from Firebase");
-          products = await firebaseService.getTrendingProducts();
+          
+          console.log(`Retrieved ${products.length} products from Firebase`);
         } else {
-          console.log("Fetching all products from Firebase");
-          products = await firebaseService.getAllProducts();
+          throw new Error("Missing required Firebase environment variables");
         }
-        
-        console.log(`Retrieved ${products.length} products from Firebase`);
       } catch (firebaseError) {
         // Log the error but continue with local storage
         console.error("Firebase products fetch error:", firebaseError);
