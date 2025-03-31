@@ -37,7 +37,13 @@ const ProductCard = ({ product }: ProductCardProps) => {
   const handleAddToCart = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    addToCart(id);
+    // Pass the full product object with required fields
+    addToCart({
+      id,
+      name,
+      price,
+      image: imageUrl
+    });
   };
   
   const [, setLocation] = useLocation();

@@ -613,7 +613,7 @@ export const addToCart = async (
         name: product.name,
         price: product.price,
         quantity,
-        image: product.image,
+        image: product.image || "",  // Ensure image is never undefined
         ...options
       };
     }
