@@ -97,7 +97,7 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
         </ScrollArea>
       </aside>
 
-      {/* Mobile sidebar */}
+      {/* Mobile sidebar with trigger */}
       <Sheet open={isMobileOpen} onOpenChange={setIsMobileOpen}>
         <SheetContent side="left" className="lg:hidden">
           <ScrollArea className="flex h-full flex-col py-4">
@@ -111,12 +111,15 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
       {/* Main content */}
       <div className="flex flex-col w-full">
         <header className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b bg-background px-4 sm:px-6 lg:px-8">
-          <SheetTrigger asChild className="lg:hidden">
-            <Button variant="outline" size="icon" onClick={() => setIsMobileOpen(true)}>
-              <Menu className="h-5 w-5" />
-              <span className="sr-only">Toggle Menu</span>
-            </Button>
-          </SheetTrigger>
+          <Button 
+            variant="outline" 
+            size="icon" 
+            className="lg:hidden"
+            onClick={() => setIsMobileOpen(true)}
+          >
+            <Menu className="h-5 w-5" />
+            <span className="sr-only">Toggle Menu</span>
+          </Button>
           <div className="flex-1">
             <h1 className="text-xl font-semibold">Feminine Elegance Admin</h1>
           </div>
