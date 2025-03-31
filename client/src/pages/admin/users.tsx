@@ -22,12 +22,25 @@ import {
 } from "@/components/ui/pagination";
 import { Loader2, Search } from "lucide-react";
 
+// Define User type for TypeScript
+interface User {
+  id: number;
+  username: string;
+  email: string;
+  fullName: string | null;
+  photoURL: string | null;
+  role: string;
+  createdAt: string;
+  firebaseUid: string | null;
+  twoFactorEnabled: boolean;
+}
+
 export default function AdminUsers() {
   const { isAdmin, isAuthenticated } = useAuth();
   const [, navigate] = useLocation();
   const [searchQuery, setSearchQuery] = useState("");
   const [page, setPage] = useState(1);
-  const [roleFilter, setRoleFilter] = useState("");
+  const [roleFilter, setRoleFilter] = useState("all");
   
   // Redirect if not admin
   useEffect(() => {
@@ -37,13 +50,13 @@ export default function AdminUsers() {
   }, [isAdmin, isAuthenticated, navigate]);
   
   // Fetch users
-  const { data: users, isLoading } = useQuery({
+  const { data: users = [], isLoading } = useQuery<User[]>({
     queryKey: ["/api/admin/users"],
     enabled: isAdmin && isAuthenticated,
   });
   
   // Filter users
-  const filteredUsers = users?.filter(user => {
+  const filteredUsers = users.filter(user => {
     let match = true;
     
     if (searchQuery) {
@@ -57,7 +70,7 @@ export default function AdminUsers() {
     }
     
     return match;
-  }) || [];
+  });
   
   // Items per page
   const itemsPerPage = 10;
@@ -81,6 +94,26 @@ export default function AdminUsers() {
     setSearchQuery("");
     setRoleFilter("all");
     setPage(1);
+  };
+  
+  // Create a custom pagination component
+  const CustomPaginationLink = ({ 
+    isActive, 
+    children, 
+    onClick, 
+  }: { 
+    isActive?: boolean; 
+    children: React.ReactNode; 
+    onClick: () => void; 
+  }) => {
+    return (
+      <PaginationLink 
+        isActive={isActive} 
+        onClick={onClick}
+      >
+        {children}
+      </PaginationLink>
+    );
   };
   
   return (
@@ -142,27 +175,27 @@ export default function AdminUsers() {
                 <Pagination>
                   <PaginationContent>
                     <PaginationItem>
-                      <PaginationPrevious
-                        onClick={() => setPage(prev => Math.max(prev - 1, 1))}
-                        disabled={page === 1}
+                      <PaginationPrevious 
+                        onClick={() => page > 1 && setPage(page - 1)}
+                        className={page <= 1 ? "pointer-events-none opacity-50" : ""}
                       />
                     </PaginationItem>
                     
                     {Array.from({ length: totalPages }).map((_, i) => (
                       <PaginationItem key={i}>
-                        <PaginationLink
+                        <CustomPaginationLink
                           isActive={page === i + 1}
                           onClick={() => setPage(i + 1)}
                         >
                           {i + 1}
-                        </PaginationLink>
+                        </CustomPaginationLink>
                       </PaginationItem>
                     ))}
                     
                     <PaginationItem>
-                      <PaginationNext
-                        onClick={() => setPage(prev => Math.min(prev + 1, totalPages))}
-                        disabled={page === totalPages}
+                      <PaginationNext 
+                        onClick={() => page < totalPages && setPage(page + 1)}
+                        className={page >= totalPages ? "pointer-events-none opacity-50" : ""}
                       />
                     </PaginationItem>
                   </PaginationContent>

@@ -1141,6 +1141,120 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: "Server error" });
     }
   });
+  
+  // Get all users for admin panel
+  app.get("/api/admin/users", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      // Get users from the database
+      const dbUsers = await storage.getAllUsers();
+      
+      // Filter out sensitive information
+      const users = dbUsers.map(user => {
+        const { password, twoFactorSecret, ...userWithoutSensitiveInfo } = user;
+        return userWithoutSensitiveInfo;
+      });
+      
+      res.json(users);
+    } catch (error) {
+      console.error("Get admin users error:", error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+  
+  // Update user role (promote or demote admin)
+  app.put("/api/admin/users/:id/role", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const userId = Number(req.params.id);
+      const { role } = req.body;
+      
+      if (!userId || isNaN(userId)) {
+        return res.status(400).json({ message: "Valid user ID is required" });
+      }
+      
+      if (role !== "admin" && role !== "user") {
+        return res.status(400).json({ message: "Valid role is required (admin or user)" });
+      }
+      
+      // Get the user from database
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      // Update the user role in the database
+      const updatedUser = await storage.updateUser(userId, { role });
+      if (!updatedUser) {
+        return res.status(500).json({ message: "Failed to update user role" });
+      }
+      
+      // Update role in Firebase if we have a Firebase UID
+      if (user.firebaseUid) {
+        try {
+          // We need to use a Firebase Admin SDK, for now we'll add a placeholder for future implementation
+          console.log(`Firebase role update would happen here for user ${user.firebaseUid}`);
+          
+          // The actual implementation would import admin SDK and update custom claims
+          // const admin = require('firebase-admin');
+          // await admin.auth().setCustomUserClaims(user.firebaseUid, { role });
+        } catch (firebaseError) {
+          console.error("Firebase role update error:", firebaseError);
+          // Continue anyway as we've already updated the database
+        }
+      }
+      
+      const { password, twoFactorSecret, ...userWithoutPassword } = updatedUser;
+      res.json(userWithoutPassword);
+    } catch (error) {
+      console.error("Update user role error:", error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+  
+  // Get user details including orders, cart, wishlist
+  app.get("/api/admin/users/:id/details", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const userId = Number(req.params.id);
+      
+      if (!userId || isNaN(userId)) {
+        return res.status(400).json({ message: "Valid user ID is required" });
+      }
+      
+      // Get the user from database
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      // Get user's orders
+      const orders = await storage.getUserOrders(userId);
+      
+      // Calculate total spent
+      const totalSpent = orders.reduce((sum, order) => sum + order.totalAmount, 0);
+      
+      // Get wishlist items (if implemented)
+      let wishlistItems = [];
+      if (user.wishlistItems && Array.isArray(user.wishlistItems)) {
+        wishlistItems = user.wishlistItems;
+      }
+      
+      // Don't return sensitive information
+      const { password, twoFactorSecret, ...userWithoutPassword } = user;
+      
+      res.json({
+        user: userWithoutPassword,
+        orders,
+        wishlistItems,
+        stats: {
+          totalSpent,
+          totalOrders: orders.length,
+          totalWishlistItems: wishlistItems.length
+        }
+      });
+    } catch (error) {
+      console.error("Get user details error:", error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
 
   // Two-factor authentication routes
   // Resend 2FA verification code
