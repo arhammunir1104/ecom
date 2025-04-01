@@ -2090,6 +2090,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = Number(req.params.id);
       const { role } = req.body;
       
+      console.log(`Updating role for user ID ${userId} to ${role}`);
+      
       if (!userId || isNaN(userId)) {
         return res.status(400).json({ message: "Valid user ID is required" });
       }
@@ -2110,31 +2112,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(500).json({ message: "Failed to update user role" });
       }
       
-      // Update role in Firebase if we have a Firebase UID
-      if (user.firebaseUid) {
-        try {
-          // Import the Firebase Admin SDK function to update role
-          const { updateUserRole } = await import('./utils/firebaseAdmin');
-          
-          // Update the user's role in Firebase Firestore and Auth
-          const success = await updateUserRole(user.firebaseUid, role as 'admin' | 'user');
-          
-          if (success) {
-            console.log(`Firebase role updated successfully for user ${user.firebaseUid}`);
-          } else {
-            console.warn(`Firebase role update failed for user ${user.firebaseUid}`);
-          }
-        } catch (firebaseError) {
-          console.error("Firebase role update error:", firebaseError);
-          // Continue anyway as we've already updated the database
-        }
-      }
+      // Skip Firebase update for now to avoid issues
+      // We'll let the client handle the update directly
+      console.log(`Skipping Firebase update on server, client will handle it`);
       
+      // Return user info without sensitive data
       const { password, twoFactorSecret, ...userWithoutPassword } = updatedUser;
-      res.json(userWithoutPassword);
+      console.log(`Role update successful, returning response`);
+      return res.json(userWithoutPassword);
     } catch (error) {
       console.error("Update user role error:", error);
-      res.status(500).json({ message: "Server error" });
+      return res.status(500).json({ message: "Server error", error: String(error) });
     }
   });
   

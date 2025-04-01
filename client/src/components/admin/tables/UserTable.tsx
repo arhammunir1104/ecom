@@ -26,13 +26,31 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { User, ShoppingBag, Mail, MoreHorizontal, ShieldCheck, Shield, Ban, Loader2, Heart, ShoppingCart, CreditCard } from "lucide-react";
+import {
+  User,
+  ShoppingBag,
+  Mail,
+  MoreHorizontal,
+  ShieldCheck,
+  Shield,
+  Ban,
+  Loader2,
+  Heart,
+  ShoppingCart,
+  CreditCard,
+} from "lucide-react";
 import { format } from "date-fns";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 
 interface User {
@@ -57,64 +75,98 @@ const UserTable = ({ users }: UserTableProps) => {
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [showOrdersDialog, setShowOrdersDialog] = useState(false);
   const [showUserProfileDialog, setShowUserProfileDialog] = useState(false);
-  
+
   // Mutation for updating user role
   const updateRoleMutation = useMutation({
     mutationFn: async ({ userId, role }: { userId: number; role: string }) => {
-      // First get user to get Firebase UID if available
-      const userResponse = await apiRequest("GET", `/api/admin/users/${userId}`);
-      const user = await userResponse.json();
-      const firebaseUid = user?.firebaseUid;
-      
-      // Update in Express database
-      const response = await apiRequest("PUT", `/api/admin/users/${userId}/role`, { role });
-      const updatedUser = await response.json();
-      
-      // If the user has a Firebase UID, directly update in Firebase as well
-      if (firebaseUid) {
-        try {
-          console.log(`Attempting direct Firebase update for UID: ${firebaseUid}`);
-          // Dynamically import to avoid import issues
-          const firebaseModule = await import('@/lib/firebaseService');
-          
-          // Use the updateUserRole function from Firebase service
-          if (firebaseModule.updateUserRole) {
-            await firebaseModule.updateUserRole(firebaseUid, role as "admin" | "user");
-            console.log('Firebase role updated directly via client SDK');
-          }
-        } catch (firebaseError) {
-          console.error('Error updating Firebase role directly:', firebaseError);
-          // We continue since the database is already updated
+      try {
+        console.log(`Starting role update for user ID ${userId} to ${role}`);
+        
+        // First get user to get Firebase UID if available
+        const userResponse = await apiRequest(
+          "GET",
+          `/api/admin/users/${userId}`,
+        );
+        const user = await userResponse.json();
+        const firebaseUid = user?.firebaseUid;
+        
+        console.log(`Got user details, Firebase UID:`, firebaseUid || 'not available');
+        
+        // Update in Express database using fetch directly to troubleshoot
+        console.log(`Sending request to update role...`);
+        const response = await fetch(`/api/admin/users/${userId}/role`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'firebase-uid': localStorage.getItem('firebaseUid') || '',
+          },
+          body: JSON.stringify({ role })
+        });
+        
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error('Server error response:', errorText);
+          throw new Error(`Server error: ${response.status} ${response.statusText}`);
         }
+        
+        const updatedUser = await response.json();
+        console.log('Database update successful', updatedUser);
+        
+        // If the user has a Firebase UID, directly update in Firebase as well
+        if (firebaseUid) {
+          try {
+            console.log(`Attempting direct Firebase update for UID: ${firebaseUid}`);
+            // Directly import the function we need
+            const { updateUserRole } = await import("@/lib/firebaseService");
+            
+            // Use the updateUserRole function from Firebase service
+            await updateUserRole(
+              firebaseUid,
+              role as "admin" | "user",
+            );
+            console.log("Firebase role updated directly via client SDK");
+          } catch (firebaseError) {
+            console.error(
+              "Error updating Firebase role directly:",
+              firebaseError,
+            );
+            // We continue since the database is already updated
+          }
+        }
+        
+        console.log('Role update completed successfully');
+        return updatedUser;
+      } catch (error) {
+        console.error('Role update error:', error);
+        throw error;
       }
-      
-      return updatedUser;
     },
     onSuccess: () => {
       toast({
         title: "Role updated",
         description: "User role has been updated successfully",
       });
-      
+
       // Invalidate related queries
       queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
-      
+
       // If a user detail is open, refresh it as well
       if (selectedUser) {
-        queryClient.invalidateQueries({ 
-          queryKey: [`/api/admin/users/${selectedUser.id}/details`] 
+        queryClient.invalidateQueries({
+          queryKey: [`/api/admin/users/${selectedUser.id}/details`],
         });
       }
     },
     onError: (error: any) => {
       toast({
         title: "Error updating role",
-        description: error.message || "An error occurred while updating user role",
+        description:
+          error.message || "An error occurred while updating user role",
         variant: "destructive",
       });
-    }
+    },
   });
-  
+
   // Define user details interface
   interface UserDetails {
     user: User;
@@ -136,45 +188,50 @@ const UserTable = ({ users }: UserTableProps) => {
       totalWishlistItems: number;
     };
   }
-  
+
   // Fetch user details when viewing profile
-  const { data: userDetails, isLoading: isLoadingDetails } = useQuery<UserDetails>({
-    queryKey: [`/api/admin/users/${selectedUser?.id}/details`],
-    enabled: showUserProfileDialog && !!selectedUser,
-  });
-  
+  const { data: userDetails, isLoading: isLoadingDetails } =
+    useQuery<UserDetails>({
+      queryKey: [`/api/admin/users/${selectedUser?.id}/details`],
+      enabled: showUserProfileDialog && !!selectedUser,
+    });
+
   const openOrdersDialog = (user: User) => {
     setSelectedUser(user);
     setShowOrdersDialog(true);
   };
-  
+
   const openUserProfileDialog = (user: User) => {
     setSelectedUser(user);
     setShowUserProfileDialog(true);
   };
-  
+
   const handleUpdateRole = (userId: number, role: string) => {
     updateRoleMutation.mutate({ userId, role });
   };
-  
+
   const getRoleColor = (role: string) => {
     switch (role) {
       case "admin":
-        return "bg-purple text-white";
+        return "bg-purple-100 text-white";
       case "user":
         return "bg-gray-100 text-gray-800";
       default:
         return "bg-gray-100 text-gray-800";
     }
   };
-  
+
   const getInitials = (user: User) => {
     if (user.fullName) {
-      return user.fullName.split(' ').map((name: string) => name[0]).join('').toUpperCase();
+      return user.fullName
+        .split(" ")
+        .map((name: string) => name[0])
+        .join("")
+        .toUpperCase();
     }
     return user.username.substring(0, 2).toUpperCase();
   };
-  
+
   return (
     <>
       <Table>
@@ -203,23 +260,27 @@ const UserTable = ({ users }: UserTableProps) => {
                     )}
                   </Avatar>
                   <div>
-                    <div className="font-medium">{user.fullName || user.username}</div>
-                    <div className="text-sm text-muted-foreground">{user.email}</div>
+                    <div className="font-medium">
+                      {user.fullName || user.username}
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      {user.email}
+                    </div>
                   </div>
                 </div>
               </TableCell>
               <TableCell>
-                <Badge className={getRoleColor(user.role)}>
-                  {user.role}
-                </Badge>
+                <Badge className={getRoleColor(user.role)}>{user.role}</Badge>
               </TableCell>
               <TableCell>
-                {user.createdAt ? format(new Date(user.createdAt), "MMM d, yyyy") : "N/A"}
+                {user.createdAt
+                  ? format(new Date(user.createdAt), "MMM d, yyyy")
+                  : "N/A"}
               </TableCell>
               <TableCell>
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
+                <Button
+                  variant="ghost"
+                  size="sm"
                   className="text-purple"
                   onClick={() => openOrdersDialog(user)}
                 >
@@ -229,9 +290,9 @@ const UserTable = ({ users }: UserTableProps) => {
               </TableCell>
               <TableCell>
                 {/* We'll fetch this data when we open the user profile */}
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
+                <Button
+                  variant="ghost"
+                  size="sm"
                   className="text-purple"
                   onClick={() => openUserProfileDialog(user)}
                 >
@@ -249,33 +310,46 @@ const UserTable = ({ users }: UserTableProps) => {
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
                     <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                    <DropdownMenuItem onClick={() => window.location.href = `mailto:${user.email}`}>
+                    <DropdownMenuItem
+                      onClick={() =>
+                        (window.location.href = `mailto:${user.email}`)
+                      }
+                    >
                       <Mail className="mr-2 h-4 w-4" />
                       Email User
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => openUserProfileDialog(user)}>
+                    <DropdownMenuItem
+                      onClick={() => openUserProfileDialog(user)}
+                    >
                       <User className="mr-2 h-4 w-4" />
                       View Profile
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     {user.role === "user" ? (
-                      <DropdownMenuItem onClick={() => handleUpdateRole(user.id, "admin")}>
+                      <DropdownMenuItem
+                        onClick={() => handleUpdateRole(user.id, "admin")}
+                      >
                         <ShieldCheck className="mr-2 h-4 w-4" />
                         Make Admin
                       </DropdownMenuItem>
                     ) : (
-                      <DropdownMenuItem onClick={() => handleUpdateRole(user.id, "user")}>
+                      <DropdownMenuItem
+                        onClick={() => handleUpdateRole(user.id, "user")}
+                      >
                         <Shield className="mr-2 h-4 w-4" />
                         Remove Admin
                       </DropdownMenuItem>
                     )}
-                    <DropdownMenuItem 
+                    <DropdownMenuItem
                       className="text-red-600"
                       // Disabling account functionality would be implemented here
-                      onClick={() => toast({
-                        title: "Not implemented",
-                        description: "Account disabling functionality is not implemented yet",
-                      })}
+                      onClick={() =>
+                        toast({
+                          title: "Not implemented",
+                          description:
+                            "Account disabling functionality is not implemented yet",
+                        })
+                      }
                     >
                       <Ban className="mr-2 h-4 w-4" />
                       Disable Account
@@ -287,43 +361,54 @@ const UserTable = ({ users }: UserTableProps) => {
           ))}
         </TableBody>
       </Table>
-      
+
       {/* User orders dialog */}
       <Dialog open={showOrdersDialog} onOpenChange={setShowOrdersDialog}>
         <DialogContent className="max-w-3xl">
           <DialogHeader>
-            <DialogTitle>Orders for {selectedUser?.fullName || selectedUser?.username}</DialogTitle>
+            <DialogTitle>
+              Orders for {selectedUser?.fullName || selectedUser?.username}
+            </DialogTitle>
             <DialogDescription>
               View all orders placed by this user
             </DialogDescription>
           </DialogHeader>
-          
+
           {/* This would show actual order data in a real app */}
           <div className="space-y-4">
             <div className="text-center py-8 text-gray-500">
               <ShoppingBag className="mx-auto h-12 w-12 text-gray-300 mb-3" />
               <p>No orders found for this user</p>
             </div>
-            
+
             <div className="flex justify-end">
-              <Button onClick={() => setShowOrdersDialog(false)} variant="outline">
+              <Button
+                onClick={() => setShowOrdersDialog(false)}
+                variant="outline"
+              >
                 Close
               </Button>
             </div>
           </div>
         </DialogContent>
       </Dialog>
-      
+
       {/* User profile dialog */}
-      <Dialog open={showUserProfileDialog} onOpenChange={setShowUserProfileDialog}>
+      <Dialog
+        open={showUserProfileDialog}
+        onOpenChange={setShowUserProfileDialog}
+      >
         <DialogContent className="max-w-4xl">
           <DialogHeader>
-            <DialogTitle>User Profile: {selectedUser?.fullName || selectedUser?.username}</DialogTitle>
+            <DialogTitle>
+              User Profile: {selectedUser?.fullName || selectedUser?.username}
+            </DialogTitle>
             <DialogDescription>
-              Detailed information about this user's account, orders, and preferences
+              Detailed information about this user's account, orders, and
+              preferences
             </DialogDescription>
           </DialogHeader>
-          
+
           {isLoadingDetails ? (
             <div className="flex justify-center items-center py-12">
               <Loader2 className="h-8 w-8 animate-spin text-purple" />
@@ -336,7 +421,7 @@ const UserTable = ({ users }: UserTableProps) => {
                 <TabsTrigger value="wishlist">Wishlist</TabsTrigger>
                 <TabsTrigger value="cart">Cart</TabsTrigger>
               </TabsList>
-              
+
               <TabsContent value="overview" className="space-y-4">
                 <div className="flex flex-col md:flex-row gap-6">
                   <Card className="flex-1">
@@ -347,7 +432,10 @@ const UserTable = ({ users }: UserTableProps) => {
                       <div className="flex justify-start items-center space-x-4 mb-4">
                         <Avatar className="h-16 w-16">
                           {userDetails.user.photoURL ? (
-                            <AvatarImage src={userDetails.user.photoURL} alt={userDetails.user.username} />
+                            <AvatarImage
+                              src={userDetails.user.photoURL}
+                              alt={userDetails.user.username}
+                            />
                           ) : (
                             <AvatarFallback className="bg-gray-100 text-gray-500 text-xl">
                               {getInitials(userDetails.user)}
@@ -355,36 +443,58 @@ const UserTable = ({ users }: UserTableProps) => {
                           )}
                         </Avatar>
                         <div>
-                          <h3 className="text-xl font-medium">{userDetails.user.fullName || userDetails.user.username}</h3>
-                          <p className="text-sm text-muted-foreground">{userDetails.user.email}</p>
+                          <h3 className="text-xl font-medium">
+                            {userDetails.user.fullName ||
+                              userDetails.user.username}
+                          </h3>
+                          <p className="text-sm text-muted-foreground">
+                            {userDetails.user.email}
+                          </p>
                         </div>
                       </div>
-                      
+
                       <Separator />
-                      
+
                       <div className="grid grid-cols-2 gap-4 pt-2">
                         <div>
-                          <p className="text-sm text-muted-foreground">Username</p>
+                          <p className="text-sm text-muted-foreground">
+                            Username
+                          </p>
                           <p>{userDetails.user.username}</p>
                         </div>
                         <div>
                           <p className="text-sm text-muted-foreground">Role</p>
-                          <Badge className={getRoleColor(userDetails.user.role)}>
+                          <Badge
+                            className={getRoleColor(userDetails.user.role)}
+                          >
                             {userDetails.user.role}
                           </Badge>
                         </div>
                         <div>
-                          <p className="text-sm text-muted-foreground">Joined</p>
-                          <p>{userDetails.user.createdAt ? format(new Date(userDetails.user.createdAt), "PP") : "N/A"}</p>
+                          <p className="text-sm text-muted-foreground">
+                            Joined
+                          </p>
+                          <p>
+                            {userDetails.user.createdAt
+                              ? format(
+                                  new Date(userDetails.user.createdAt),
+                                  "PP",
+                                )
+                              : "N/A"}
+                          </p>
                         </div>
                         <div>
-                          <p className="text-sm text-muted-foreground">2FA Enabled</p>
-                          <p>{userDetails.user.twoFactorEnabled ? "Yes" : "No"}</p>
+                          <p className="text-sm text-muted-foreground">
+                            2FA Enabled
+                          </p>
+                          <p>
+                            {userDetails.user.twoFactorEnabled ? "Yes" : "No"}
+                          </p>
                         </div>
                       </div>
                     </CardContent>
                   </Card>
-                  
+
                   <Card className="flex-1">
                     <CardHeader>
                       <CardTitle>Shopping Activity</CardTitle>
@@ -393,21 +503,33 @@ const UserTable = ({ users }: UserTableProps) => {
                       <div className="grid grid-cols-3 gap-4">
                         <div className="flex flex-col items-center justify-center p-4 bg-gray-50 rounded-md">
                           <CreditCard className="h-8 w-8 text-purple mb-2" />
-                          <p className="text-2xl font-bold">${userDetails.stats.totalSpent.toFixed(2)}</p>
-                          <p className="text-sm text-muted-foreground">Total Spent</p>
+                          <p className="text-2xl font-bold">
+                            ${userDetails.stats.totalSpent.toFixed(2)}
+                          </p>
+                          <p className="text-sm text-muted-foreground">
+                            Total Spent
+                          </p>
                         </div>
                         <div className="flex flex-col items-center justify-center p-4 bg-gray-50 rounded-md">
                           <ShoppingBag className="h-8 w-8 text-purple mb-2" />
-                          <p className="text-2xl font-bold">{userDetails.stats.totalOrders}</p>
-                          <p className="text-sm text-muted-foreground">Orders</p>
+                          <p className="text-2xl font-bold">
+                            {userDetails.stats.totalOrders}
+                          </p>
+                          <p className="text-sm text-muted-foreground">
+                            Orders
+                          </p>
                         </div>
                         <div className="flex flex-col items-center justify-center p-4 bg-gray-50 rounded-md">
                           <Heart className="h-8 w-8 text-purple mb-2" />
-                          <p className="text-2xl font-bold">{userDetails.stats.totalWishlistItems}</p>
-                          <p className="text-sm text-muted-foreground">Wishlist Items</p>
+                          <p className="text-2xl font-bold">
+                            {userDetails.stats.totalWishlistItems}
+                          </p>
+                          <p className="text-sm text-muted-foreground">
+                            Wishlist Items
+                          </p>
                         </div>
                       </div>
-                      
+
                       <div>
                         <h4 className="font-medium mb-2">Actions</h4>
                         <div className="flex flex-wrap gap-2">
@@ -416,9 +538,11 @@ const UserTable = ({ users }: UserTableProps) => {
                             Email User
                           </Button>
                           {userDetails.user.role === "user" ? (
-                            <Button 
+                            <Button
                               size="sm"
-                              onClick={() => handleUpdateRole(userDetails.user.id, "admin")}
+                              onClick={() =>
+                                handleUpdateRole(userDetails.user.id, "admin")
+                              }
                               disabled={updateRoleMutation.isPending}
                             >
                               {updateRoleMutation.isPending ? (
@@ -429,10 +553,12 @@ const UserTable = ({ users }: UserTableProps) => {
                               Make Admin
                             </Button>
                           ) : (
-                            <Button 
-                              variant="secondary" 
+                            <Button
+                              variant="secondary"
                               size="sm"
-                              onClick={() => handleUpdateRole(userDetails.user.id, "user")}
+                              onClick={() =>
+                                handleUpdateRole(userDetails.user.id, "user")
+                              }
                               disabled={updateRoleMutation.isPending}
                             >
                               {updateRoleMutation.isPending ? (
@@ -449,7 +575,7 @@ const UserTable = ({ users }: UserTableProps) => {
                   </Card>
                 </div>
               </TabsContent>
-              
+
               <TabsContent value="orders">
                 <Card>
                   <CardHeader>
@@ -474,14 +600,24 @@ const UserTable = ({ users }: UserTableProps) => {
                           {userDetails.orders.map((order: any) => (
                             <TableRow key={order.id}>
                               <TableCell>#{order.id}</TableCell>
-                              <TableCell>{format(new Date(order.createdAt), "PP")}</TableCell>
                               <TableCell>
-                                <Badge variant={order.status === "completed" ? "default" : "outline"}>
+                                {format(new Date(order.createdAt), "PP")}
+                              </TableCell>
+                              <TableCell>
+                                <Badge
+                                  variant={
+                                    order.status === "completed"
+                                      ? "default"
+                                      : "outline"
+                                  }
+                                >
                                   {order.status}
                                 </Badge>
                               </TableCell>
                               <TableCell>{order.items.length} items</TableCell>
-                              <TableCell>${order.totalAmount.toFixed(2)}</TableCell>
+                              <TableCell>
+                                ${order.totalAmount.toFixed(2)}
+                              </TableCell>
                             </TableRow>
                           ))}
                         </TableBody>
@@ -495,22 +631,23 @@ const UserTable = ({ users }: UserTableProps) => {
                   </CardContent>
                 </Card>
               </TabsContent>
-              
+
               <TabsContent value="wishlist">
                 <Card>
                   <CardHeader>
                     <CardTitle>Wishlist</CardTitle>
-                    <CardDescription>
-                      Products saved for later
-                    </CardDescription>
+                    <CardDescription>Products saved for later</CardDescription>
                   </CardHeader>
                   <CardContent>
-                    {userDetails.wishlistItems && userDetails.wishlistItems.length > 0 ? (
+                    {userDetails.wishlistItems &&
+                    userDetails.wishlistItems.length > 0 ? (
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         {userDetails.wishlistItems.map((item: any) => (
                           <div key={item.id} className="border rounded-md p-4">
                             <h4 className="font-medium">{item.name}</h4>
-                            <p className="text-sm text-muted-foreground">${item.price.toFixed(2)}</p>
+                            <p className="text-sm text-muted-foreground">
+                              ${item.price.toFixed(2)}
+                            </p>
                           </div>
                         ))}
                       </div>
@@ -523,14 +660,12 @@ const UserTable = ({ users }: UserTableProps) => {
                   </CardContent>
                 </Card>
               </TabsContent>
-              
+
               <TabsContent value="cart">
                 <Card>
                   <CardHeader>
                     <CardTitle>Shopping Cart</CardTitle>
-                    <CardDescription>
-                      Items currently in cart
-                    </CardDescription>
+                    <CardDescription>Items currently in cart</CardDescription>
                   </CardHeader>
                   <CardContent>
                     <div className="text-center py-8 text-gray-500">
@@ -547,9 +682,12 @@ const UserTable = ({ users }: UserTableProps) => {
               <p>Failed to load user details</p>
             </div>
           )}
-          
+
           <DialogFooter>
-            <Button onClick={() => setShowUserProfileDialog(false)} variant="outline">
+            <Button
+              onClick={() => setShowUserProfileDialog(false)}
+              variant="outline"
+            >
               Close
             </Button>
           </DialogFooter>
