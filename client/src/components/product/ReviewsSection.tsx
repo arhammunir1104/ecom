@@ -11,12 +11,13 @@ import {
   SelectValue 
 } from "@/components/ui/select";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { AlertCircle, StarIcon } from "lucide-react";
+import { AlertCircle, LockIcon, StarIcon } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { 
   addProductReview, 
   getProductReviews, 
-  getUserProductReview
+  getUserProductReview,
+  hasUserPurchasedProduct
 } from "@/lib/firebaseService";
 
 // Import this type to match what's returned from Firebase
@@ -42,15 +43,20 @@ const ReviewsSection = ({ productId }: ReviewsSectionProps) => {
   const [reviews, setReviews] = useState<ProductReview[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [hasUserReviewed, setHasUserReviewed] = useState(false);
+  const [hasPurchased, setHasPurchased] = useState(false);
   const [newReview, setNewReview] = useState("");
   const [rating, setRating] = useState("5");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isCheckingPurchase, setIsCheckingPurchase] = useState(false);
   
-  // Load reviews from Firestore
+  // Load reviews from Firestore and check purchase status
   useEffect(() => {
-    const loadReviews = async () => {
+    const loadReviewsAndCheckPurchase = async () => {
       setIsLoading(true);
+      setIsCheckingPurchase(true);
+      
       try {
+        // Load reviews
         const productReviews = await getProductReviews(productId);
         setReviews(productReviews);
         
@@ -58,6 +64,10 @@ const ReviewsSection = ({ productId }: ReviewsSectionProps) => {
         if (user?.uid) {
           const userReview = await getUserProductReview(user.uid, productId);
           setHasUserReviewed(!!userReview);
+          
+          // Check if user has purchased this product
+          const purchaseVerified = await hasUserPurchasedProduct(user.uid, productId);
+          setHasPurchased(purchaseVerified);
         }
       } catch (error) {
         console.error("Error loading reviews:", error);
@@ -68,10 +78,11 @@ const ReviewsSection = ({ productId }: ReviewsSectionProps) => {
         });
       } finally {
         setIsLoading(false);
+        setIsCheckingPurchase(false);
       }
     };
     
-    loadReviews();
+    loadReviewsAndCheckPurchase();
   }, [productId, user, toast]);
 
   const handleSubmitReview = async () => {
@@ -93,6 +104,15 @@ const ReviewsSection = ({ productId }: ReviewsSectionProps) => {
       return;
     }
 
+    if (!hasPurchased) {
+      toast({
+        title: "Purchase required",
+        description: "You need to purchase this product before leaving a review",
+        variant: "destructive",
+      });
+      return;
+    }
+
     if (!newReview.trim()) {
       toast({
         title: "Review required",
@@ -107,11 +127,6 @@ const ReviewsSection = ({ productId }: ReviewsSectionProps) => {
     try {
       // Getting proper display name for the review
       const displayName = user.email?.split('@')[0] || "Anonymous User";
-      
-      // Check if user has purchased the product
-      // In a real implementation, we would fetch order history and verify purchase
-      // For now, we're marking all reviews as unverified purchases
-      const hasPurchased = false; // This would be replaced with actual purchase verification
       
       // Submit review using Firebase
       await addProductReview(user.uid, productId, {
@@ -187,12 +202,23 @@ const ReviewsSection = ({ productId }: ReviewsSectionProps) => {
       {/* Review form */}
       <div className="bg-gray-50 p-6 rounded-lg mb-8">
         <h3 className="font-medium text-lg mb-4">Write a Review</h3>
+        
+        {isAuthenticated && !isCheckingPurchase && !hasPurchased && (
+          <Alert className="mb-4 bg-amber-50 border-amber-200">
+            <AlertCircle className="h-4 w-4 text-amber-600" />
+            <AlertTitle className="text-amber-800">Purchase required</AlertTitle>
+            <AlertDescription className="text-amber-700">
+              You need to purchase this product before you can leave a review.
+            </AlertDescription>
+          </Alert>
+        )}
+        
         <div className="space-y-4">
           <div>
             <label htmlFor="rating" className="block text-sm font-medium mb-1">
               Rating
             </label>
-            <Select value={rating} onValueChange={setRating}>
+            <Select value={rating} onValueChange={setRating} disabled={!hasPurchased}>
               <SelectTrigger className="w-full">
                 <SelectValue placeholder="Select your rating" />
               </SelectTrigger>
@@ -212,15 +238,16 @@ const ReviewsSection = ({ productId }: ReviewsSectionProps) => {
             <Textarea
               id="review"
               rows={4}
-              placeholder="Share your experience with this product..."
+              placeholder={hasPurchased ? "Share your experience with this product..." : "Purchase this product to leave a review"}
               value={newReview}
               onChange={(e) => setNewReview(e.target.value)}
               className="w-full"
+              disabled={!hasPurchased}
             />
           </div>
           <Button 
             onClick={handleSubmitReview} 
-            disabled={isSubmitting || !isAuthenticated}
+            disabled={isSubmitting || !isAuthenticated || !hasPurchased}
             className="bg-purple hover:bg-purple-dark text-white"
           >
             {isSubmitting ? "Submitting..." : "Submit Review"}
@@ -228,6 +255,12 @@ const ReviewsSection = ({ productId }: ReviewsSectionProps) => {
           {!isAuthenticated && (
             <p className="text-sm text-gray-500 mt-2">
               Please log in to leave a review
+            </p>
+          )}
+          {isAuthenticated && !hasPurchased && (
+            <p className="text-sm text-gray-500 mt-2 flex items-center">
+              <LockIcon className="h-3 w-3 mr-1" />
+              You need to purchase this product to leave a review
             </p>
           )}
         </div>

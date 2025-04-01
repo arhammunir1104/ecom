@@ -2116,6 +2116,43 @@ export const getUserProductReview = async (
 };
 
 /**
+ * Check if a user has purchased a specific product
+ */
+export const hasUserPurchasedProduct = async (
+  userId: string,
+  productId: number | string
+): Promise<boolean> => {
+  try {
+    if (!userId) return false;
+    
+    // Convert productId to string for comparison
+    const productIdStr = productId.toString();
+    
+    // Get all orders for this user
+    const orders = await getUserOrders(userId);
+    
+    // Check if any order contains this product
+    for (const order of orders) {
+      if (!order.items) continue;
+      
+      // Look for the product in the order items
+      const hasPurchased = order.items.some(item => 
+        item.productId.toString() === productIdStr
+      );
+      
+      if (hasPurchased) {
+        return true;
+      }
+    }
+    
+    return false;
+  } catch (error) {
+    console.error("Error checking purchase status:", error);
+    return false;
+  }
+};
+
+/**
  * Get all reviews for a specific product
  */
 export const getProductReviews = async (

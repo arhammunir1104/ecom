@@ -92,13 +92,15 @@ const ProductInfo = ({ product, category }: ProductInfoProps) => {
           productImage = product.images[0];
         }
         
+        // Make sure to include both price and discountPrice in the wishlist item
         await addToWishlist(user.uid, {
           id,
           name,
           price,
-          discountPrice,
+          discountPrice: discountPrice || null,
           image: productImage
         });
+        
         setIsWishlisted(true);
         toast({
           title: "Added to wishlist",
