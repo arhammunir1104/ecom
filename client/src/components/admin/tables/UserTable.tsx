@@ -76,10 +76,20 @@ const UserTable = ({ users }: UserTableProps) => {
   const [showOrdersDialog, setShowOrdersDialog] = useState(false);
   const [showUserProfileDialog, setShowUserProfileDialog] = useState(false);
 
+  // State to track Firebase sync status
+  const [firebaseSyncStatus, setFirebaseSyncStatus] = useState<{
+    userId: number;
+    status: 'success' | 'warning' | 'error' | null;
+    message: string;
+  } | null>(null);
+  
   // Mutation for updating user role
   const updateRoleMutation = useMutation({
     mutationFn: async ({ userId, role }: { userId: number; role: string }) => {
       try {
+        // Reset Firebase sync status
+        setFirebaseSyncStatus(null);
+        
         // Simplified approach: use the server-side role update endpoint
         // This handles both database update and Firebase update in one call
         const response = await apiRequest("POST", "/api/direct-update-role", {
@@ -95,16 +105,43 @@ const UserTable = ({ users }: UserTableProps) => {
         }
 
         const responseData = await response.json();
+        
+        // Track Firebase sync status
+        if (responseData.firebaseSuccess === true) {
+          setFirebaseSyncStatus({
+            userId,
+            status: 'success',
+            message: 'Database and Firebase roles updated successfully'
+          });
+        } else if (responseData.firebaseSuccess === false) {
+          setFirebaseSyncStatus({
+            userId,
+            status: 'warning',
+            message: 'Database updated but Firebase sync failed. Roles may be out of sync.'
+          });
+        }
+        
         return responseData.user;
       } catch (error) {
         console.error("Role update error:", error);
+        
+        // Set error status
+        setFirebaseSyncStatus({
+          userId: userId,
+          status: 'error',
+          message: error instanceof Error ? error.message : 'Unknown error occurred'
+        });
+        
         throw error;
       }
     },
     onSuccess: () => {
       toast({
         title: "Role updated",
-        description: "User role has been updated successfully",
+        description: firebaseSyncStatus?.status === 'warning' 
+          ? "Database updated but Firebase sync failed. Roles may be out of sync." 
+          : "User role has been updated successfully",
+        variant: firebaseSyncStatus?.status === 'warning' ? "destructive" : "default"
       });
 
       // Invalidate related queries
@@ -230,7 +267,20 @@ const UserTable = ({ users }: UserTableProps) => {
                 </div>
               </TableCell>
               <TableCell>
-                <Badge className={getRoleColor(user.role)}>{user.role}</Badge>
+                <div className="flex flex-col gap-1">
+                  <Badge className={getRoleColor(user.role)}>{user.role}</Badge>
+                  {firebaseSyncStatus?.userId === user.id && (
+                    <div className={`text-xs px-2 py-0.5 rounded-full ${
+                      firebaseSyncStatus.status === 'success' ? 'bg-green-100 text-green-800' :
+                      firebaseSyncStatus.status === 'warning' ? 'bg-yellow-100 text-yellow-800' :
+                      'bg-red-100 text-red-800'
+                    }`}>
+                      {firebaseSyncStatus.status === 'success' ? 'Synced ✓' : 
+                       firebaseSyncStatus.status === 'warning' ? 'Partial sync !' : 
+                       'Sync failed ✗'}
+                    </div>
+                  )}
+                </div>
               </TableCell>
               <TableCell>
                 {user.createdAt

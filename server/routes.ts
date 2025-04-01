@@ -2244,7 +2244,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-  // Endpoint for updating user roles - handles both database and Firebase updates
+  // Main endpoint for updating user roles - handles both database and Firebase updates
   app.post("/api/direct-update-role", isAuthenticated, isAdmin, async (req, res) => {
     try {
       const { userId, role } = req.body;
@@ -2272,15 +2272,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // If user has a Firebase UID, update their role in Firebase too
+      let firebaseSuccess = false;
       if (user.firebaseUid) {
         try {
+          // First try the direct Firebase Admin SDK approach
           const { updateUserRole } = require('./utils/firebase');
           await updateUserRole(user.firebaseUid, role as "admin" | "user");
-          console.log(`Firebase role also updated successfully for UID: ${user.firebaseUid}`);
+          console.log(`Firebase role updated successfully for UID: ${user.firebaseUid}`);
+          firebaseSuccess = true;
         } catch (firebaseError) {
-          console.error("Failed to update Firebase role:", firebaseError);
-          // We continue since the database update was successful
-          // The system will eventually get back in sync through other mechanisms
+          console.error("Failed to update Firebase role using admin SDK:", firebaseError);
+          
+          // Try alternative method - using Firestore admin directly
+          try {
+            const admin = require('firebase-admin');
+            if (!admin.apps.length) {
+              // Initialize Firebase Admin if not already done
+              console.log("Initializing Firebase Admin directly");
+              admin.initializeApp({
+                credential: admin.credential.cert(require('../firebase-admin.json'))
+              });
+            }
+            
+            // Update the user document directly
+            await admin.firestore()
+              .collection('users')
+              .doc(user.firebaseUid)
+              .update({ 
+                role, 
+                updatedAt: new Date() 
+              });
+              
+            console.log(`Firebase role updated successfully using alternative method`);
+            firebaseSuccess = true;
+          } catch (altError) {
+            console.error("Failed using alternative method too:", altError);
+            // We continue since the database update was successful
+          }
         }
       }
       
@@ -2289,7 +2317,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log(`Role update successful, returning response`);
       return res.json({
         success: true,
-        user: userWithoutPassword
+        user: userWithoutPassword,
+        firebaseSuccess
       });
     } catch (error) {
       console.error("Update user role error:", error);

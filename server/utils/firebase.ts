@@ -443,7 +443,12 @@ export const updateUserRole = async (firebaseUid: string, role: "admin" | "user"
     console.log(`Updating role for user ${firebaseUid} to ${role} in Firestore`);
     
     if (!isFirebaseInitialized) {
-      throw new Error('Firebase is not initialized');
+      console.warn('Firebase is not initialized, initializing now');
+      initializeFirebase();
+      
+      if (!isFirebaseInitialized) {
+        throw new Error('Failed to initialize Firebase');
+      }
     }
     
     // First check if the user document exists
@@ -453,10 +458,22 @@ export const updateUserRole = async (firebaseUid: string, role: "admin" | "user"
     
     if (!userDoc.exists) {
       console.error(`User ${firebaseUid} not found in Firestore`);
-      throw new Error(`User not found in Firestore`);
+      
+      // If document doesn't exist, try to create it instead of failing
+      console.log(`Attempting to create user document for ${firebaseUid}`);
+      await userRef.set({
+        uid: firebaseUid,
+        role,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      });
+      
+      console.log(`Created new user document with role ${role}`);
+      return { id: firebaseUid, role };
     }
     
     // Update the role field
+    console.log(`Found existing user document, updating role to ${role}`);
     await userRef.update({
       role,
       updatedAt: new Date()
