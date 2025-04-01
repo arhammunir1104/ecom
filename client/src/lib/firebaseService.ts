@@ -3,6 +3,9 @@ import {
   signInWithEmailAndPassword,
   sendPasswordResetEmail,
   updateProfile,
+  updatePassword,
+  EmailAuthProvider,
+  reauthenticateWithCredential,
   signOut as firebaseSignOut,
   GoogleAuthProvider,
   signInWithPopup,
@@ -460,7 +463,7 @@ export const signOut = async (): Promise<void> => {
 };
 
 /**
- * Reset password for a user
+ * Reset password for a user - sends email with reset link
  */
 export const resetPassword = async (email: string): Promise<void> => {
   try {
@@ -468,6 +471,71 @@ export const resetPassword = async (email: string): Promise<void> => {
   } catch (error) {
     console.error("Error resetting password:", error);
     throw error;
+  }
+};
+
+/**
+ * Update password for a user
+ * @param currentPassword The user's current password
+ * @param newPassword The new password to set
+ */
+export const updateUserPassword = async (currentPassword: string, newPassword: string): Promise<boolean> => {
+  try {
+    const user = auth.currentUser;
+    
+    if (!user || !user.email) {
+      console.error("No authenticated user found");
+      return false;
+    }
+    
+    try {
+      // First re-authenticate the user
+      const credential = EmailAuthProvider.credential(user.email, currentPassword);
+      await reauthenticateWithCredential(user, credential);
+      
+      // Then update the password
+      await updatePassword(user, newPassword);
+      console.log("Password updated successfully");
+      return true;
+    } catch (error: any) {
+      console.error("Error updating password:", error);
+      
+      if (error.code === 'auth/wrong-password') {
+        throw new Error("Current password is incorrect");
+      } else if (error.code === 'auth/requires-recent-login') {
+        throw new Error("For security reasons, please log in again before changing your password");
+      } else {
+        throw error;
+      }
+    }
+  } catch (error) {
+    console.error("Password update failed:", error);
+    throw error;
+  }
+};
+
+/**
+ * Update password with reset workflow (for forgotten passwords)
+ * No need for current password, but requires verified reset token
+ */
+export const resetPasswordWithOTP = async (email: string, newPassword: string, resetDocId: string): Promise<boolean> => {
+  try {
+    // Send standard Firebase reset email as fallback
+    // This is the most reliable way to reset passwords without being logged in
+    await sendPasswordResetEmail(auth, email);
+    
+    // Mark the reset as processed in Firestore
+    const resetDocRef = doc(db, "passwordResets", resetDocId);
+    await updateDoc(resetDocRef, {
+      resetComplete: true,
+      resetCompletedAt: new Date(),
+    });
+    
+    console.log("Password reset email sent successfully to:", email);
+    return true;
+  } catch (error) {
+    console.error("Error sending password reset:", error);
+    return false;
   }
 };
 

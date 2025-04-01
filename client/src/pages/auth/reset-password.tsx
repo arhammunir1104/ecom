@@ -9,9 +9,11 @@ import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
 import { Link, useLocation } from "wouter";
 import { ArrowLeft, Loader2, Lock, Eye, EyeOff } from "lucide-react";
-import { getAuth, confirmPasswordReset, signInWithEmailAndPassword, sendPasswordResetEmail } from "firebase/auth";
+import { sendPasswordResetEmail } from "firebase/auth";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { auth } from "@/lib/firebase";
+import { resetPasswordWithOTP } from "@/lib/firebaseService";
 
 // Password validation schema
 const passwordSchema = z
@@ -41,7 +43,6 @@ export default function ResetPassword() {
   const [resetDocId, setResetDocId] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const auth = getAuth();
 
   const form = useForm<ResetPasswordFormValues>({
     resolver: zodResolver(passwordSchema),
@@ -147,35 +148,32 @@ export default function ResetPassword() {
           return;
         }
         
-        // For non-authenticated users we need to use the sendPasswordResetEmail flow
-        // This is more reliable when the user is not logged in
+        // Use our improved resetPasswordWithOTP function
+        const success = await resetPasswordWithOTP(
+          email,
+          values.password,
+          resetDocId
+        );
         
-        // Send a regular Firebase password reset email
-        await sendPasswordResetEmail(auth, email);
-        
-        // Mark the reset as processed
-        await updateDoc(resetDocRef, {
-          resetComplete: true,
-          resetCompletedAt: new Date(),
-          resetProcessed: true,
-          resetProcessedAt: new Date(),
-        });
-        
-        setResetComplete(true);
-        
-        toast({
-          title: "Password Reset Email Sent",
-          description: "Please check your email to complete the password reset process. Click the link in that email to set your new password.",
-          variant: "default",
-        });
-        
-        // Clear session storage
-        sessionStorage.removeItem("resetEmail");
-        sessionStorage.removeItem("resetDocId");
-        
-        // Sign out any current session to ensure the user logs in with new password
-        if (auth.currentUser) {
-          await auth.signOut();
+        if (success) {
+          setResetComplete(true);
+          
+          toast({
+            title: "Password Reset Email Sent",
+            description: "Please check your email to complete the password reset process. Click the link in that email to set your new password.",
+            variant: "default",
+          });
+          
+          // Clear session storage
+          sessionStorage.removeItem("resetEmail");
+          sessionStorage.removeItem("resetDocId");
+          
+          // Sign out any current session to ensure the user logs in with new password
+          if (auth.currentUser) {
+            await auth.signOut();
+          }
+        } else {
+          throw new Error("Failed to reset password. Please try again.");
         }
         
       } catch (authError: any) {
