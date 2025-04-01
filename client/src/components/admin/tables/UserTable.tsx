@@ -80,69 +80,21 @@ const UserTable = ({ users }: UserTableProps) => {
   const updateRoleMutation = useMutation({
     mutationFn: async ({ userId, role }: { userId: number; role: string }) => {
       try {
-        console.log(
-          `Starting direct role update for user ID ${userId} to ${role}`,
-        );
-
-        // First get user to get Firebase UID if available
-        const userResponse = await apiRequest(
-          "GET",
-          `/api/admin/users/${userId}`,
-        );
-        console.log(userResponse);
-        const user = await userResponse.json();
-        const firebaseUid = user?.firebaseUid;
-        console.log(user);
-
-        console.log(
-          `Got user details, Firebase UID:`,
-          firebaseUid || "not available",
-        );
-
-        // Switch to using POST /api/direct-update-role which we know already works
-        console.log(`Sending direct role update request with POST...`);
-        
+        // Simplified approach: use the server-side role update endpoint
+        // This handles both database update and Firebase update in one call
         const response = await apiRequest("POST", "/api/direct-update-role", {
           userId, 
-          role,
-          firebaseUid: firebaseUid || null
+          role
         });
         
-        console.log("Role update response:", response);
-        const responseData = await response.json();
-        console.log("Response data:", responseData);
-
         if (!response.ok) {
-          console.error("Server error response:", responseData);
+          const errorData = await response.json();
           throw new Error(
-            responseData.message || `Server error: ${response.status}`,
+            errorData.message || `Server error: ${response.status}`
           );
         }
 
-        console.log("Database update successful", responseData.user);
-
-        // If the user has a Firebase UID, directly update in Firebase as well
-        if (firebaseUid) {
-          try {
-            console.log(
-              `Attempting direct Firebase update for UID: ${firebaseUid}`,
-            );
-            // Directly import the function we need
-            const { updateUserRole } = await import("@/lib/firebaseService");
-
-            // Use the updateUserRole function from Firebase service
-            await updateUserRole(firebaseUid, role as "admin" | "user");
-            console.log("Firebase role updated directly via client SDK");
-          } catch (firebaseError) {
-            console.error(
-              "Error updating Firebase role directly:",
-              firebaseError,
-            );
-            // We continue since the database is already updated
-          }
-        }
-
-        console.log("Role update completed successfully");
+        const responseData = await response.json();
         return responseData.user;
       } catch (error) {
         console.error("Role update error:", error);

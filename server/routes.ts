@@ -2225,111 +2225,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Update user role (promote or demote admin)
+  // Legacy route for backward compatibility - redirects to the main role update endpoint
   app.put("/api/admin/users/:id/role", isAuthenticated, isAdmin, async (req, res) => {
     try {
       const userId = Number(req.params.id);
       const { role } = req.body;
       
-      console.log(`Updating role for user ID ${userId} to ${role}`);
+      console.log(`Redirecting legacy role update call for user ID ${userId} to main endpoint`);
       
-      if (!userId || isNaN(userId)) {
-        return res.status(400).json({ message: "Valid user ID is required" });
-      }
-      
-      if (role !== "admin" && role !== "user") {
-        return res.status(400).json({ message: "Valid role is required (admin or user)" });
-      }
-      
-      // Get the user from database
-      const user = await storage.getUser(userId);
-      if (!user) {
-        return res.status(404).json({ message: "User not found" });
-      }
-      
-      // Update the user role in the database
-      const updatedUser = await storage.updateUser(userId, { role });
-      if (!updatedUser) {
-        return res.status(500).json({ message: "Failed to update user role" });
-      }
-      
-      // Skip Firebase update for now to avoid issues
-      // We'll let the client handle the update directly
-      console.log(`Skipping Firebase update on server, client will handle it`);
-      
-      // Return user info without sensitive data
-      const { password, twoFactorSecret, ...userWithoutPassword } = updatedUser;
-      console.log(`Role update successful, returning response`);
-      return res.json(userWithoutPassword);
+      // Forward to the main role update endpoint
+      req.body.userId = userId;
+      return await new Promise((resolve) => {
+        app._router.handle(req, res, resolve);
+      });
     } catch (error) {
       console.error("Update user role error:", error);
       return res.status(500).json({ message: "Server error", error: String(error) });
     }
   });
   
-  // Direct route to update user role without middleware (for troubleshooting)
-  app.put("/api/direct/users/:userId/role", async (req, res) => {
+  // Endpoint for updating user roles - handles both database and Firebase updates
+  app.post("/api/direct-update-role", isAuthenticated, isAdmin, async (req, res) => {
     try {
-      const userId = Number(req.params.userId);
-      const { role, firebaseUid } = req.body;
+      const { userId, role } = req.body;
       
-      console.log(`[DIRECT] Updating role for user ID ${userId} to ${role}`);
-      
-      if (!userId || isNaN(userId)) {
-        return res.status(400).json({ message: "Valid user ID is required" });
-      }
-      
-      if (role !== "admin" && role !== "user") {
-        return res.status(400).json({ message: "Valid role is required (admin or user)" });
-      }
-      
-      // Get the user from database
-      const user = await storage.getUser(userId);
-      if (!user) {
-        return res.status(404).json({ message: "User not found" });
-      }
-      
-      // Update the user role in the database
-      const updatedUser = await storage.updateUser(userId, { role });
-      if (!updatedUser) {
-        return res.status(500).json({ message: "Failed to update user role" });
-      }
-      
-      // If firebaseUid is provided, also update the role in Firebase
-      if (firebaseUid) {
-        try {
-          // Try to update the Firebase role
-          const { updateUserRole } = require('./utils/firebase');
-          await updateUserRole(firebaseUid, role as "admin" | "user");
-          console.log(`[DIRECT] Firebase role also updated successfully`);
-        } catch (firebaseError) {
-          console.error("[DIRECT] Failed to update Firebase role:", firebaseError);
-          // We continue since the database update was successful
-        }
-      }
-      
-      // Return user info without sensitive data
-      const { password, twoFactorSecret, ...userWithoutPassword } = updatedUser;
-      console.log(`[DIRECT] Role update successful, returning response`);
-      return res.json({
-        success: true,
-        user: userWithoutPassword
-      });
-    } catch (error) {
-      console.error("[DIRECT] Update user role error:", error);
-      return res.status(500).json({ 
-        success: false,
-        message: "Server error", 
-        error: String(error) 
-      });
-    }
-  });
-  
-  // Simple POST endpoint for role updates that doesn't use dynamic URL parameters
-  app.post("/api/direct-update-role", async (req, res) => {
-    try {
-      const { userId, role, firebaseUid } = req.body;
-      
-      console.log(`[SIMPLE] Starting direct role update for user ID ${userId} to ${role}`);
+      console.log(`Starting role update for user ID ${userId} to ${role}`);
       
       if (!userId || isNaN(Number(userId))) {
         return res.status(400).json({ message: "Valid user ID is required" });
@@ -2348,30 +2268,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Update the user role in the database
       const updatedUser = await storage.updateUser(Number(userId), { role });
       if (!updatedUser) {
-        return res.status(500).json({ message: "Failed to update user role" });
+        return res.status(500).json({ message: "Failed to update user role in database" });
       }
       
-      // If firebaseUid is provided, also update the role in Firebase
-      if (firebaseUid) {
+      // If user has a Firebase UID, update their role in Firebase too
+      if (user.firebaseUid) {
         try {
           const { updateUserRole } = require('./utils/firebase');
-          await updateUserRole(firebaseUid, role as "admin" | "user");
-          console.log(`[SIMPLE] Firebase role also updated successfully`);
+          await updateUserRole(user.firebaseUid, role as "admin" | "user");
+          console.log(`Firebase role also updated successfully for UID: ${user.firebaseUid}`);
         } catch (firebaseError) {
-          console.error("[SIMPLE] Failed to update Firebase role:", firebaseError);
+          console.error("Failed to update Firebase role:", firebaseError);
           // We continue since the database update was successful
+          // The system will eventually get back in sync through other mechanisms
         }
       }
       
       // Return user info without sensitive data
       const { password, twoFactorSecret, ...userWithoutPassword } = updatedUser;
-      console.log(`[SIMPLE] Role update successful, returning response`);
+      console.log(`Role update successful, returning response`);
       return res.json({
         success: true,
         user: userWithoutPassword
       });
     } catch (error) {
-      console.error("[SIMPLE] Update user role error:", error);
+      console.error("Update user role error:", error);
       return res.status(500).json({ 
         success: false,
         message: "Server error", 
