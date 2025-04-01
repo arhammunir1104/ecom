@@ -84,10 +84,10 @@ const UserTable = ({ users }: UserTableProps) => {
   // State to track Firebase sync status
   const [firebaseSyncStatus, setFirebaseSyncStatus] = useState<{
     userId: number;
-    status: 'success' | 'warning' | 'error' | null;
+    status: "success" | "warning" | "error" | null;
     message: string;
   } | null>(null);
-  
+
   // Use the updateUserRole function from Firebase service directly
 
   // Mutation for updating user role
@@ -96,70 +96,83 @@ const UserTable = ({ users }: UserTableProps) => {
       try {
         // Reset Firebase sync status
         setFirebaseSyncStatus(null);
-        
+
         // Find the user to get their Firebase UID - we need this for the client-side update
-        let userFirebaseUid = '';
-        
+        let userFirebaseUid = "";
+
         // First, try to find the user's Firebase UID from the users prop we already have
-        const existingUser = users.find(u => u.id === userId);
+        const existingUser = users.find((u) => u.id === userId);
         if (existingUser && existingUser.firebaseUid) {
           userFirebaseUid = existingUser.firebaseUid;
         }
-        
-        console.log(`Updating role for user id ${userId} with Firebase UID ${userFirebaseUid}`);
-        
+
+        console.log(
+          `Updating role for user id ${userId} with Firebase UID ${userFirebaseUid}`,
+        );
+
         // 1. First, try standard server-side API to update both database and Firebase
         // This handles both database update and Firebase update in one call
         const response = await apiRequest("POST", "/api/admin/users/role", {
-          userId, 
-          role
+          userId,
+          role,
         });
-        
+
         if (!response.ok) {
           const errorData = await response.json();
           throw new Error(
-            errorData.message || `Server error: ${response.status}`
+            errorData.message || `Server error: ${response.status}`,
           );
         }
 
         const responseData = await response.json();
-        
+
         // If no Firebase UID found yet, try to get it from the response
-        if (!userFirebaseUid && responseData.user && responseData.user.firebaseUid) {
+        if (
+          !userFirebaseUid &&
+          responseData.user &&
+          responseData.user.firebaseUid
+        ) {
           userFirebaseUid = responseData.user.firebaseUid;
         }
-        
+
         // 2. If the server-side Firebase update failed but we have a Firebase UID,
         // try the client-side approach as a backup
         if (responseData.firebaseSuccess === false && userFirebaseUid) {
-          console.log(`Server-side Firebase update failed, trying client-side update for UID: ${userFirebaseUid}`);
-          
+          console.log(
+            `Server-side Firebase update failed, trying client-side update for UID: ${userFirebaseUid}`,
+          );
+
           try {
             // Use the client-side Firebase service function
             await firebaseService.updateUserRole(userFirebaseUid, role as any);
-            
+
             console.log("Client-side Firebase update succeeded");
-            
+
             // Update status to show partial success with client-side backup
             setFirebaseSyncStatus({
               userId,
-              status: 'success',
-              message: 'Role updated in database and Firebase (via client-side fallback)'
+              status: "success",
+              message:
+                "Role updated in database and Firebase (via client-side fallback)",
             });
-            
+
             // Return the updated user with an overridden firebaseSuccess flag
             return {
               ...responseData.user,
-              _firebaseSuccess: true
+              _firebaseSuccess: true,
             };
           } catch (firebaseError) {
-            console.error("Client-side Firebase update also failed:", firebaseError);
-            
+            console.error(
+              "Client-side Firebase update also failed:",
+              firebaseError,
+            );
+
             // Keep the warning status since client-side also failed
             setFirebaseSyncStatus({
               userId,
-              status: 'warning',
-              message: 'Database updated but Firebase sync failed despite backup attempts. Roles may be out of sync.'
+              status: "warning",
+              message:
+                "Database updated but Firebase sync failed despite backup attempts. Roles may be out of sync.",
             });
           }
         } else {
@@ -167,39 +180,43 @@ const UserTable = ({ users }: UserTableProps) => {
           if (responseData.firebaseSuccess === true) {
             setFirebaseSyncStatus({
               userId,
-              status: 'success',
-              message: 'Database and Firebase roles updated successfully'
+              status: "success",
+              message: "Database and Firebase roles updated successfully",
             });
           } else if (responseData.firebaseSuccess === false) {
             setFirebaseSyncStatus({
               userId,
-              status: 'warning',
-              message: 'Database updated but Firebase sync failed. Roles may be out of sync.'
+              status: "warning",
+              message:
+                "Database updated but Firebase sync failed. Roles may be out of sync.",
             });
           }
         }
-        
+
         return responseData.user;
       } catch (error) {
         console.error("Role update error:", error);
-        
+
         // Set error status
         setFirebaseSyncStatus({
           userId: userId,
-          status: 'error',
-          message: error instanceof Error ? error.message : 'Unknown error occurred'
+          status: "error",
+          message:
+            error instanceof Error ? error.message : "Unknown error occurred",
         });
-        
+
         throw error;
       }
     },
     onSuccess: () => {
       toast({
         title: "Role updated",
-        description: firebaseSyncStatus?.status === 'warning' 
-          ? "Database updated but Firebase sync failed. Roles may be out of sync." 
-          : "User role has been updated successfully",
-        variant: firebaseSyncStatus?.status === 'warning' ? "destructive" : "default"
+        description:
+          firebaseSyncStatus?.status === "warning"
+            ? "Database updated but Firebase sync failed. Roles may be out of sync."
+            : "User role has been updated successfully",
+        variant:
+          firebaseSyncStatus?.status === "warning" ? "destructive" : "default",
       });
 
       // Invalidate related queries
@@ -366,14 +383,20 @@ const UserTable = ({ users }: UserTableProps) => {
                 <div className="flex flex-col gap-1">
                   <Badge className={getRoleColor(user.role)}>{user.role}</Badge>
                   {firebaseSyncStatus?.userId === user.id && (
-                    <div className={`text-xs px-2 py-0.5 rounded-full ${
-                      firebaseSyncStatus.status === 'success' ? 'bg-green-100 text-green-800' :
-                      firebaseSyncStatus.status === 'warning' ? 'bg-yellow-100 text-yellow-800' :
-                      'bg-red-100 text-red-800'
-                    }`}>
-                      {firebaseSyncStatus.status === 'success' ? 'Synced ✓' : 
-                       firebaseSyncStatus.status === 'warning' ? 'Partial sync !' : 
-                       'Sync failed ✗'}
+                    <div
+                      className={`text-xs px-2 py-0.5 rounded-full ${
+                        firebaseSyncStatus.status === "success"
+                          ? "bg-green-100 text-green-800"
+                          : firebaseSyncStatus.status === "warning"
+                            ? "bg-yellow-100 text-yellow-800"
+                            : "bg-red-100 text-red-800"
+                      }`}
+                    >
+                      {firebaseSyncStatus.status === "success"
+                        ? "Synced ✓"
+                        : firebaseSyncStatus.status === "warning"
+                          ? "Partial sync !"
+                          : "Sync failed ✗"}
                     </div>
                   )}
                 </div>
@@ -607,13 +630,15 @@ const UserTable = ({ users }: UserTableProps) => {
                       <CardTitle>Shopping Activity</CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-8">
-                      <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
+                      <div className="grid grid-cols-2 sm:grid-cols-2 gap-4">
                         <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
                           <div className="flex items-center justify-between mb-2">
                             <div className="bg-purple-100 p-2 rounded-full">
                               <CreditCard className="h-6 w-6 text-purple-600" />
                             </div>
-                            <span className="text-xs font-medium text-gray-500 uppercase">Total Spent</span>
+                            <span className="text-xs font-medium text-gray-500 uppercase">
+                              Total Spent
+                            </span>
                           </div>
                           <div className="mt-2">
                             <p className="text-2xl md:text-3xl font-bold text-purple-700">
@@ -621,13 +646,15 @@ const UserTable = ({ users }: UserTableProps) => {
                             </p>
                           </div>
                         </div>
-                        
+
                         <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
                           <div className="flex items-center justify-between mb-2">
                             <div className="bg-green-100 p-2 rounded-full">
                               <ShoppingBag className="h-6 w-6 text-green-600" />
                             </div>
-                            <span className="text-xs font-medium text-gray-500 uppercase">Orders</span>
+                            <span className="text-xs font-medium text-gray-500 uppercase">
+                              Orders
+                            </span>
                           </div>
                           <div className="mt-2">
                             <p className="text-2xl md:text-3xl font-bold text-green-700">
@@ -635,13 +662,15 @@ const UserTable = ({ users }: UserTableProps) => {
                             </p>
                           </div>
                         </div>
-                        
+
                         <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
                           <div className="flex items-center justify-between mb-2">
                             <div className="bg-red-100 p-2 rounded-full">
                               <Heart className="h-6 w-6 text-red-600" />
                             </div>
-                            <span className="text-xs font-medium text-gray-500 uppercase">Wishlist</span>
+                            <span className="text-xs font-medium text-gray-500 uppercase">
+                              Wishlist
+                            </span>
                           </div>
                           <div className="mt-2">
                             <p className="text-2xl md:text-3xl font-bold text-red-700">
@@ -649,13 +678,15 @@ const UserTable = ({ users }: UserTableProps) => {
                             </p>
                           </div>
                         </div>
-                        
+
                         <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
                           <div className="flex items-center justify-between mb-2">
                             <div className="bg-blue-100 p-2 rounded-full">
                               <ShoppingCart className="h-6 w-6 text-blue-600" />
                             </div>
-                            <span className="text-xs font-medium text-gray-500 uppercase">Cart</span>
+                            <span className="text-xs font-medium text-gray-500 uppercase">
+                              Cart
+                            </span>
                           </div>
                           <div className="mt-2">
                             <p className="text-2xl md:text-3xl font-bold text-blue-700">
@@ -663,23 +694,31 @@ const UserTable = ({ users }: UserTableProps) => {
                             </p>
                           </div>
                         </div>
-                        
+
                         <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
                           <div className="flex items-center justify-between mb-2">
                             <div className="bg-yellow-100 p-2 rounded-full">
                               <Star className="h-6 w-6 text-yellow-600" />
                             </div>
-                            <span className="text-xs font-medium text-gray-500 uppercase">Rating</span>
+                            <span className="text-xs font-medium text-gray-500 uppercase">
+                              Rating
+                            </span>
                           </div>
                           <div className="flex items-center">
                             <p className="text-xl md:text-2xl font-bold text-yellow-700 mr-2">
-                              {userDetails.stats.averageReviewRating?.toFixed(1) || '0.0'}
+                              {userDetails.stats.averageReviewRating?.toFixed(
+                                1,
+                              ) || "0.0"}
                             </p>
                             <div className="flex text-yellow-400">
                               {Array.from({ length: 5 }).map((_, index) => (
                                 <span key={index} className="text-lg">
-                                  {index < Math.round(userDetails.stats.averageReviewRating || 0) ? 
-                                    "★" : "☆"}
+                                  {index <
+                                  Math.round(
+                                    userDetails.stats.averageReviewRating || 0,
+                                  )
+                                    ? "★"
+                                    : "☆"}
                                 </span>
                               ))}
                             </div>
@@ -755,25 +794,30 @@ const UserTable = ({ users }: UserTableProps) => {
                               <TableHead>Status</TableHead>
                               <TableHead>Products</TableHead>
                               <TableHead>Total</TableHead>
-                              <TableHead className="text-right">Actions</TableHead>
+                              <TableHead className="text-right">
+                                Actions
+                              </TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
                             {userDetails.orders.map((order: any) => (
                               <React.Fragment key={order.id}>
                                 <TableRow className="group hover:bg-gray-50">
-                                  <TableCell className="font-medium">#{order.id}</TableCell>
+                                  <TableCell className="font-medium">
+                                    #{order.id}
+                                  </TableCell>
                                   <TableCell className="whitespace-nowrap">
                                     {format(new Date(order.createdAt), "PPP")}
                                   </TableCell>
                                   <TableCell>
                                     <Badge
                                       variant={
-                                        order.status === "delivered" || order.status === "completed"
+                                        order.status === "delivered" ||
+                                        order.status === "completed"
                                           ? "default"
                                           : order.status === "cancelled"
-                                          ? "destructive"
-                                          : "outline"
+                                            ? "destructive"
+                                            : "outline"
                                       }
                                       className="capitalize"
                                     >
@@ -786,10 +830,19 @@ const UserTable = ({ users }: UserTableProps) => {
                                       {order.items.length > 0 && (
                                         <div className="flex-shrink-0 relative">
                                           <div className="h-10 w-10 rounded border overflow-hidden">
-                                            {order.items[0].images?.length > 0 || order.items[0].image ? (
-                                              <img 
-                                                src={order.items[0].images?.length > 0 ? order.items[0].images[0] : 
-                                                    Array.isArray(order.items[0].image) ? order.items[0].image[0] : order.items[0].image} 
+                                            {order.items[0].images?.length >
+                                              0 || order.items[0].image ? (
+                                              <img
+                                                src={
+                                                  order.items[0].images
+                                                    ?.length > 0
+                                                    ? order.items[0].images[0]
+                                                    : Array.isArray(
+                                                          order.items[0].image,
+                                                        )
+                                                      ? order.items[0].image[0]
+                                                      : order.items[0].image
+                                                }
                                                 alt={order.items[0].name}
                                                 className="h-full w-full object-cover"
                                               />
@@ -811,7 +864,10 @@ const UserTable = ({ users }: UserTableProps) => {
                                           {order.items[0]?.name || "Product"}
                                         </div>
                                         <div className="text-gray-500 text-xs">
-                                          {order.items.length} {order.items.length === 1 ? 'item' : 'items'}
+                                          {order.items.length}{" "}
+                                          {order.items.length === 1
+                                            ? "item"
+                                            : "items"}
                                         </div>
                                       </div>
                                     </div>
@@ -824,53 +880,86 @@ const UserTable = ({ users }: UserTableProps) => {
                                       variant="ghost"
                                       size="sm"
                                       className="h-8"
-                                      onClick={() => window.open(`/orders/${order.id}`, '_blank')}
+                                      onClick={() =>
+                                        window.open(
+                                          `/orders/${order.id}`,
+                                          "_blank",
+                                        )
+                                      }
                                     >
                                       <ExternalLink className="h-4 w-4 mr-1" />
                                       Details
                                     </Button>
                                   </TableCell>
                                 </TableRow>
-                                
+
                                 {/* Expandable product list for this order */}
                                 <TableRow className="bg-gray-50/50 hover:bg-gray-50/80 group-hover:table-row hidden">
                                   <TableCell colSpan={6} className="p-2">
                                     <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                                      {order.items.map((item: any, idx: number) => (
-                                        <div key={idx} className="flex items-center space-x-2 p-2 rounded border bg-white">
-                                          <div className="w-12 h-12 flex-shrink-0 rounded overflow-hidden">
-                                            {item.images?.length > 0 || item.image ? (
-                                              <img 
-                                                src={item.images?.length > 0 ? item.images[0] : 
-                                                    Array.isArray(item.image) ? item.image[0] : item.image} 
-                                                alt={item.name}
-                                                className="h-full w-full object-cover"
-                                              />
-                                            ) : (
-                                              <div className="h-full w-full bg-gray-100 flex items-center justify-center">
-                                                <ImageIcon className="h-5 w-5 text-gray-400" />
+                                      {order.items.map(
+                                        (item: any, idx: number) => (
+                                          <div
+                                            key={idx}
+                                            className="flex items-center space-x-2 p-2 rounded border bg-white"
+                                          >
+                                            <div className="w-12 h-12 flex-shrink-0 rounded overflow-hidden">
+                                              {item.images?.length > 0 ||
+                                              item.image ? (
+                                                <img
+                                                  src={
+                                                    item.images?.length > 0
+                                                      ? item.images[0]
+                                                      : Array.isArray(
+                                                            item.image,
+                                                          )
+                                                        ? item.image[0]
+                                                        : item.image
+                                                  }
+                                                  alt={item.name}
+                                                  className="h-full w-full object-cover"
+                                                />
+                                              ) : (
+                                                <div className="h-full w-full bg-gray-100 flex items-center justify-center">
+                                                  <ImageIcon className="h-5 w-5 text-gray-400" />
+                                                </div>
+                                              )}
+                                            </div>
+                                            <div className="flex-grow min-w-0">
+                                              <h4 className="font-medium text-sm line-clamp-1">
+                                                {item.name}
+                                              </h4>
+                                              <div className="flex justify-between text-xs text-gray-500">
+                                                <span>
+                                                  $
+                                                  {typeof item.price ===
+                                                  "number"
+                                                    ? item.price.toFixed(2)
+                                                    : "0.00"}
+                                                </span>
+                                                <span>
+                                                  Qty: {item.quantity || 1}
+                                                </span>
                                               </div>
+                                            </div>
+                                            {item.productId && (
+                                              <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="h-8 w-8 flex-shrink-0"
+                                                onClick={() =>
+                                                  window.open(
+                                                    `/product/${item.productId}`,
+                                                    "_blank",
+                                                  )
+                                                }
+                                              >
+                                                <ExternalLink className="h-4 w-4" />
+                                              </Button>
                                             )}
                                           </div>
-                                          <div className="flex-grow min-w-0">
-                                            <h4 className="font-medium text-sm line-clamp-1">{item.name}</h4>
-                                            <div className="flex justify-between text-xs text-gray-500">
-                                              <span>${typeof item.price === 'number' ? item.price.toFixed(2) : '0.00'}</span>
-                                              <span>Qty: {item.quantity || 1}</span>
-                                            </div>
-                                          </div>
-                                          {item.productId && (
-                                            <Button 
-                                              variant="ghost" 
-                                              size="icon"
-                                              className="h-8 w-8 flex-shrink-0"
-                                              onClick={() => window.open(`/product/${item.productId}`, '_blank')}
-                                            >
-                                              <ExternalLink className="h-4 w-4" />
-                                            </Button>
-                                          )}
-                                        </div>
-                                      ))}
+                                        ),
+                                      )}
                                     </div>
                                   </TableCell>
                                 </TableRow>
@@ -900,13 +989,21 @@ const UserTable = ({ users }: UserTableProps) => {
                     userDetails.wishlistItems.length > 0 ? (
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         {userDetails.wishlistItems.map((item: any) => (
-                          <div key={item.id} className="border rounded-md p-4 flex flex-col gap-2">
+                          <div
+                            key={item.id}
+                            className="border rounded-md p-4 flex flex-col gap-2"
+                          >
                             {/* Product Image */}
                             {item.images?.length > 0 || item.image ? (
                               <div className="aspect-square overflow-hidden rounded-md">
-                                <img 
-                                  src={item.images?.length > 0 ? item.images[0] : 
-                                       Array.isArray(item.image) ? item.image[0] : item.image} 
+                                <img
+                                  src={
+                                    item.images?.length > 0
+                                      ? item.images[0]
+                                      : Array.isArray(item.image)
+                                        ? item.image[0]
+                                        : item.image
+                                  }
                                   alt={item.name}
                                   className="h-full w-full object-cover"
                                 />
@@ -916,19 +1013,26 @@ const UserTable = ({ users }: UserTableProps) => {
                                 <ImageIcon className="h-10 w-10 text-gray-400" />
                               </div>
                             )}
-                            
+
                             {/* Product Name with Link */}
                             <div>
-                              <h4 className="font-medium line-clamp-2">{item.name}</h4>
+                              <h4 className="font-medium line-clamp-2">
+                                {item.name}
+                              </h4>
                               <div className="flex justify-between items-center mt-1">
                                 <p className="text-sm font-medium">
-                                  ${typeof item.price === 'number' ? item.price.toFixed(2) : '0.00'}
+                                  $
+                                  {typeof item.price === "number"
+                                    ? item.price.toFixed(2)
+                                    : "0.00"}
                                 </p>
-                                <Button 
-                                  variant="ghost" 
-                                  size="sm" 
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
                                   className="h-8 px-2"
-                                  onClick={() => window.open(`/product/${item.id}`, '_blank')}
+                                  onClick={() =>
+                                    window.open(`/product/${item.id}`, "_blank")
+                                  }
                                 >
                                   <ExternalLink className="h-4 w-4 mr-1" />
                                   View
@@ -955,51 +1059,72 @@ const UserTable = ({ users }: UserTableProps) => {
                     <CardDescription>Items currently in cart</CardDescription>
                   </CardHeader>
                   <CardContent>
-                    {userDetails.cartItems && userDetails.cartItems.length > 0 ? (
+                    {userDetails.cartItems &&
+                    userDetails.cartItems.length > 0 ? (
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {userDetails.cartItems.map((item: any, index: number) => (
-                          <div key={index} className="border rounded-md p-4 flex flex-col gap-2">
-                            {/* Product Image */}
-                            {item.images?.length > 0 || item.image ? (
-                              <div className="aspect-square overflow-hidden rounded-md">
-                                <img 
-                                  src={item.images?.length > 0 ? item.images[0] : 
-                                       Array.isArray(item.image) ? item.image[0] : item.image} 
-                                  alt={item.name}
-                                  className="h-full w-full object-cover"
-                                />
-                              </div>
-                            ) : (
-                              <div className="aspect-square bg-gray-100 rounded-md flex items-center justify-center">
-                                <ImageIcon className="h-10 w-10 text-gray-400" />
-                              </div>
-                            )}
-                            
-                            {/* Product Details */}
-                            <div>
-                              <h4 className="font-medium line-clamp-2">{item.name}</h4>
-                              <div className="flex justify-between items-center mt-1">
-                                <div className="flex flex-col">
-                                  <p className="text-sm font-medium">
-                                    ${typeof item.price === 'number' ? item.price.toFixed(2) : '0.00'}
-                                  </p>
-                                  <p className="text-xs text-muted-foreground">
-                                    Qty: {item.quantity || 1}
-                                  </p>
+                        {userDetails.cartItems.map(
+                          (item: any, index: number) => (
+                            <div
+                              key={index}
+                              className="border rounded-md p-4 flex flex-col gap-2"
+                            >
+                              {/* Product Image */}
+                              {item.images?.length > 0 || item.image ? (
+                                <div className="aspect-square overflow-hidden rounded-md">
+                                  <img
+                                    src={
+                                      item.images?.length > 0
+                                        ? item.images[0]
+                                        : Array.isArray(item.image)
+                                          ? item.image[0]
+                                          : item.image
+                                    }
+                                    alt={item.name}
+                                    className="h-full w-full object-cover"
+                                  />
                                 </div>
-                                <Button 
-                                  variant="ghost" 
-                                  size="sm" 
-                                  className="h-8 px-2"
-                                  onClick={() => window.open(`/product/${item.id}`, '_blank')}
-                                >
-                                  <ExternalLink className="h-4 w-4 mr-1" />
-                                  View
-                                </Button>
+                              ) : (
+                                <div className="aspect-square bg-gray-100 rounded-md flex items-center justify-center">
+                                  <ImageIcon className="h-10 w-10 text-gray-400" />
+                                </div>
+                              )}
+
+                              {/* Product Details */}
+                              <div>
+                                <h4 className="font-medium line-clamp-2">
+                                  {item.name}
+                                </h4>
+                                <div className="flex justify-between items-center mt-1">
+                                  <div className="flex flex-col">
+                                    <p className="text-sm font-medium">
+                                      $
+                                      {typeof item.price === "number"
+                                        ? item.price.toFixed(2)
+                                        : "0.00"}
+                                    </p>
+                                    <p className="text-xs text-muted-foreground">
+                                      Qty: {item.quantity || 1}
+                                    </p>
+                                  </div>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-8 px-2"
+                                    onClick={() =>
+                                      window.open(
+                                        `/product/${item.id}`,
+                                        "_blank",
+                                      )
+                                    }
+                                  >
+                                    <ExternalLink className="h-4 w-4 mr-1" />
+                                    View
+                                  </Button>
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        ))}
+                          ),
+                        )}
                       </div>
                     ) : (
                       <div className="text-center py-8 text-gray-500">
@@ -1010,18 +1135,18 @@ const UserTable = ({ users }: UserTableProps) => {
                   </CardContent>
                 </Card>
               </TabsContent>
-              
+
               <TabsContent value="analytics">
                 <div className="space-y-4">
                   <Card>
                     <CardHeader>
                       <CardTitle>Purchase Analytics</CardTitle>
                       <CardDescription>
-                        Analysis of user purchase behavior
+                        Analysis of user purchase behavior (from order history)
                       </CardDescription>
                     </CardHeader>
                     <CardContent>
-                      {userDetails.analytics ? (
+                      {userDetails.orders && userDetails.orders.length > 0 ? (
                         <div className="space-y-6">
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                             <div className="bg-gray-50 p-4 rounded-lg">
@@ -1029,8 +1154,7 @@ const UserTable = ({ users }: UserTableProps) => {
                                 Average Order Value
                               </h4>
                               <p className="text-2xl font-semibold">
-                                ${userDetails.analytics.averageOrderValue ? 
-                                  userDetails.analytics.averageOrderValue.toFixed(2) : '0.00'}
+                                ${(userDetails.stats.totalSpent / userDetails.orders.length).toFixed(2)}
                               </p>
                             </div>
                             <div className="bg-gray-50 p-4 rounded-lg">
@@ -1038,7 +1162,8 @@ const UserTable = ({ users }: UserTableProps) => {
                                 Total Items Purchased
                               </h4>
                               <p className="text-2xl font-semibold">
-                                {userDetails.analytics.totalItemsPurchased || 0}
+                                {userDetails.orders.reduce((total, order) => 
+                                  total + order.items.reduce((sum, item) => sum + (item.quantity || 1), 0), 0)}
                               </p>
                             </div>
                             <div className="bg-gray-50 p-4 rounded-lg">
@@ -1046,66 +1171,140 @@ const UserTable = ({ users }: UserTableProps) => {
                                 Last Purchase
                               </h4>
                               <p className="text-lg font-semibold">
-                                {userDetails.analytics.lastPurchaseDate ? 
-                                  format(new Date(userDetails.analytics.lastPurchaseDate), "PPP") : 'Never'}
+                                {format(new Date(userDetails.orders[0].createdAt), "PPP")}
                               </p>
                             </div>
                           </div>
-                          
-                          {userDetails.analytics.mostPurchasedProducts && 
-                            userDetails.analytics.mostPurchasedProducts.length > 0 && (
-                            <div>
-                              <h4 className="font-medium mb-2">Most Purchased Products</h4>
-                              <Table>
-                                <TableHeader>
-                                  <TableRow>
-                                    <TableHead>Product</TableHead>
-                                    <TableHead>Quantity</TableHead>
-                                    <TableHead>Total Spent</TableHead>
-                                  </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                  {userDetails.analytics.mostPurchasedProducts.slice(0, 5).map((product: any) => (
-                                    <TableRow key={product.id}>
-                                      <TableCell>{product.name}</TableCell>
-                                      <TableCell>{product.count}</TableCell>
-                                      <TableCell>${typeof product.totalSpent === 'number' ? product.totalSpent.toFixed(2) : '0.00'}</TableCell>
+
+                          {/* Process order history data for product purchases */}
+                          {(() => {
+                            // Group orders by product
+                            const products = new Map();
+                            
+                            userDetails.orders.forEach(order => {
+                              order.items.forEach(item => {
+                                const id = item.id || item.productId;
+                                if (!id) return;
+                                
+                                if (!products.has(id)) {
+                                  products.set(id, {
+                                    id: id,
+                                    name: item.name || `Product #${id}`,
+                                    count: 0,
+                                    totalSpent: 0
+                                  });
+                                }
+                                
+                                const product = products.get(id);
+                                const quantity = item.quantity || 1;
+                                product.count += quantity;
+                                product.totalSpent += (item.price || 0) * quantity;
+                              });
+                            });
+                            
+                            // Convert to array and sort
+                            const productList = Array.from(products.values())
+                              .sort((a, b) => b.count - a.count);
+                              
+                            if (productList.length === 0) return null;
+                            
+                            return (
+                              <div>
+                                <h4 className="font-medium mb-2">
+                                  Most Purchased Products
+                                </h4>
+                                <Table>
+                                  <TableHeader>
+                                    <TableRow>
+                                      <TableHead>Product</TableHead>
+                                      <TableHead>Quantity</TableHead>
+                                      <TableHead>Total Spent</TableHead>
                                     </TableRow>
-                                  ))}
-                                </TableBody>
-                              </Table>
-                            </div>
-                          )}
-                          
-                          {userDetails.analytics.productCategories && 
-                            userDetails.analytics.productCategories.length > 0 && (
-                            <div>
-                              <h4 className="font-medium mb-2">Category Preferences</h4>
-                              <Table>
-                                <TableHeader>
-                                  <TableRow>
-                                    <TableHead>Category</TableHead>
-                                    <TableHead>Items Purchased</TableHead>
-                                    <TableHead>Total Spent</TableHead>
-                                  </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                  {userDetails.analytics.productCategories.slice(0, 5).map((category: any) => (
-                                    <TableRow key={category.id}>
-                                      <TableCell>{category.name}</TableCell>
-                                      <TableCell>{category.count}</TableCell>
-                                      <TableCell>${typeof category.totalSpent === 'number' ? category.totalSpent.toFixed(2) : '0.00'}</TableCell>
+                                  </TableHeader>
+                                  <TableBody>
+                                    {productList.slice(0, 5).map((product: any) => (
+                                      <TableRow key={product.id}>
+                                        <TableCell>{product.name}</TableCell>
+                                        <TableCell>{product.count}</TableCell>
+                                        <TableCell>
+                                          ${product.totalSpent.toFixed(2)}
+                                        </TableCell>
+                                      </TableRow>
+                                    ))}
+                                  </TableBody>
+                                </Table>
+                              </div>
+                            );
+                          })()}
+
+                          {/* Process order history data for category preferences */}
+                          {(() => {
+                            // Group orders by category
+                            const categories = new Map();
+                            
+                            userDetails.orders.forEach(order => {
+                              order.items.forEach(item => {
+                                const categoryId = item.categoryId;
+                                if (!categoryId) return;
+                                
+                                const categoryName = item.categoryName || `Category #${categoryId}`;
+                                
+                                if (!categories.has(categoryId)) {
+                                  categories.set(categoryId, {
+                                    id: categoryId,
+                                    name: categoryName,
+                                    count: 0,
+                                    totalSpent: 0
+                                  });
+                                }
+                                
+                                const category = categories.get(categoryId);
+                                const quantity = item.quantity || 1;
+                                category.count += quantity;
+                                category.totalSpent += (item.price || 0) * quantity;
+                              });
+                            });
+                            
+                            // Convert to array and sort
+                            const categoryList = Array.from(categories.values())
+                              .sort((a, b) => b.count - a.count);
+                              
+                            if (categoryList.length === 0) return null;
+                            
+                            return (
+                              <div>
+                                <h4 className="font-medium mb-2">
+                                  Preferred Categories
+                                </h4>
+                                <Table>
+                                  <TableHeader>
+                                    <TableRow>
+                                      <TableHead>Category</TableHead>
+                                      <TableHead>Items</TableHead>
+                                      <TableHead>Total Spent</TableHead>
                                     </TableRow>
-                                  ))}
-                                </TableBody>
-                              </Table>
-                            </div>
-                          )}
+                                  </TableHeader>
+                                  <TableBody>
+                                    {categoryList.slice(0, 5).map((category: any) => (
+                                      <TableRow key={category.id}>
+                                        <TableCell>{category.name}</TableCell>
+                                        <TableCell>{category.count}</TableCell>
+                                        <TableCell>
+                                          ${category.totalSpent.toFixed(2)}
+                                        </TableCell>
+                                      </TableRow>
+                                    ))}
+                                  </TableBody>
+                                </Table>
+                              </div>
+                            );
+                          })()}
                         </div>
                       ) : (
                         <div className="text-center py-8 text-gray-500">
                           <BarChart className="mx-auto h-12 w-12 text-gray-300 mb-3" />
-                          <p>No analytics data available</p>
+                          <p>No order history available</p>
+                          <p className="text-sm text-muted-foreground mt-1">Analytics are generated from the user's order history</p>
                         </div>
                       )}
                     </CardContent>
