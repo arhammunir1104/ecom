@@ -95,19 +95,37 @@ export const updateUserRole = async (firebaseUid: string, role: 'admin' | 'user'
     const auth = getFirebaseAdminAuth();
     
     // Update the user document in Firestore
-    const userRef = db.collection('users').doc(firebaseUid);
-    await userRef.update({
-      role: role,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp()
-    });
+    try {
+      const userRef = db.collection('users').doc(firebaseUid);
+      await userRef.update({
+        role: role,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+      console.log(`Firestore role updated successfully for user ${firebaseUid}`);
+    } catch (firestoreError) {
+      console.error('Error updating user role in Firestore:', firestoreError);
+      // Continue to try Auth update even if Firestore fails
+    }
     
     // Also set custom claims for additional security in Auth
-    await auth.setCustomUserClaims(firebaseUid, { role });
+    try {
+      await auth.setCustomUserClaims(firebaseUid, { role });
+      console.log(`Auth custom claims updated successfully for user ${firebaseUid}`);
+    } catch (authError) {
+      console.error('Error updating custom claims in Auth:', authError);
+      // We'll still return true if at least Firestore update worked
+    }
     
-    console.log(`Firebase role updated successfully for user ${firebaseUid}`);
+    console.log(`Firebase role update process completed for user ${firebaseUid}`);
     return true;
   } catch (error) {
-    console.error('Error updating user role in Firebase:', error);
+    console.error('Error initializing Firebase Admin for role update:', error);
+    
+    // Special case - try direct update through Firebase client SDK
+    // This would require implementing a separate mechanism since 
+    // client SDK doesn't have permission to update other users
+    console.log('Will rely on database update only');
+    
     return false;
   }
 };

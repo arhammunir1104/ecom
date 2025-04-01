@@ -61,8 +61,34 @@ const UserTable = ({ users }: UserTableProps) => {
   // Mutation for updating user role
   const updateRoleMutation = useMutation({
     mutationFn: async ({ userId, role }: { userId: number; role: string }) => {
+      // First get user to get Firebase UID if available
+      const userResponse = await apiRequest("GET", `/api/admin/users/${userId}`);
+      const user = await userResponse.json();
+      const firebaseUid = user?.firebaseUid;
+      
+      // Update in Express database
       const response = await apiRequest("PUT", `/api/admin/users/${userId}/role`, { role });
-      return response.json();
+      const updatedUser = await response.json();
+      
+      // If the user has a Firebase UID, directly update in Firebase as well
+      if (firebaseUid) {
+        try {
+          console.log(`Attempting direct Firebase update for UID: ${firebaseUid}`);
+          // Dynamically import to avoid import issues
+          const firebaseModule = await import('@/lib/firebaseService');
+          
+          // Use the updateUserRole function from Firebase service
+          if (firebaseModule.updateUserRole) {
+            await firebaseModule.updateUserRole(firebaseUid, role as "admin" | "user");
+            console.log('Firebase role updated directly via client SDK');
+          }
+        } catch (firebaseError) {
+          console.error('Error updating Firebase role directly:', firebaseError);
+          // We continue since the database is already updated
+        }
+      }
+      
+      return updatedUser;
     },
     onSuccess: () => {
       toast({
