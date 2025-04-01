@@ -2113,12 +2113,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Update role in Firebase if we have a Firebase UID
       if (user.firebaseUid) {
         try {
-          // We need to use a Firebase Admin SDK, for now we'll add a placeholder for future implementation
-          console.log(`Firebase role update would happen here for user ${user.firebaseUid}`);
+          // Import the Firebase Admin SDK function to update role
+          const { updateUserRole } = await import('./utils/firebaseAdmin');
           
-          // The actual implementation would import admin SDK and update custom claims
-          // const admin = require('firebase-admin');
-          // await admin.auth().setCustomUserClaims(user.firebaseUid, { role });
+          // Update the user's role in Firebase Firestore and Auth
+          const success = await updateUserRole(user.firebaseUid, role as 'admin' | 'user');
+          
+          if (success) {
+            console.log(`Firebase role updated successfully for user ${user.firebaseUid}`);
+          } else {
+            console.warn(`Firebase role update failed for user ${user.firebaseUid}`);
+          }
         } catch (firebaseError) {
           console.error("Firebase role update error:", firebaseError);
           // Continue anyway as we've already updated the database

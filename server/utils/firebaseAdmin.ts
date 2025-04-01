@@ -1,5 +1,6 @@
 import * as admin from 'firebase-admin';
 import { getAuth } from 'firebase-admin/auth';
+import { getFirestore } from 'firebase-admin/firestore';
 
 // Track if Firebase Admin is already initialized
 let isInitialized = false;
@@ -77,6 +78,36 @@ export const resetUserPassword = async (email: string, newPassword: string): Pro
     return true;
   } catch (error) {
     console.error('Error resetting password:', error);
+    return false;
+  }
+};
+
+/**
+ * Update a user's role in Firebase Firestore and Auth custom claims
+ */
+export const updateUserRole = async (firebaseUid: string, role: 'admin' | 'user'): Promise<boolean> => {
+  try {
+    console.log(`Admin SDK: Updating Firebase role for user ${firebaseUid} to ${role}`);
+    
+    // Initialize Firebase Admin
+    const app = initializeFirebaseAdmin();
+    const db = getFirestore(app);
+    const auth = getFirebaseAdminAuth();
+    
+    // Update the user document in Firestore
+    const userRef = db.collection('users').doc(firebaseUid);
+    await userRef.update({
+      role: role,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+    
+    // Also set custom claims for additional security in Auth
+    await auth.setCustomUserClaims(firebaseUid, { role });
+    
+    console.log(`Firebase role updated successfully for user ${firebaseUid}`);
+    return true;
+  } catch (error) {
+    console.error('Error updating user role in Firebase:', error);
     return false;
   }
 };
