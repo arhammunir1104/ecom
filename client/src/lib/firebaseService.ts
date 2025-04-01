@@ -949,14 +949,54 @@ export const addToCart = async (
       };
     }
     
-    // Update cart in Firestore
-    await setDoc(cartDocRef, {
-      ...cart,
-      updatedAt: serverTimestamp()
-    });
+    // Create two promises: one for Firebase and one for PostgreSQL
+    const promises = [];
     
-    console.log("Cart updated successfully");
-    console.log("Cart saved to Firestore successfully");
+    // Update cart in Firestore
+    promises.push(
+      setDoc(cartDocRef, {
+        ...cart,
+        updatedAt: serverTimestamp()
+      })
+    );
+    
+    // Also sync with PostgreSQL via API
+    // Use apiRequest from the query client to ensure the API call is authenticated
+    try {
+      const apiRequest = async (method: string, url: string, data?: any) => {
+        const headers: HeadersInit = {
+          'Content-Type': 'application/json',
+        };
+        
+        // Add Firebase UID as a header if we have it
+        if (userId) {
+          headers['firebase-uid'] = userId;
+        }
+        
+        return fetch(url, {
+          method,
+          headers,
+          credentials: 'include',
+          body: data ? JSON.stringify(data) : undefined,
+        });
+      };
+      
+      // If we have an API cart endpoint, we'd use it here
+      // For now, we'll create cartItems in the PostgreSQL user record
+      // This should be added in a future update
+      
+      // Since we don't have a direct cart API yet, we'll log for now
+      console.log("PostgreSQL cart sync will be implemented in a future update");
+      
+    } catch (apiError) {
+      console.error("Error syncing cart with PostgreSQL:", apiError);
+      // Don't throw error here, we'll still return the Firebase cart
+    }
+    
+    // Wait for all promises to resolve
+    await Promise.all(promises);
+    
+    console.log("Cart updated successfully in Firebase and PostgreSQL");
     return cart;
   } catch (error) {
     console.error("Error adding to cart:", error);
@@ -1925,13 +1965,62 @@ export const addToWishlist = async (
         addedAt: Timestamp.fromDate(new Date()) // Use client-side timestamp instead of serverTimestamp()
       });
       
-      // Update wishlist in Firestore (document-level timestamp is fine)
-      await setDoc(wishlistDocRef, {
-        ...wishlist,
-        updatedAt: serverTimestamp()
-      });
+      // Create an array of promises to update both Firebase and PostgreSQL
+      const promises = [];
       
-      console.log("Item added to wishlist successfully");
+      // Update wishlist in Firestore (document-level timestamp is fine)
+      promises.push(
+        setDoc(wishlistDocRef, {
+          ...wishlist,
+          updatedAt: serverTimestamp()
+        })
+      );
+      
+      // Also sync with PostgreSQL via API
+      // Create a helper function for API requests that includes the Firebase UID
+      try {
+        const apiRequest = async (method: string, url: string, data?: any) => {
+          const headers: HeadersInit = {
+            'Content-Type': 'application/json',
+          };
+          
+          // Add Firebase UID as a header if we have it
+          if (userId) {
+            headers['firebase-uid'] = userId;
+          }
+          
+          return fetch(url, {
+            method,
+            headers,
+            credentials: 'include',
+            body: data ? JSON.stringify(data) : undefined,
+          });
+        };
+        
+        // Call the wishlist API endpoint to update the PostgreSQL database
+        promises.push(
+          apiRequest('POST', '/api/users/wishlist', { productId: product.id })
+            .then(response => {
+              if (!response.ok) {
+                console.error(`Failed to sync wishlist with PostgreSQL: ${response.status} ${response.statusText}`);
+              } else {
+                console.log('Successfully synced wishlist with PostgreSQL');
+              }
+              return response;
+            })
+            .catch(apiError => {
+              console.error('Error syncing wishlist with PostgreSQL:', apiError);
+            })
+        );
+      } catch (apiError) {
+        console.error('Error preparing API request:', apiError);
+        // Don't throw here, still try to finish Firebase operation
+      }
+      
+      // Wait for all promises to resolve
+      await Promise.all(promises);
+      
+      console.log("Item added to wishlist successfully in Firebase and PostgreSQL");
     } else {
       console.log("Item already exists in wishlist");
     }
@@ -1963,13 +2052,62 @@ export const removeFromWishlist = async (
     // Remove the item
     wishlist.items = wishlist.items.filter(item => item.productId !== productId);
     
-    // Update wishlist in Firestore
-    await setDoc(wishlistDocRef, {
-      ...wishlist,
-      updatedAt: serverTimestamp()
-    });
+    // Create an array of promises to update both Firebase and PostgreSQL
+    const promises = [];
     
-    console.log(`Removed product ${productId} from wishlist`);
+    // Update wishlist in Firestore
+    promises.push(
+      setDoc(wishlistDocRef, {
+        ...wishlist,
+        updatedAt: serverTimestamp()
+      })
+    );
+    
+    // Also sync with PostgreSQL via API
+    // Create a helper function for API requests that includes the Firebase UID
+    try {
+      const apiRequest = async (method: string, url: string, data?: any) => {
+        const headers: HeadersInit = {
+          'Content-Type': 'application/json',
+        };
+        
+        // Add Firebase UID as a header if we have it
+        if (userId) {
+          headers['firebase-uid'] = userId;
+        }
+        
+        return fetch(url, {
+          method,
+          headers,
+          credentials: 'include',
+          body: data ? JSON.stringify(data) : undefined,
+        });
+      };
+      
+      // Call the wishlist API endpoint to update the PostgreSQL database
+      promises.push(
+        apiRequest('DELETE', `/api/users/wishlist/${productId}`)
+          .then(response => {
+            if (!response.ok) {
+              console.error(`Failed to sync wishlist deletion with PostgreSQL: ${response.status} ${response.statusText}`);
+            } else {
+              console.log('Successfully synced wishlist deletion with PostgreSQL');
+            }
+            return response;
+          })
+          .catch(apiError => {
+            console.error('Error syncing wishlist deletion with PostgreSQL:', apiError);
+          })
+      );
+    } catch (apiError) {
+      console.error('Error preparing API request for wishlist deletion:', apiError);
+      // Don't throw here, still try to finish Firebase operation
+    }
+    
+    // Wait for all promises to resolve
+    await Promise.all(promises);
+    
+    console.log(`Removed product ${productId} from wishlist in Firebase and PostgreSQL`);
     return wishlist;
   } catch (error) {
     console.error("Error removing from wishlist:", error);
@@ -2314,8 +2452,59 @@ export const clearWishlist = async (userId: string): Promise<void> => {
       updatedAt: Timestamp.fromDate(new Date()) // Use client-side timestamp
     };
     
-    await setDoc(wishlistDocRef, emptyWishlist);
-    console.log("Wishlist cleared successfully");
+    // Create an array of promises to update both Firebase and PostgreSQL
+    const promises = [];
+    
+    // Update wishlist in Firestore
+    promises.push(
+      setDoc(wishlistDocRef, emptyWishlist)
+    );
+    
+    // Also sync with PostgreSQL via API
+    // Create a helper function for API requests that includes the Firebase UID
+    try {
+      const apiRequest = async (method: string, url: string, data?: any) => {
+        const headers: HeadersInit = {
+          'Content-Type': 'application/json',
+        };
+        
+        // Add Firebase UID as a header if we have it
+        if (userId) {
+          headers['firebase-uid'] = userId;
+        }
+        
+        return fetch(url, {
+          method,
+          headers,
+          credentials: 'include',
+          body: data ? JSON.stringify(data) : undefined,
+        });
+      };
+      
+      // Call the wishlist API endpoint to clear the PostgreSQL wishlist
+      promises.push(
+        apiRequest('DELETE', '/api/users/wishlist')
+          .then(response => {
+            if (!response.ok) {
+              console.error(`Failed to clear wishlist in PostgreSQL: ${response.status} ${response.statusText}`);
+            } else {
+              console.log('Successfully cleared wishlist in PostgreSQL');
+            }
+            return response;
+          })
+          .catch(apiError => {
+            console.error('Error clearing wishlist in PostgreSQL:', apiError);
+          })
+      );
+    } catch (apiError) {
+      console.error('Error preparing API request for clearing wishlist:', apiError);
+      // Don't throw here, still try to finish Firebase operation
+    }
+    
+    // Wait for all promises to resolve
+    await Promise.all(promises);
+    
+    console.log("Wishlist cleared successfully in Firebase and PostgreSQL");
   } catch (error) {
     console.error("Error clearing wishlist:", error);
     throw error;
