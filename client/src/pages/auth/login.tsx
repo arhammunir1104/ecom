@@ -210,11 +210,7 @@ export default function Login() {
             </form>
           </Form>
 
-          <div className="mt-4 text-center">
-            <Link to="/auth/forgot-password" className="text-sm text-primary hover:underline">
-              Forgot your password?
-            </Link>
-          </div>
+
 
           <div className="relative my-4">
             <div className="absolute inset-0 flex items-center">

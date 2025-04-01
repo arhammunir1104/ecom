@@ -10,7 +10,7 @@ import * as firebaseAdmin from "./utils/firebase";
 import firebaseApp from "../client/src/lib/firebase";
 import * as firebaseAuth from "firebase/auth";
 import * as firebaseFirestore from "firebase/firestore";
-import { setupPasswordResetHandlers } from "./utils/passwordReset";
+import { setupPasswordResetHandlers } from "./utils/passwordResetDisabled";
 
 // Augment the Express Request type to include the user property
 declare global {
