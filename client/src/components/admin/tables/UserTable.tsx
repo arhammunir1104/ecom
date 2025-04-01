@@ -38,6 +38,9 @@ import {
   Loader2,
   Heart,
   ShoppingCart,
+  ImageIcon,
+  ExternalLink,
+  Star,
   BarChart,
   CreditCard,
 } from "lucide-react";
@@ -604,49 +607,74 @@ const UserTable = ({ users }: UserTableProps) => {
                       <CardTitle>Shopping Activity</CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-8">
-                      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
-                        <div className="flex flex-col items-center justify-center p-4 bg-gray-50 rounded-md">
-                          <CreditCard className="h-8 w-8 text-purple mb-2" />
-                          <p className="text-2xl font-bold">
+                      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
+                        <div className="flex flex-col items-center justify-center p-4 bg-gradient-to-br from-white to-gray-50 rounded-md border border-gray-100 shadow-sm">
+                          <div className="bg-purple-100 p-2 rounded-full mb-2">
+                            <CreditCard className="h-7 w-7 text-purple-600" />
+                          </div>
+                          <p className="text-2xl font-bold text-purple-700">
                             ${userDetails.stats.totalSpent.toFixed(2)}
                           </p>
-                          <p className="text-sm text-muted-foreground">
+                          <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mt-1">
                             Total Spent
                           </p>
                         </div>
-                        <div className="flex flex-col items-center justify-center p-4 bg-gray-50 rounded-md">
-                          <ShoppingBag className="h-8 w-8 text-purple mb-2" />
-                          <p className="text-2xl font-bold">
+                        
+                        <div className="flex flex-col items-center justify-center p-4 bg-gradient-to-br from-white to-gray-50 rounded-md border border-gray-100 shadow-sm">
+                          <div className="bg-green-100 p-2 rounded-full mb-2">
+                            <ShoppingBag className="h-7 w-7 text-green-600" />
+                          </div>
+                          <p className="text-2xl font-bold text-green-700">
                             {userDetails.stats.totalOrders}
                           </p>
-                          <p className="text-sm text-muted-foreground">
+                          <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mt-1">
                             Orders
                           </p>
                         </div>
-                        <div className="flex flex-col items-center justify-center p-4 bg-gray-50 rounded-md">
-                          <Heart className="h-8 w-8 text-purple mb-2" />
-                          <p className="text-2xl font-bold">
+                        
+                        <div className="flex flex-col items-center justify-center p-4 bg-gradient-to-br from-white to-gray-50 rounded-md border border-gray-100 shadow-sm">
+                          <div className="bg-red-100 p-2 rounded-full mb-2">
+                            <Heart className="h-7 w-7 text-red-600" />
+                          </div>
+                          <p className="text-2xl font-bold text-red-700">
                             {userDetails.stats.totalWishlistItems}
                           </p>
-                          <p className="text-sm text-muted-foreground">
+                          <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mt-1">
                             Wishlist Items
                           </p>
                         </div>
-                        <div className="flex flex-col items-center justify-center p-4 bg-gray-50 rounded-md">
-                          <ShoppingCart className="h-8 w-8 text-purple mb-2" />
-                          <p className="text-2xl font-bold">
+                        
+                        <div className="flex flex-col items-center justify-center p-4 bg-gradient-to-br from-white to-gray-50 rounded-md border border-gray-100 shadow-sm">
+                          <div className="bg-blue-100 p-2 rounded-full mb-2">
+                            <ShoppingCart className="h-7 w-7 text-blue-600" />
+                          </div>
+                          <p className="text-2xl font-bold text-blue-700">
                             {userDetails.stats.totalCartItems || 0}
                           </p>
-                          <p className="text-sm text-muted-foreground">
+                          <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mt-1">
                             Cart Items
                           </p>
                         </div>
-                        <div className="flex flex-col items-center justify-center p-4 bg-gray-50 rounded-md">
-                          <BarChart className="h-8 w-8 text-purple mb-2" />
-                          <p className="text-2xl font-bold">
+                        
+                        <div className="flex flex-col items-center justify-center p-4 bg-gradient-to-br from-white to-gray-50 rounded-md border border-gray-100 shadow-sm">
+                          <div className="bg-yellow-100 p-2 rounded-full mb-2">
+                            <Star className="h-7 w-7 text-yellow-600" />
+                          </div>
+                          <div className="flex text-yellow-500 mb-1">
+                            {Array.from({ length: 5 }).map((_, index) => (
+                              <div key={index} className="text-lg">
+                                {index < Math.round(userDetails.stats.averageReviewRating || 0) ? 
+                                  "★" : "☆"}
+                              </div>
+                            ))}
+                          </div>
+                          <p className="text-xl font-bold text-yellow-700">
                             {userDetails.stats.averageReviewRating?.toFixed(1) || '0.0'}
+                            <span className="text-xs text-gray-500 ml-1">
+                              ({userDetails.stats.totalReviews || 0})
+                            </span>
                           </p>
-                          <p className="text-sm text-muted-foreground">
+                          <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mt-1">
                             Avg Rating
                           </p>
                         </div>
@@ -708,42 +736,112 @@ const UserTable = ({ users }: UserTableProps) => {
                   </CardHeader>
                   <CardContent>
                     {userDetails.orders && userDetails.orders.length > 0 ? (
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Order ID</TableHead>
-                            <TableHead>Date</TableHead>
-                            <TableHead>Status</TableHead>
-                            <TableHead>Items</TableHead>
-                            <TableHead>Total</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {userDetails.orders.map((order: any) => (
-                            <TableRow key={order.id}>
-                              <TableCell>#{order.id}</TableCell>
-                              <TableCell>
-                                {format(new Date(order.createdAt), "PP")}
-                              </TableCell>
-                              <TableCell>
-                                <Badge
-                                  variant={
-                                    order.status === "completed"
-                                      ? "default"
-                                      : "outline"
-                                  }
-                                >
-                                  {order.status}
-                                </Badge>
-                              </TableCell>
-                              <TableCell>{order.items.length} items</TableCell>
-                              <TableCell>
-                                ${order.totalAmount.toFixed(2)}
-                              </TableCell>
+                      <div className="space-y-8">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Order ID</TableHead>
+                              <TableHead>Date</TableHead>
+                              <TableHead>Status</TableHead>
+                              <TableHead>Items</TableHead>
+                              <TableHead>Total</TableHead>
+                              <TableHead className="text-right">Actions</TableHead>
                             </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
+                          </TableHeader>
+                          <TableBody>
+                            {userDetails.orders.map((order: any) => (
+                              <TableRow key={order.id} className="group">
+                                <TableCell className="font-medium">#{order.id}</TableCell>
+                                <TableCell className="whitespace-nowrap">
+                                  {format(new Date(order.createdAt), "PP")}
+                                </TableCell>
+                                <TableCell>
+                                  <Badge
+                                    variant={
+                                      order.status === "delivered" || order.status === "completed"
+                                        ? "default"
+                                        : order.status === "cancelled"
+                                        ? "destructive"
+                                        : "outline"
+                                    }
+                                    className="capitalize"
+                                  >
+                                    {order.status}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell>{order.items.length} items</TableCell>
+                                <TableCell className="font-medium">
+                                  ${order.totalAmount.toFixed(2)}
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-8 opacity-0 group-hover:opacity-100 transition-opacity"
+                                    onClick={() => window.open(`/orders/${order.id}`, '_blank')}
+                                  >
+                                    View Details
+                                  </Button>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+
+                        {/* Order items section for the latest order */}
+                        {userDetails.orders.length > 0 && (
+                          <div className="mt-8 border rounded-md p-4">
+                            <h3 className="text-lg font-medium mb-4">Latest Order Items</h3>
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                              {userDetails.orders[0].items.map((item: any, idx: number) => (
+                                <div key={idx} className="border rounded-md p-4 flex flex-col gap-2">
+                                  {/* Product Image */}
+                                  {item.images?.length > 0 || item.image ? (
+                                    <div className="aspect-square overflow-hidden rounded-md">
+                                      <img 
+                                        src={item.images?.length > 0 ? item.images[0] : 
+                                            Array.isArray(item.image) ? item.image[0] : item.image} 
+                                        alt={item.name}
+                                        className="h-full w-full object-cover"
+                                      />
+                                    </div>
+                                  ) : (
+                                    <div className="aspect-square bg-gray-100 rounded-md flex items-center justify-center">
+                                      <ImageIcon className="h-10 w-10 text-gray-400" />
+                                    </div>
+                                  )}
+                                  
+                                  {/* Product Details */}
+                                  <div>
+                                    <h4 className="font-medium line-clamp-2">{item.name}</h4>
+                                    <div className="flex justify-between items-center mt-1">
+                                      <div className="flex flex-col">
+                                        <p className="text-sm font-medium">
+                                          ${typeof item.price === 'number' ? item.price.toFixed(2) : '0.00'}
+                                        </p>
+                                        <p className="text-xs text-muted-foreground">
+                                          Qty: {item.quantity || 1}
+                                        </p>
+                                      </div>
+                                      {item.productId && (
+                                        <Button 
+                                          variant="ghost" 
+                                          size="sm" 
+                                          className="h-8 px-2"
+                                          onClick={() => window.open(`/product/${item.productId}`, '_blank')}
+                                        >
+                                          <ExternalLink className="h-4 w-4 mr-1" />
+                                          View
+                                        </Button>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     ) : (
                       <div className="text-center py-8 text-gray-500">
                         <ShoppingBag className="mx-auto h-12 w-12 text-gray-300 mb-3" />
@@ -765,11 +863,41 @@ const UserTable = ({ users }: UserTableProps) => {
                     userDetails.wishlistItems.length > 0 ? (
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         {userDetails.wishlistItems.map((item: any) => (
-                          <div key={item.id} className="border rounded-md p-4">
-                            <h4 className="font-medium">{item.name}</h4>
-                            <p className="text-sm text-muted-foreground">
-                              ${typeof item.price === 'number' ? item.price.toFixed(2) : '0.00'}
-                            </p>
+                          <div key={item.id} className="border rounded-md p-4 flex flex-col gap-2">
+                            {/* Product Image */}
+                            {item.images?.length > 0 || item.image ? (
+                              <div className="aspect-square overflow-hidden rounded-md">
+                                <img 
+                                  src={item.images?.length > 0 ? item.images[0] : 
+                                       Array.isArray(item.image) ? item.image[0] : item.image} 
+                                  alt={item.name}
+                                  className="h-full w-full object-cover"
+                                />
+                              </div>
+                            ) : (
+                              <div className="aspect-square bg-gray-100 rounded-md flex items-center justify-center">
+                                <ImageIcon className="h-10 w-10 text-gray-400" />
+                              </div>
+                            )}
+                            
+                            {/* Product Name with Link */}
+                            <div>
+                              <h4 className="font-medium line-clamp-2">{item.name}</h4>
+                              <div className="flex justify-between items-center mt-1">
+                                <p className="text-sm font-medium">
+                                  ${typeof item.price === 'number' ? item.price.toFixed(2) : '0.00'}
+                                </p>
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm" 
+                                  className="h-8 px-2"
+                                  onClick={() => window.open(`/product/${item.id}`, '_blank')}
+                                >
+                                  <ExternalLink className="h-4 w-4 mr-1" />
+                                  View
+                                </Button>
+                              </div>
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -794,23 +922,44 @@ const UserTable = ({ users }: UserTableProps) => {
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         {userDetails.cartItems.map((item: any, index: number) => (
                           <div key={index} className="border rounded-md p-4 flex flex-col gap-2">
-                            {item.image && (
+                            {/* Product Image */}
+                            {item.images?.length > 0 || item.image ? (
                               <div className="aspect-square overflow-hidden rounded-md">
                                 <img 
-                                  src={Array.isArray(item.image) ? item.image[0] : item.image} 
+                                  src={item.images?.length > 0 ? item.images[0] : 
+                                       Array.isArray(item.image) ? item.image[0] : item.image} 
                                   alt={item.name}
                                   className="h-full w-full object-cover"
                                 />
                               </div>
+                            ) : (
+                              <div className="aspect-square bg-gray-100 rounded-md flex items-center justify-center">
+                                <ImageIcon className="h-10 w-10 text-gray-400" />
+                              </div>
                             )}
-                            <h4 className="font-medium">{item.name}</h4>
-                            <div className="flex justify-between">
-                              <p className="text-sm text-muted-foreground">
-                                ${typeof item.price === 'number' ? item.price.toFixed(2) : '0.00'}
-                              </p>
-                              <p className="text-sm text-muted-foreground">
-                                Qty: {item.quantity || 1}
-                              </p>
+                            
+                            {/* Product Details */}
+                            <div>
+                              <h4 className="font-medium line-clamp-2">{item.name}</h4>
+                              <div className="flex justify-between items-center mt-1">
+                                <div className="flex flex-col">
+                                  <p className="text-sm font-medium">
+                                    ${typeof item.price === 'number' ? item.price.toFixed(2) : '0.00'}
+                                  </p>
+                                  <p className="text-xs text-muted-foreground">
+                                    Qty: {item.quantity || 1}
+                                  </p>
+                                </div>
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm" 
+                                  className="h-8 px-2"
+                                  onClick={() => window.open(`/product/${item.id}`, '_blank')}
+                                >
+                                  <ExternalLink className="h-4 w-4 mr-1" />
+                                  View
+                                </Button>
+                              </div>
                             </div>
                           </div>
                         ))}
