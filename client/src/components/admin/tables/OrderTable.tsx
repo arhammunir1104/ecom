@@ -210,7 +210,7 @@ const OrderTable = ({ orders }: OrderTableProps) => {
           {orders.map((order) => (
             <TableRow key={order.id}>
               <TableCell className="font-medium">
-                #{order.id.slice(0, 8)}
+                #{typeof order.id === 'string' ? order.id.slice(0, 8) : order.id}
               </TableCell>
               <TableCell>
                 <div>
@@ -290,7 +290,7 @@ const OrderTable = ({ orders }: OrderTableProps) => {
           <AlertDialogHeader>
             <AlertDialogTitle>Update Order Status</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to change order #{selectedOrder?.id?.slice(0, 8)} status to {selectedOrder?.status}?
+              Are you sure you want to change order #{typeof selectedOrder?.id === 'string' ? selectedOrder.id.slice(0, 8) : selectedOrder?.id} status to {selectedOrder?.status}?
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -316,7 +316,7 @@ const OrderTable = ({ orders }: OrderTableProps) => {
       <Dialog open={!!viewOrderDetails} onOpenChange={(open) => !open && setViewOrderDetails(null)}>
         <DialogContent className="sm:max-w-[700px] max-h-[80vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Order Details #{viewOrderDetails?.id?.slice(0, 8)}</DialogTitle>
+            <DialogTitle>Order Details #{typeof viewOrderDetails?.id === 'string' ? viewOrderDetails.id.slice(0, 8) : viewOrderDetails?.id}</DialogTitle>
           </DialogHeader>
           
           {viewOrderDetails && (
