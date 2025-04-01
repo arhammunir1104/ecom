@@ -768,7 +768,7 @@ const UserTable = ({ users }: UserTableProps) => {
                           <div key={item.id} className="border rounded-md p-4">
                             <h4 className="font-medium">{item.name}</h4>
                             <p className="text-sm text-muted-foreground">
-                              ${item.price.toFixed(2)}
+                              ${typeof item.price === 'number' ? item.price.toFixed(2) : '0.00'}
                             </p>
                           </div>
                         ))}
@@ -883,7 +883,7 @@ const UserTable = ({ users }: UserTableProps) => {
                                     <TableRow key={product.id}>
                                       <TableCell>{product.name}</TableCell>
                                       <TableCell>{product.count}</TableCell>
-                                      <TableCell>${product.totalSpent.toFixed(2)}</TableCell>
+                                      <TableCell>${typeof product.totalSpent === 'number' ? product.totalSpent.toFixed(2) : '0.00'}</TableCell>
                                     </TableRow>
                                   ))}
                                 </TableBody>
@@ -908,7 +908,7 @@ const UserTable = ({ users }: UserTableProps) => {
                                     <TableRow key={category.id}>
                                       <TableCell>{category.name}</TableCell>
                                       <TableCell>{category.count}</TableCell>
-                                      <TableCell>${category.totalSpent.toFixed(2)}</TableCell>
+                                      <TableCell>${typeof category.totalSpent === 'number' ? category.totalSpent.toFixed(2) : '0.00'}</TableCell>
                                     </TableRow>
                                   ))}
                                 </TableBody>
