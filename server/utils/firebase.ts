@@ -1,5 +1,5 @@
 import { initializeApp, cert, getApps } from 'firebase-admin/app';
-import { getFirestore, Firestore } from 'firebase-admin/firestore';
+import { getFirestore, Firestore, FieldValue } from 'firebase-admin/firestore';
 import { getAuth, Auth } from 'firebase-admin/auth';
 import { getStorage, Storage } from 'firebase-admin/storage';
 
@@ -432,4 +432,43 @@ export const getUserOrders = async (userId: string) => {
 
 export const getAllOrders = async () => {
   return getAllDocuments(ORDERS_COLLECTION);
+};
+
+// Constants for user collection
+export const USERS_COLLECTION = "users";
+
+// Function to update a user's role in Firestore
+export const updateUserRole = async (firebaseUid: string, role: "admin" | "user") => {
+  try {
+    console.log(`Updating role for user ${firebaseUid} to ${role} in Firestore`);
+    
+    if (!isFirebaseInitialized) {
+      throw new Error('Firebase is not initialized');
+    }
+    
+    // First check if the user document exists
+    const firestore = db();
+    const userRef = firestore.collection(USERS_COLLECTION).doc(firebaseUid);
+    const userDoc = await userRef.get();
+    
+    if (!userDoc.exists) {
+      console.error(`User ${firebaseUid} not found in Firestore`);
+      throw new Error(`User not found in Firestore`);
+    }
+    
+    // Update the role field
+    await userRef.update({
+      role,
+      updatedAt: new Date()
+    });
+    
+    console.log(`Role for user ${firebaseUid} successfully updated to ${role}`);
+    
+    // Get the updated user document
+    const updatedDoc = await userRef.get();
+    return { id: updatedDoc.id, ...updatedDoc.data() };
+  } catch (error) {
+    console.error(`Error updating role for user ${firebaseUid}:`, error);
+    throw error;
+  }
 };

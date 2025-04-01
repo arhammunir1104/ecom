@@ -9,8 +9,10 @@ import {
   signOut as firebaseSignOut,
   GoogleAuthProvider,
   signInWithPopup,
-  User as FirebaseUser
+  User as FirebaseUser,
+  signInWithCustomToken
 } from "firebase/auth";
+import axios from "axios";
 import { 
   collection,
   doc, 
@@ -518,23 +520,71 @@ export const updateUserPassword = async (currentPassword: string, newPassword: s
  * Update password with reset workflow (for forgotten passwords)
  * No need for current password, but requires verified reset token
  */
-export const resetPasswordWithOTP = async (email: string, newPassword: string, resetDocId: string): Promise<boolean> => {
+export const resetPasswordWithOTP = async (email: string, newPassword: string, resetCode: string): Promise<boolean> => {
   try {
-    // Send standard Firebase reset email as fallback
-    // This is the most reliable way to reset passwords without being logged in
+    console.log(`Processing password reset for ${email} with verification code`);
+    
+    // First verify if the reset code is valid through our backend
+    const verifyResponse = await axios.post('/api/auth/verify-reset-code', {
+      email,
+      code: resetCode
+    });
+    
+    if (!verifyResponse.data || !verifyResponse.data.success) {
+      console.error('Invalid or expired reset code');
+      return false;
+    }
+    
+    console.log('Reset code verified, proceeding with password reset');
+    
+    try {
+      // Try to find user by email and obtain credentials
+      // Use a temporary sign-in with custom token if possible, otherwise use standard reset
+      const userCredential = await axios.post('/api/auth/get-temp-token', {
+        email,
+        resetCode
+      });
+      
+      if (userCredential.data && userCredential.data.token) {
+        // Sign in with the temporary token
+        await signInWithCustomToken(auth, userCredential.data.token);
+        
+        // Now we're signed in, we can update the password
+        const currentUser = auth.currentUser;
+        if (currentUser) {
+          await updatePassword(currentUser, newPassword);
+          console.log('Password updated successfully via temporary auth');
+          
+          // Sign out after password change
+          await firebaseSignOut(auth);
+          return true;
+        }
+      }
+    } catch (authError) {
+      console.warn('Could not use temporary auth, falling back to standard reset flow', authError);
+    }
+    
+    // If we couldn't do a direct update, use the standard password reset flow
     await sendPasswordResetEmail(auth, email);
     
-    // Mark the reset as processed in Firestore
-    const resetDocRef = doc(db, "passwordResets", resetDocId);
-    await updateDoc(resetDocRef, {
-      resetComplete: true,
-      resetCompletedAt: new Date(),
-    });
+    // Update the reset document in Firestore if ID is provided
+    if (resetCode && resetCode.length > 10) { // Likely a Firestore doc ID not just a code
+      try {
+        const resetDocRef = doc(db, "passwordResets", resetCode);
+        await updateDoc(resetDocRef, {
+          resetComplete: true,
+          resetCompletedAt: new Date(),
+        });
+      } catch (docError) {
+        console.warn('Error updating reset document:', docError);
+        // Continue anyway as the main reset email is sent
+      }
+    }
     
     console.log("Password reset email sent successfully to:", email);
     return true;
   } catch (error) {
-    console.error("Error sending password reset:", error);
+    console.error("Error processing password reset:", error);
     return false;
   }
 };
