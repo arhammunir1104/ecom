@@ -7,7 +7,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { updateUserRole, type FirestoreUser } from "@/lib/firestoreUsers";
+import { type FirestoreUser } from "@/lib/firestoreUsers";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -40,6 +40,7 @@ import { format } from "date-fns";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Timestamp } from "firebase/firestore";
+import { apiRequest } from "@/lib/queryClient";
 
 interface FirestoreUserTableProps {
   users: FirestoreUser[];
@@ -56,12 +57,28 @@ const FirestoreUserTable = ({ users, isLoading = false, onRoleUpdate }: Firestor
   // State to track Firebase update status
   const [updatingUserIds, setUpdatingUserIds] = useState<string[]>([]);
   
-  // Mutation for updating user role directly in Firestore
+  // Mutation for updating user role with synchronization across databases
   const updateRoleMutation = useMutation({
     mutationFn: async ({ uid, role }: { uid: string; role: "admin" | "user" }) => {
       try {
         setUpdatingUserIds((prev) => [...prev, uid]);
-        await updateUserRole(uid, role);
+        
+        // Use our new API endpoint to sync the role across both databases
+        const response = await apiRequest("POST", "/api/sync-user-role", {
+          firebaseUid: uid,
+          role
+        });
+        
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.message || "Failed to update user role");
+        }
+        
+        const data = await response.json();
+        if (!data.success) {
+          throw new Error(data.message || "Failed to update user role");
+        }
+        
         return { uid, role };
       } catch (error) {
         console.error("Error updating role:", error);
@@ -72,8 +89,8 @@ const FirestoreUserTable = ({ users, isLoading = false, onRoleUpdate }: Firestor
     },
     onSuccess: (data) => {
       toast({
-        title: "Role updated",
-        description: `User role has been updated to ${data.role}`,
+        title: "Role synchronized",
+        description: `User role has been updated to ${data.role} across all databases`,
       });
 
       // Trigger any custom callback

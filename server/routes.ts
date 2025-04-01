@@ -272,6 +272,33 @@ const createFirestoreUser = async (uid: string, userData: any) => {
   }
 };
 
+// Helper function to sync role between Firestore and PostgreSQL
+const syncUserRole = async (firebaseUid: string, role: "admin" | "user") => {
+  try {
+    // 1. Update role in PostgreSQL
+    const user = await storage.getUserByFirebaseId(firebaseUid);
+    if (user) {
+      await storage.updateUser(user.id, { role });
+      console.log(`User ${user.id} role updated in PostgreSQL to ${role}`);
+    } else {
+      console.log(`No PostgreSQL user found with Firebase UID: ${firebaseUid}`);
+    }
+
+    // 2. Update role in Firestore
+    const userRef = firebaseFirestore.doc(firebaseFirestore.collection(firebaseFirestore.getFirestore(firebaseApp), 'users'), firebaseUid);
+    await firebaseFirestore.setDoc(userRef, {
+      role,
+      updatedAt: firebaseFirestore.serverTimestamp()
+    }, { merge: true });
+    console.log(`User ${firebaseUid} role updated in Firestore to ${role}`);
+
+    return true;
+  } catch (error) {
+    console.error("Error syncing user role:", error);
+    return false;
+  }
+};
+
 export async function registerRoutes(app: Express): Promise<Server> {
   // Auth routes
   app.post("/api/auth/login", async (req, res) => {
@@ -2245,6 +2272,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Main endpoint for updating user roles - handles both database and Firebase updates
+  // API to sync a user's role between Firestore and PostgreSQL
+  app.post("/api/sync-user-role", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const { firebaseUid, role } = req.body;
+      
+      if (!firebaseUid) {
+        return res.status(400).json({ 
+          success: false, 
+          message: "Firebase UID is required" 
+        });
+      }
+      
+      if (role !== "admin" && role !== "user") {
+        return res.status(400).json({ 
+          success: false, 
+          message: "Valid role is required (admin or user)" 
+        });
+      }
+      
+      const success = await syncUserRole(firebaseUid, role);
+      
+      if (success) {
+        return res.json({
+          success: true,
+          message: `User role successfully synchronized to ${role}`
+        });
+      } else {
+        return res.status(500).json({
+          success: false,
+          message: "Failed to synchronize user role across databases"
+        });
+      }
+    } catch (error) {
+      console.error("Sync user role error:", error);
+      return res.status(500).json({ 
+        success: false,
+        message: "Server error", 
+        error: String(error) 
+      });
+    }
+  });
+  
   app.post("/api/direct-update-role", isAuthenticated, isAdmin, async (req, res) => {
     try {
       const { userId, role } = req.body;
