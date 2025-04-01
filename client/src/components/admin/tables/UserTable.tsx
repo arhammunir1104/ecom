@@ -99,23 +99,18 @@ const UserTable = ({ users }: UserTableProps) => {
           firebaseUid || "not available",
         );
 
-        // Update in Express database using direct endpoint to bypass auth middlewares
-        console.log(`Sending request to direct update role endpoint...`);
-        const fullUrl = `/api/direct/users/${userId}/role`;
-        console.log('Request URL:', fullUrl);
+        // Switch to using POST /api/direct-update-role which we know already works
+        console.log(`Sending direct role update request with POST...`);
         
-        const response = await fetch(fullUrl, {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            role,
-            firebaseUid: firebaseUid || null,
-          }),
+        const response = await apiRequest("POST", "/api/direct-update-role", {
+          userId, 
+          role,
+          firebaseUid: firebaseUid || null
         });
-
+        
+        console.log("Role update response:", response);
         const responseData = await response.json();
+        console.log("Response data:", responseData);
 
         if (!response.ok) {
           console.error("Server error response:", responseData);

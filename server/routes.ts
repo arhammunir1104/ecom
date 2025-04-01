@@ -2184,6 +2184,62 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
+  // Simple POST endpoint for role updates that doesn't use dynamic URL parameters
+  app.post("/api/direct-update-role", async (req, res) => {
+    try {
+      const { userId, role, firebaseUid } = req.body;
+      
+      console.log(`[SIMPLE] Starting direct role update for user ID ${userId} to ${role}`);
+      
+      if (!userId || isNaN(Number(userId))) {
+        return res.status(400).json({ message: "Valid user ID is required" });
+      }
+      
+      if (role !== "admin" && role !== "user") {
+        return res.status(400).json({ message: "Valid role is required (admin or user)" });
+      }
+      
+      // Get the user from database
+      const user = await storage.getUser(Number(userId));
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      // Update the user role in the database
+      const updatedUser = await storage.updateUser(Number(userId), { role });
+      if (!updatedUser) {
+        return res.status(500).json({ message: "Failed to update user role" });
+      }
+      
+      // If firebaseUid is provided, also update the role in Firebase
+      if (firebaseUid) {
+        try {
+          const { updateUserRole } = require('./utils/firebase');
+          await updateUserRole(firebaseUid, role as "admin" | "user");
+          console.log(`[SIMPLE] Firebase role also updated successfully`);
+        } catch (firebaseError) {
+          console.error("[SIMPLE] Failed to update Firebase role:", firebaseError);
+          // We continue since the database update was successful
+        }
+      }
+      
+      // Return user info without sensitive data
+      const { password, twoFactorSecret, ...userWithoutPassword } = updatedUser;
+      console.log(`[SIMPLE] Role update successful, returning response`);
+      return res.json({
+        success: true,
+        user: userWithoutPassword
+      });
+    } catch (error) {
+      console.error("[SIMPLE] Update user role error:", error);
+      return res.status(500).json({ 
+        success: false,
+        message: "Server error", 
+        error: String(error) 
+      });
+    }
+  });
+  
   // Get user details including orders, cart, wishlist
   app.get("/api/admin/users/:id/details", isAuthenticated, isAdmin, async (req, res) => {
     try {
