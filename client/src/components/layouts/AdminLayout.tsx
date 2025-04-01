@@ -10,7 +10,8 @@ import {
   Settings, 
   LogOut, 
   Menu, 
-  X 
+  X,
+  ShoppingCart
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -40,6 +41,7 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
     { name: "Dashboard", href: "/admin", icon: LayoutDashboard },
     { name: "Products", href: "/admin/products", icon: ShoppingBag },
     { name: "Categories", href: "/admin/categories", icon: Tags },
+    { name: "Orders", href: "/admin/orders", icon: ShoppingCart },
     { name: "Users", href: "/admin/users", icon: Users },
     { name: "Hero Banners", href: "/admin/hero-banners", icon: Image },
   ];

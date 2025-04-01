@@ -65,11 +65,13 @@ export const orders = pgTable("orders", {
   items: jsonb("items").notNull(),
   totalAmount: doublePrecision("total_amount").notNull(),
   shippingAddress: jsonb("shipping_address").notNull(),
-  status: text("status").default("pending").notNull(),
-  paymentStatus: text("payment_status").default("pending").notNull(),
+  status: text("status", { enum: ['pending', 'processing', 'shipped', 'delivered', 'cancelled'] }).default("pending").notNull(),
+  paymentStatus: text("payment_status", { enum: ['pending', 'paid', 'failed', 'refunded'] }).default("pending").notNull(),
   paymentIntent: text("payment_intent"),
   trackingNumber: text("tracking_number"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at"),
+  firebaseOrderId: text("firebase_order_id"), // To link with Firebase orders
 });
 
 // Hero Banners Table

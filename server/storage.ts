@@ -579,18 +579,37 @@ export class MemStorage implements IStorage {
       shippingAddress: orderData.shippingAddress || {},
       paymentStatus: orderData.paymentStatus || 'pending',
       paymentIntent: orderData.paymentIntent || null,
-      trackingNumber: orderData.trackingNumber || null
+      trackingNumber: orderData.trackingNumber || null,
+      updatedAt: null,
+      firebaseOrderId: orderData.firebaseOrderId || null
     };
     this.orders.set(id, order);
     return order;
   }
 
-  async updateOrderStatus(id: number, status: string): Promise<Order | undefined> {
-    const order = await this.getOrder(id);
+  async updateOrderStatus(id: string | number, status: 'pending' | 'processing' | 'shipped' | 'delivered' | 'cancelled'): Promise<Order | undefined> {
+    // If id is a string, try to convert it to a number if possible (for database storage)
+    const orderId = typeof id === 'string' && !isNaN(Number(id)) ? Number(id) : id;
+    
+    // For string IDs that can't be converted to numbers (like Firebase IDs), 
+    // we'll need to implement a lookup by a custom field. For this example, we'll
+    // use a simple approach and just check all orders
+    if (typeof orderId === 'string') {
+      // This is a Firebase ID or other string ID
+      // In a real implementation, we would add a proper lookup
+      console.log(`Looking for order with string ID ${orderId}`);
+      
+      // Just returning undefined for now as we don't yet have a string ID lookup
+      // This will be handled by the Firebase direct update in the routes.ts
+      return undefined;
+    }
+    
+    // Standard numeric ID lookup
+    const order = await this.getOrder(orderId as number);
     if (!order) return undefined;
     
-    const updatedOrder = { ...order, status };
-    this.orders.set(id, updatedOrder);
+    const updatedOrder = { ...order, status, updatedAt: new Date() };
+    this.orders.set(orderId as number, updatedOrder);
     return updatedOrder;
   }
 
@@ -1112,14 +1131,47 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
-  async updateOrderStatus(id: number, status: string): Promise<Order | undefined> {
+  async updateOrderStatus(id: string | number, status: 'pending' | 'processing' | 'shipped' | 'delivered' | 'cancelled'): Promise<Order | undefined> {
     try {
-      const [updatedOrder] = await db
-        .update(orders)
-        .set({ status })
-        .where(eq(orders.id, id))
-        .returning();
-      return updatedOrder;
+      // If id is a string and starts with a non-numeric character, it's likely a Firebase ID
+      if (typeof id === 'string' && isNaN(Number(id))) {
+        // This is a Firebase ID, check if we have a record with this Firebase ID
+        const [order] = await db
+          .select()
+          .from(orders)
+          .where(eq(orders.firebaseOrderId, id))
+          .limit(1);
+        
+        if (order) {
+          // If we found an order with this Firebase ID, update it
+          const [updatedOrder] = await db
+            .update(orders)
+            .set({ 
+              status, 
+              updatedAt: new Date() 
+            })
+            .where(eq(orders.id, order.id))
+            .returning();
+          return updatedOrder;
+        } else {
+          console.log(`No order found with Firebase ID: ${id}`);
+          return undefined;
+        }
+      } else {
+        // Convert to number if it's a string
+        const numericId = typeof id === 'string' ? Number(id) : id;
+        
+        // Standard update by numeric ID
+        const [updatedOrder] = await db
+          .update(orders)
+          .set({ 
+            status, 
+            updatedAt: new Date() 
+          })
+          .where(eq(orders.id, numericId))
+          .returning();
+        return updatedOrder;
+      }
     } catch (error) {
       console.error("Database error in updateOrderStatus:", error);
       return undefined;

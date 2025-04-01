@@ -38,6 +38,7 @@ import AdminCategories from "./pages/admin/categories";
 import AdminAddCategory from "./pages/admin/add-category";
 import AdminEditCategory from "./pages/admin/edit-category";
 import AdminUsers from "./pages/admin/users";
+import AdminOrders from "./pages/admin/orders";
 import AdminHeroBanners from "./pages/admin/hero-banners";
 
 function Router() {
@@ -145,6 +146,11 @@ function Router() {
       <Route path="/admin/users" component={() => (
         <AdminLayout>
           <AdminUsers />
+        </AdminLayout>
+      )} />
+      <Route path="/admin/orders" component={() => (
+        <AdminLayout>
+          <AdminOrders />
         </AdminLayout>
       )} />
       <Route path="/admin/hero-banners" component={() => (

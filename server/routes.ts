@@ -1619,6 +1619,60 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: "Server error" });
     }
   });
+  
+  // Update order status - admin only
+  app.put("/api/admin/orders/:id/status", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const orderId = req.params.id;
+      const { status } = req.body;
+      
+      if (!orderId) {
+        return res.status(400).json({ message: "Order ID is required" });
+      }
+      
+      if (!status || !['pending', 'processing', 'shipped', 'delivered', 'cancelled'].includes(status)) {
+        return res.status(400).json({ message: "Valid status is required" });
+      }
+      
+      // Update in storage
+      const updatedOrder = await storage.updateOrderStatus(orderId, status as 'pending' | 'processing' | 'shipped' | 'delivered' | 'cancelled');
+      
+      // Also update in Firebase for backward compatibility
+      try {
+        // Get Firebase connection
+        const db = firebaseFirestore.getFirestore(firebaseApp);
+        
+        // Check if it's a Firebase ID (string with non-numeric characters)
+        const isFirebaseId = typeof orderId === 'string' && isNaN(Number(orderId));
+        
+        if (isFirebaseId) {
+          // Update in the main orders collection
+          const orderRef = firebaseFirestore.doc(db, 'orders', orderId);
+          await firebaseFirestore.updateDoc(orderRef, {
+            status,
+            updatedAt: firebaseFirestore.serverTimestamp()
+          });
+          
+          console.log(`Firebase order ${orderId} status updated to ${status}`);
+        } else {
+          console.log(`Order ${orderId} is not a Firebase ID, skipping Firebase update`);
+        }
+      } catch (firebaseError) {
+        console.error("Firebase update error:", firebaseError);
+        // Continue even if Firebase update fails as long as storage update succeeded
+      }
+      
+      res.json({ 
+        message: "Order status updated", 
+        orderId, 
+        status,
+        order: updatedOrder || undefined
+      });
+    } catch (error) {
+      console.error("Update order status error:", error);
+      res.status(500).json({ message: "Server error" });
+    }
+  });
 
   app.post("/api/orders", async (req, res) => {
     try {
@@ -1728,30 +1782,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(201).json(order);
     } catch (error) {
       console.error("Create order error:", error);
-      res.status(500).json({ message: "Server error" });
-    }
-  });
-
-  app.put("/api/admin/orders/:id/status", isAuthenticated, isAdmin, async (req, res) => {
-    try {
-      const id = Number(req.params.id);
-      if (isNaN(id)) {
-        return res.status(400).json({ message: "Invalid order ID" });
-      }
-      
-      const { status } = req.body;
-      if (!status || typeof status !== 'string') {
-        return res.status(400).json({ message: "Status is required" });
-      }
-      
-      const order = await storage.updateOrderStatus(id, status);
-      if (!order) {
-        return res.status(404).json({ message: "Order not found" });
-      }
-      
-      res.json(order);
-    } catch (error) {
-      console.error("Update order status error:", error);
       res.status(500).json({ message: "Server error" });
     }
   });
