@@ -607,75 +607,85 @@ const UserTable = ({ users }: UserTableProps) => {
                       <CardTitle>Shopping Activity</CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-8">
-                      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 md:gap-4">
-                        <div className="flex flex-col items-center justify-center p-3 bg-white rounded-md border border-gray-100 shadow-sm">
-                          <div className="bg-purple-100 p-2 rounded-full mb-1 flex-shrink-0">
-                            <CreditCard className="h-5 w-5 text-purple-600" />
+                      <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
+                        <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="bg-purple-100 p-2 rounded-full">
+                              <CreditCard className="h-6 w-6 text-purple-600" />
+                            </div>
+                            <span className="text-xs font-medium text-gray-500 uppercase">Total Spent</span>
                           </div>
-                          <p className="text-lg sm:text-xl md:text-2xl font-bold text-purple-700 truncate w-full text-center">
-                            ${userDetails.stats.totalSpent.toFixed(2)}
-                          </p>
-                          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mt-1 truncate w-full text-center">
-                            Total Spent
-                          </p>
+                          <div className="mt-2">
+                            <p className="text-2xl md:text-3xl font-bold text-purple-700">
+                              ${userDetails.stats.totalSpent.toFixed(2)}
+                            </p>
+                          </div>
                         </div>
                         
-                        <div className="flex flex-col items-center justify-center p-3 bg-white rounded-md border border-gray-100 shadow-sm">
-                          <div className="bg-green-100 p-2 rounded-full mb-1 flex-shrink-0">
-                            <ShoppingBag className="h-5 w-5 text-green-600" />
+                        <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="bg-green-100 p-2 rounded-full">
+                              <ShoppingBag className="h-6 w-6 text-green-600" />
+                            </div>
+                            <span className="text-xs font-medium text-gray-500 uppercase">Orders</span>
                           </div>
-                          <p className="text-lg sm:text-xl md:text-2xl font-bold text-green-700">
-                            {userDetails.stats.totalOrders}
-                          </p>
-                          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mt-1 truncate w-full text-center">
-                            Orders
-                          </p>
+                          <div className="mt-2">
+                            <p className="text-2xl md:text-3xl font-bold text-green-700">
+                              {userDetails.stats.totalOrders}
+                            </p>
+                          </div>
                         </div>
                         
-                        <div className="flex flex-col items-center justify-center p-3 bg-white rounded-md border border-gray-100 shadow-sm">
-                          <div className="bg-red-100 p-2 rounded-full mb-1 flex-shrink-0">
-                            <Heart className="h-5 w-5 text-red-600" />
+                        <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="bg-red-100 p-2 rounded-full">
+                              <Heart className="h-6 w-6 text-red-600" />
+                            </div>
+                            <span className="text-xs font-medium text-gray-500 uppercase">Wishlist</span>
                           </div>
-                          <p className="text-lg sm:text-xl md:text-2xl font-bold text-red-700">
-                            {userDetails.stats.totalWishlistItems}
-                          </p>
-                          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mt-1 truncate w-full text-center">
-                            Wishlist
-                          </p>
+                          <div className="mt-2">
+                            <p className="text-2xl md:text-3xl font-bold text-red-700">
+                              {userDetails.stats.totalWishlistItems}
+                            </p>
+                          </div>
                         </div>
                         
-                        <div className="flex flex-col items-center justify-center p-3 bg-white rounded-md border border-gray-100 shadow-sm">
-                          <div className="bg-blue-100 p-2 rounded-full mb-1 flex-shrink-0">
-                            <ShoppingCart className="h-5 w-5 text-blue-600" />
+                        <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="bg-blue-100 p-2 rounded-full">
+                              <ShoppingCart className="h-6 w-6 text-blue-600" />
+                            </div>
+                            <span className="text-xs font-medium text-gray-500 uppercase">Cart</span>
                           </div>
-                          <p className="text-lg sm:text-xl md:text-2xl font-bold text-blue-700">
-                            {userDetails.stats.totalCartItems || 0}
-                          </p>
-                          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mt-1 truncate w-full text-center">
-                            Cart
-                          </p>
+                          <div className="mt-2">
+                            <p className="text-2xl md:text-3xl font-bold text-blue-700">
+                              {userDetails.stats.totalCartItems || 0}
+                            </p>
+                          </div>
                         </div>
                         
-                        <div className="flex flex-col items-center justify-center p-3 bg-white rounded-md border border-gray-100 shadow-sm">
-                          <div className="bg-yellow-100 p-2 rounded-full mb-1 flex-shrink-0">
-                            <Star className="h-5 w-5 text-yellow-600" />
+                        <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="bg-yellow-100 p-2 rounded-full">
+                              <Star className="h-6 w-6 text-yellow-600" />
+                            </div>
+                            <span className="text-xs font-medium text-gray-500 uppercase">Rating</span>
                           </div>
-                          <div className="flex text-yellow-500">
-                            {Array.from({ length: 5 }).map((_, index) => (
-                              <span key={index} className="text-sm md:text-base">
-                                {index < Math.round(userDetails.stats.averageReviewRating || 0) ? 
-                                  "★" : "☆"}
-                              </span>
-                            ))}
+                          <div className="flex items-center">
+                            <p className="text-xl md:text-2xl font-bold text-yellow-700 mr-2">
+                              {userDetails.stats.averageReviewRating?.toFixed(1) || '0.0'}
+                            </p>
+                            <div className="flex text-yellow-400">
+                              {Array.from({ length: 5 }).map((_, index) => (
+                                <span key={index} className="text-lg">
+                                  {index < Math.round(userDetails.stats.averageReviewRating || 0) ? 
+                                    "★" : "☆"}
+                                </span>
+                              ))}
+                            </div>
                           </div>
-                          <p className="text-base sm:text-lg font-bold text-yellow-700 flex items-center">
-                            {userDetails.stats.averageReviewRating?.toFixed(1) || '0.0'}
-                            <span className="text-xs text-gray-500 ml-1">
-                              ({userDetails.stats.totalReviews || 0})
-                            </span>
-                          </p>
-                          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mt-1 truncate w-full text-center">
-                            Rating
+                          <p className="text-xs text-gray-500 mt-1">
+                            ({userDetails.stats.totalReviews || 0} reviews)
                           </p>
                         </div>
                       </div>
@@ -771,32 +781,39 @@ const UserTable = ({ users }: UserTableProps) => {
                                     </Badge>
                                   </TableCell>
                                   <TableCell>
-                                    <div className="flex -space-x-2 overflow-hidden">
-                                      {order.items.slice(0, 3).map((item: any, idx: number) => (
-                                        <div 
-                                          key={idx} 
-                                          className="inline-block h-8 w-8 rounded-full border-2 border-white"
-                                          title={item.name}
-                                        >
-                                          {item.images?.length > 0 || item.image ? (
-                                            <img 
-                                              src={item.images?.length > 0 ? item.images[0] : 
-                                                  Array.isArray(item.image) ? item.image[0] : item.image} 
-                                              alt={item.name}
-                                              className="h-full w-full object-cover rounded-full"
-                                            />
-                                          ) : (
-                                            <div className="h-full w-full bg-gray-100 rounded-full flex items-center justify-center">
-                                              <ImageIcon className="h-4 w-4 text-gray-400" />
+                                    <div className="flex items-center gap-2">
+                                      {/* Only show the first product image */}
+                                      {order.items.length > 0 && (
+                                        <div className="flex-shrink-0 relative">
+                                          <div className="h-10 w-10 rounded border overflow-hidden">
+                                            {order.items[0].images?.length > 0 || order.items[0].image ? (
+                                              <img 
+                                                src={order.items[0].images?.length > 0 ? order.items[0].images[0] : 
+                                                    Array.isArray(order.items[0].image) ? order.items[0].image[0] : order.items[0].image} 
+                                                alt={order.items[0].name}
+                                                className="h-full w-full object-cover"
+                                              />
+                                            ) : (
+                                              <div className="h-full w-full bg-gray-100 flex items-center justify-center">
+                                                <ImageIcon className="h-4 w-4 text-gray-400" />
+                                              </div>
+                                            )}
+                                          </div>
+                                          {order.items.length > 1 && (
+                                            <div className="absolute -top-1 -right-1 bg-purple-600 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                                              {order.items.length}
                                             </div>
                                           )}
                                         </div>
-                                      ))}
-                                      {order.items.length > 3 && (
-                                        <div className="inline-block h-8 w-8 rounded-full border-2 border-white bg-gray-100 flex items-center justify-center">
-                                          <span className="text-xs font-medium text-gray-500">+{order.items.length - 3}</span>
-                                        </div>
                                       )}
+                                      <div className="text-sm">
+                                        <div className="font-semibold truncate max-w-[120px]">
+                                          {order.items[0]?.name || "Product"}
+                                        </div>
+                                        <div className="text-gray-500 text-xs">
+                                          {order.items.length} {order.items.length === 1 ? 'item' : 'items'}
+                                        </div>
+                                      </div>
                                     </div>
                                   </TableCell>
                                   <TableCell className="font-medium">
