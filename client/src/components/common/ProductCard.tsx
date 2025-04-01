@@ -145,8 +145,25 @@ const ProductCard = ({ product }: ProductCardProps) => {
       try {
         // Fetch reviews data
         setIsLoadingReviews(true);
-        const stats = await getProductReviewStats(id);
-        setReviewStats(stats);
+        
+        // First try to get product reviews directly to ensure accurate count
+        const reviews = await getProductReviews(id);
+        
+        // If reviews exist but review stats don't, update them to ensure consistency
+        if (reviews.length > 0) {
+          // Force update the review stats based on actual reviews
+          let stats = await updateProductReviewStats(id);
+          if (!stats) {
+            // If updateProductReviewStats fails, try fallback to getProductReviewStats
+            stats = await getProductReviewStats(id);
+          }
+          setReviewStats(stats);
+        } else {
+          // If no reviews, just get the stats (which will create the document if needed)
+          const stats = await getProductReviewStats(id);
+          setReviewStats(stats);
+        }
+        
         setIsLoadingReviews(false);
         
         // Check wishlist status

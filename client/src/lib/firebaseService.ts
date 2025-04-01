@@ -2234,11 +2234,31 @@ export const getProductReviewStats = async (
   productId: number | string
 ): Promise<ReviewsData | null> => {
   try {
-    const productDoc = await getDoc(getProductReviewStatsDocRef(productId));
+    const productDocRef = getProductReviewStatsDocRef(productId);
+    const productDoc = await getDoc(productDocRef);
     
+    // If product document doesn't exist in Firebase, create it
     if (!productDoc.exists()) {
-      console.log("Product document not found for review stats");
-      return null;
+      console.log(`Creating product document for ID: ${productId}`);
+      // Initialize with empty stats
+      const emptyStats: ReviewsData = {
+        totalReviews: 0,
+        averageRating: 0,
+        lastUpdated: Timestamp.fromDate(new Date())
+      };
+      
+      try {
+        // Set the document with empty stats
+        await setDoc(productDocRef, {
+          id: productId,
+          reviewStats: emptyStats
+        });
+        
+        return emptyStats;
+      } catch (createError) {
+        console.error("Error creating product document:", createError);
+        return emptyStats; // Return empty stats even if creation failed
+      }
     }
     
     const data = productDoc.data();
@@ -2246,13 +2266,37 @@ export const getProductReviewStats = async (
     if (!data || !data.reviewStats) {
       // If no review stats exist, generate them
       console.log("No review stats found, generating now...");
-      return await updateProductReviewStats(productId);
+      // Try to get real reviews if they exist
+      const reviews = await getProductReviews(productId);
+      
+      if (reviews.length > 0) {
+        // If reviews exist, update statistics based on them
+        return await updateProductReviewStats(productId);
+      } else {
+        // If no reviews exist, create empty stats
+        const emptyStats: ReviewsData = {
+          totalReviews: 0,
+          averageRating: 0,
+          lastUpdated: Timestamp.fromDate(new Date())
+        };
+        
+        await updateDoc(productDocRef, {
+          reviewStats: emptyStats
+        });
+        
+        return emptyStats;
+      }
     }
     
     return data.reviewStats as ReviewsData;
   } catch (error) {
     console.error("Error getting product review stats:", error);
-    return null;
+    // Return a default empty stats object instead of null
+    return {
+      totalReviews: 0,
+      averageRating: 0,
+      lastUpdated: Timestamp.fromDate(new Date())
+    };
   }
 };
 
