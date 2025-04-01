@@ -189,7 +189,8 @@ export default function ResetPassword() {
           try {
             await axios.post('/api/auth/sync-password', {
               email,
-              password: values.password
+              password: values.password,
+              forceSyncAll: true // Force sync across all systems
             });
             console.log("Password sync with database completed");
           } catch (syncError) {

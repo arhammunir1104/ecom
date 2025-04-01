@@ -537,6 +537,19 @@ export const resetPasswordWithOTP = async (email: string, newPassword: string, r
     
     console.log('Reset code verified, proceeding with password reset');
     
+    // Ensure password is synced right away with PostgreSQL as a failsafe
+    try {
+      console.log('Pre-syncing password with PostgreSQL for consistency');
+      await axios.post('/api/auth/sync-password', {
+        email,
+        password: newPassword,
+        forceSyncAll: true // Ensure both datastores are updated
+      });
+    } catch (syncError) {
+      console.warn('Pre-sync with PostgreSQL failed:', syncError);
+      // Continue with the reset process anyway
+    }
+    
     try {
       // First try to use the Firebase Admin API through our endpoint
       // This will update both Firebase and PostgreSQL in one go
@@ -580,13 +593,14 @@ export const resetPasswordWithOTP = async (email: string, newPassword: string, r
             await updatePassword(currentUser, newPassword);
             console.log('Password updated successfully via temporary auth');
             
-            // Sync the password with PostgreSQL
+            // Sync the password with PostgreSQL - include the new password
             try {
               await axios.post('/api/auth/sync-password', {
                 email,
-                uid: currentUser.uid
+                uid: currentUser.uid,
+                password: newPassword // Include the actual password for syncing
               });
-              console.log('Password sync requested for PostgreSQL');
+              console.log('Password sync requested for PostgreSQL with new password');
             } catch (syncError) {
               console.warn('Error syncing password with PostgreSQL:', syncError);
               // Continue anyway since Firebase auth is updated

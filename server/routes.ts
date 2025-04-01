@@ -4135,7 +4135,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   app.post("/api/auth/sync-password", async (req, res) => {
     try {
-      const { email, uid, password } = req.body;
+      const { email, uid, password, forceSyncAll } = req.body;
       
       if (!email) {
         return res.status(400).json({ 
@@ -4144,7 +4144,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
       
-      console.log(`Password sync requested for email: ${email}`);
+      console.log(`Password sync requested for email: ${email} (forceSyncAll: ${forceSyncAll ? 'true' : 'false'})`);
       
       // Check if user exists in PostgreSQL
       const pgUser = await storage.getUserByEmail(email);
@@ -4166,12 +4166,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
             updateData.password = hashedPassword;
           } catch (hashError) {
             console.error(`Error hashing password for user ID: ${pgUser.id}`, hashError);
-            // Fall back to placeholder if hashing fails
-            updateData.password = 'firebase-auth-' + Date.now();
+            return res.status(500).json({
+              success: false,
+              message: "Error hashing password"
+            });
           }
-        } else {
-          // Use placeholder password when no specific password provided
+        } else if (!forceSyncAll) {
+          // Only set a placeholder when not doing a force sync (normal sync operations)
+          // For forceSyncAll operations, we want to sync the actual password
           updateData.password = 'firebase-auth-' + Date.now();
+        } else {
+          // When forceSyncAll is true but no password provided, return an error
+          return res.status(400).json({
+            success: false,
+            message: "Password is required when forceSyncAll is true"
+          });
         }
         
         // Update the user in PostgreSQL
@@ -4179,12 +4188,53 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         console.log(`Password ${password ? 'updated' : 'placeholder created'} in PostgreSQL for user ID: ${pgUser.id}`);
         
+        // If forceSyncAll flag is true and password is provided, also update Firebase Auth
+        // This ensures the password is synchronized in both systems
+        if (forceSyncAll && password) {
+          try {
+            if (pgUser.firebaseUid) {
+              console.log(`Force syncing password to Firebase Auth for user: ${pgUser.email} (UID: ${pgUser.firebaseUid})`);
+              const { resetUserPassword } = await import("./utils/firebaseAdmin");
+              await resetUserPassword(pgUser.email, password);
+              console.log(`Firebase Auth password updated for user: ${pgUser.email}`);
+            } else {
+              console.warn(`Cannot sync with Firebase Auth - no UID found for user ID: ${pgUser.id}`);
+            }
+          } catch (firebaseError) {
+            console.error(`Error updating Firebase Auth password:`, firebaseError);
+            // Don't fail the entire operation, but inform client there was a partial sync
+            return res.status(207).json({
+              success: true,
+              message: "Password updated in PostgreSQL but failed to sync with Firebase Auth",
+              firebaseError: String(firebaseError)
+            });
+          }
+        }
+        
         return res.status(200).json({ 
           success: true,
           message: "Password sync completed successfully" 
         });
       } else {
         console.log(`No PostgreSQL user found with email: ${email}`);
+        
+        // If forceSyncAll is true, try to update Firebase Auth directly even if not in PostgreSQL
+        if (forceSyncAll && password) {
+          try {
+            console.log(`Force syncing password to Firebase Auth only for email: ${email}`);
+            const { resetUserPassword } = await import("./utils/firebaseAdmin");
+            await resetUserPassword(email, password);
+            console.log(`Firebase Auth password updated for email: ${email}`);
+            
+            return res.status(206).json({
+              success: true,
+              message: "Password updated in Firebase Auth only (user not found in PostgreSQL)"
+            });
+          } catch (firebaseError) {
+            console.error(`Error updating Firebase Auth password:`, firebaseError);
+          }
+        }
+        
         return res.status(404).json({ 
           success: false,
           message: "User not found in database" 
@@ -4194,7 +4244,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error("Error syncing password:", error);
       return res.status(500).json({ 
         success: false,
-        message: "Internal server error" 
+        message: "Internal server error",
+        error: String(error)
       });
     }
   });
