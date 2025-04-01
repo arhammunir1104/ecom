@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Link, useLocation } from "wouter";
@@ -15,15 +15,13 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
-import { ArrowLeft, ShieldCheck, KeyRound, Loader2 } from "lucide-react";
+import { ArrowLeft, ShieldCheck, Mail, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 
 // Form schema
 const verifyOTPSchema = z.object({
-  email: z.string().email("Please enter a valid email address"),
   otp: z.string().length(6, "OTP must be 6 digits"),
 });
 
@@ -31,33 +29,58 @@ type VerifyOTPFormValues = z.infer<typeof verifyOTPSchema>;
 
 const VerifyResetCode = () => {
   const [isLoading, setIsLoading] = useState(false);
-  const [verifiedEmail, setVerifiedEmail] = useState<string | null>(null);
-  const [verifiedOTP, setVerifiedOTP] = useState<string | null>(null);
-  const [_, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
   const { toast } = useToast();
+  const [email, setEmail] = useState("");
 
   // Initialize form
   const form = useForm<VerifyOTPFormValues>({
     resolver: zodResolver(verifyOTPSchema),
     defaultValues: {
-      email: "",
       otp: "",
     },
   });
 
+  // Extract email from query parameters on page load
+  useEffect(() => {
+    const params = new URLSearchParams(location);
+    const emailParam = params.get("email");
+    
+    if (emailParam) {
+      setEmail(emailParam);
+    } else {
+      // If no email was provided, redirect back to forgot password
+      toast({
+        title: "Missing Email",
+        description: "Please start the password reset process again",
+        variant: "destructive",
+      });
+      setLocation("/auth/forgot-password");
+    }
+  }, [location, setLocation, toast]);
+
   // Handle form submission
   const onSubmit = async (data: VerifyOTPFormValues) => {
+    if (!email) {
+      toast({
+        title: "Missing Email",
+        description: "Please start the password reset process again",
+        variant: "destructive",
+      });
+      setLocation("/auth/forgot-password");
+      return;
+    }
+
     setIsLoading(true);
     try {
-      // Send request to API
-      const response = await axios.post("/api/auth/verify-reset-code", data);
+      // Send request to API with email from URL and OTP from form
+      const response = await axios.post("/api/auth/verify-reset-code", {
+        email: email,
+        otp: data.otp
+      });
       
-      // Store the verified email and OTP for the reset password step
-      setVerifiedEmail(data.email);
-      setVerifiedOTP(data.otp);
-      
-      // Redirect to reset password page with email in query params
-      setLocation(`/auth/reset-password?email=${encodeURIComponent(data.email)}&otp=${encodeURIComponent(data.otp)}`);
+      // Redirect to reset password page with email and OTP in query params
+      setLocation(`/auth/reset-password?email=${encodeURIComponent(email)}&otp=${encodeURIComponent(data.otp)}`);
       
       toast({
         title: "Verification Successful",
@@ -86,27 +109,15 @@ const VerifyResetCode = () => {
           </CardDescription>
         </CardHeader>
         <CardContent>
+          {email && (
+            <div className="mb-4 flex items-center space-x-2 p-3 bg-muted rounded-md">
+              <Mail className="h-5 w-5 text-muted-foreground" />
+              <span className="text-sm text-muted-foreground font-medium truncate">{email}</span>
+            </div>
+          )}
+          
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-              <FormField
-                control={form.control}
-                name="email"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Email</FormLabel>
-                    <FormControl>
-                      <Input 
-                        type="email" 
-                        placeholder="your.email@example.com" 
-                        {...field} 
-                        disabled={isLoading}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
               <FormField
                 control={form.control}
                 name="otp"

@@ -90,7 +90,7 @@ const ForgotPassword = () => {
             </Alert>
             <div className="flex flex-col gap-4">
               <Button asChild variant="outline">
-                <Link to="/auth/verify-reset-code">
+                <Link to={`/auth/verify-reset-code?email=${encodeURIComponent(form.getValues().email)}`}>
                   I have a reset code
                 </Link>
               </Button>

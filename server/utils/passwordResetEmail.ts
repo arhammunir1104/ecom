@@ -18,12 +18,21 @@ export async function sendPasswordResetEmail(
   otp: string
 ): Promise<boolean> {
   try {
+    console.log(`[Password Reset] Starting email send process to ${recipientEmail} with OTP: ${otp}`);
+    
     // Check for required environment variables
     if (!process.env.SMTP_HOST || !process.env.SMTP_PORT || !process.env.SMTP_USER || !process.env.SMTP_PASSWORD) {
-      console.error('Missing SMTP configuration');
+      console.error('[Password Reset] Missing SMTP configuration:',
+        'Host:', process.env.SMTP_HOST ? 'SET' : 'MISSING',
+        'Port:', process.env.SMTP_PORT ? 'SET' : 'MISSING',
+        'User:', process.env.SMTP_USER ? 'SET' : 'MISSING',
+        'Password:', process.env.SMTP_PASSWORD ? 'SET' : 'MISSING'
+      );
       return false;
     }
 
+    console.log(`[Password Reset] Creating email transporter with host: ${process.env.SMTP_HOST}, port: ${process.env.SMTP_PORT}`);
+    
     // Create email transporter
     const transporter = nodemailer.createTransport({
       host: process.env.SMTP_HOST,
@@ -33,11 +42,23 @@ export async function sendPasswordResetEmail(
         user: process.env.SMTP_USER,
         pass: process.env.SMTP_PASSWORD,
       },
+      // Add debug option to help with troubleshooting
+      logger: true,
+      debug: true
     });
+    
+    // Verify SMTP connection before sending
+    console.log('[Password Reset] Verifying SMTP connection...');
+    const verified = await transporter.verify();
+    console.log('[Password Reset] SMTP connection verified:', verified);
+
+    // Set email from address
+    const fromEmail = process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER;
+    console.log(`[Password Reset] Using from email: ${fromEmail}`);
 
     // Create email content
     const mailOptions = {
-      from: process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER,
+      from: fromEmail,
       to: recipientEmail,
       subject: 'Password Reset Verification Code',
       text: `Your password reset code is: ${otp}\n\nThis code will expire in 5 minutes. If you did not request this, please ignore this email.`,
@@ -63,12 +84,24 @@ export async function sendPasswordResetEmail(
       `,
     };
 
+    console.log('[Password Reset] Sending email...');
     // Send the email
     const info = await transporter.sendMail(mailOptions);
-    console.log(`Password reset email sent to ${recipientEmail}: ${info.messageId}`);
+    console.log(`[Password Reset] Email sent successfully to ${recipientEmail}`);
+    console.log(`[Password Reset] Message ID: ${info.messageId}`);
+    console.log(`[Password Reset] Preview URL: ${nodemailer.getTestMessageUrl(info) || 'Not available'}`);
+    
     return true;
   } catch (error) {
-    console.error('Error sending password reset email:', error);
+    console.error('[Password Reset] Error sending password reset email:', error);
+    
+    // More detailed error logging
+    if (error instanceof Error) {
+      console.error('[Password Reset] Error name:', error.name);
+      console.error('[Password Reset] Error message:', error.message);
+      console.error('[Password Reset] Error stack:', error.stack);
+    }
+    
     return false;
   }
 }
