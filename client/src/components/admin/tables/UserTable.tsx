@@ -80,53 +80,63 @@ const UserTable = ({ users }: UserTableProps) => {
   const updateRoleMutation = useMutation({
     mutationFn: async ({ userId, role }: { userId: number; role: string }) => {
       try {
-        console.log(`Starting direct role update for user ID ${userId} to ${role}`);
-        
+        console.log(
+          `Starting direct role update for user ID ${userId} to ${role}`,
+        );
+
         // First get user to get Firebase UID if available
         const userResponse = await apiRequest(
           "GET",
           `/api/admin/users/${userId}`,
         );
+        console.log(userResponse);
         const user = await userResponse.json();
         const firebaseUid = user?.firebaseUid;
-        
-        console.log(`Got user details, Firebase UID:`, firebaseUid || 'not available');
-        
+        console.log(user);
+
+        console.log(
+          `Got user details, Firebase UID:`,
+          firebaseUid || "not available",
+        );
+
         // Update in Express database using direct endpoint to bypass auth middlewares
         console.log(`Sending request to direct update role endpoint...`);
-        const response = await fetch(`/api/direct/users/${userId}/role`, {
-          method: 'PUT',
+        const fullUrl = `/api/direct/users/${userId}/role`;
+        console.log('Request URL:', fullUrl);
+        
+        const response = await fetch(fullUrl, {
+          method: "PUT",
           headers: {
-            'Content-Type': 'application/json',
+            "Content-Type": "application/json",
           },
-          body: JSON.stringify({ 
-            userId, 
+          body: JSON.stringify({
             role,
-            firebaseUid: firebaseUid || null
-          })
+            firebaseUid: firebaseUid || null,
+          }),
         });
-        
+
         const responseData = await response.json();
-        
+
         if (!response.ok) {
-          console.error('Server error response:', responseData);
-          throw new Error(responseData.message || `Server error: ${response.status}`);
+          console.error("Server error response:", responseData);
+          throw new Error(
+            responseData.message || `Server error: ${response.status}`,
+          );
         }
-        
-        console.log('Database update successful', responseData.user);
-        
+
+        console.log("Database update successful", responseData.user);
+
         // If the user has a Firebase UID, directly update in Firebase as well
         if (firebaseUid) {
           try {
-            console.log(`Attempting direct Firebase update for UID: ${firebaseUid}`);
+            console.log(
+              `Attempting direct Firebase update for UID: ${firebaseUid}`,
+            );
             // Directly import the function we need
             const { updateUserRole } = await import("@/lib/firebaseService");
-            
+
             // Use the updateUserRole function from Firebase service
-            await updateUserRole(
-              firebaseUid,
-              role as "admin" | "user",
-            );
+            await updateUserRole(firebaseUid, role as "admin" | "user");
             console.log("Firebase role updated directly via client SDK");
           } catch (firebaseError) {
             console.error(
@@ -136,11 +146,11 @@ const UserTable = ({ users }: UserTableProps) => {
             // We continue since the database is already updated
           }
         }
-        
-        console.log('Role update completed successfully');
+
+        console.log("Role update completed successfully");
         return responseData.user;
       } catch (error) {
-        console.error('Role update error:', error);
+        console.error("Role update error:", error);
         throw error;
       }
     },
