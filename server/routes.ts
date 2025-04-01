@@ -2056,9 +2056,72 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const totalUsers = users.length;
       const totalProducts = products.length;
       
+      // Calculate monthly metrics for current and previous month
+      const now = new Date();
+      const currentMonth = now.getMonth();
+      const currentYear = now.getFullYear();
+      const lastMonth = currentMonth === 0 ? 11 : currentMonth - 1;
+      const lastMonthYear = currentMonth === 0 ? currentYear - 1 : currentYear;
+      
+      // Group orders by month
+      const currentMonthOrders = orders.filter(order => {
+        const orderDate = new Date(order.createdAt);
+        return orderDate.getMonth() === currentMonth && orderDate.getFullYear() === currentYear;
+      });
+      
+      const lastMonthOrders = orders.filter(order => {
+        const orderDate = new Date(order.createdAt);
+        return orderDate.getMonth() === lastMonth && orderDate.getFullYear() === lastMonthYear;
+      });
+      
+      // Calculate metrics for current and previous month
+      const currentMonthRevenue = currentMonthOrders.reduce((sum, order) => sum + order.totalAmount, 0);
+      const lastMonthRevenue = lastMonthOrders.reduce((sum, order) => sum + order.totalAmount, 0);
+      const currentMonthOrderCount = currentMonthOrders.length;
+      const lastMonthOrderCount = lastMonthOrders.length;
+      
+      // Calculate month-over-month growth
+      const revenueGrowth = lastMonthRevenue === 0 
+        ? 100 
+        : ((currentMonthRevenue - lastMonthRevenue) / lastMonthRevenue) * 100;
+      
+      const ordersGrowth = lastMonthOrderCount === 0 
+        ? 100 
+        : ((currentMonthOrderCount - lastMonthOrderCount) / lastMonthOrderCount) * 100;
+      
+      // Calculate user and product growth
+      const lastMonthUsers = users.filter(user => {
+        const createdAt = new Date(user.createdAt);
+        return createdAt.getMonth() === lastMonth && createdAt.getFullYear() === lastMonthYear;
+      }).length;
+      
+      const currentMonthUsers = users.filter(user => {
+        const createdAt = new Date(user.createdAt);
+        return createdAt.getMonth() === currentMonth && createdAt.getFullYear() === currentYear;
+      }).length;
+      
+      const usersGrowth = lastMonthUsers === 0 
+        ? 100 
+        : ((currentMonthUsers - lastMonthUsers) / lastMonthUsers) * 100;
+        
+      // For products, we'll consider growth in product listing
+      const lastMonthProducts = products.filter(product => {
+        const createdAt = new Date(product.createdAt);
+        return createdAt.getMonth() === lastMonth && createdAt.getFullYear() === lastMonthYear;
+      }).length;
+      
+      const currentMonthProducts = products.filter(product => {
+        const createdAt = new Date(product.createdAt);
+        return createdAt.getMonth() === currentMonth && createdAt.getFullYear() === currentYear;
+      }).length;
+      
+      const productsGrowth = lastMonthProducts === 0 
+        ? 100 
+        : ((currentMonthProducts - lastMonthProducts) / lastMonthProducts) * 100;
+      
       // Recent orders
       const recentOrders = orders
-        .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
         .slice(0, 5);
       
       // Top-selling products
@@ -2081,6 +2144,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const resolvedTopProducts = await Promise.all(topProducts);
       
+      // Generate monthly sales data for chart
+      const monthlySalesData = [];
+      const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      
+      // Get sales for the past 12 months
+      for (let i = 0; i < 12; i++) {
+        const month = (currentMonth - i + 12) % 12; // Go back i months
+        const year = currentYear - Math.floor((currentMonth - i + 12) / 12) + 1;
+        
+        const monthOrders = orders.filter(order => {
+          const orderDate = new Date(order.createdAt);
+          return orderDate.getMonth() === month && orderDate.getFullYear() === year;
+        });
+        
+        const monthRevenue = monthOrders.reduce((sum, order) => sum + order.totalAmount, 0);
+        const monthOrderCount = monthOrders.length;
+        
+        monthlySalesData.unshift({
+          month: monthNames[month],
+          revenue: monthRevenue,
+          orders: monthOrderCount
+        });
+      }
+      
       res.json({
         totalRevenue,
         totalOrders,
@@ -2088,6 +2175,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
         totalProducts,
         recentOrders,
         topProducts: resolvedTopProducts,
+        monthlySalesData,
+        metrics: {
+          revenue: {
+            total: totalRevenue,
+            growth: revenueGrowth.toFixed(1),
+            trend: revenueGrowth >= 0 ? "up" : "down"
+          },
+          orders: {
+            total: totalOrders,
+            growth: ordersGrowth.toFixed(1),
+            trend: ordersGrowth >= 0 ? "up" : "down"
+          },
+          users: {
+            total: totalUsers,
+            growth: usersGrowth.toFixed(1),
+            trend: usersGrowth >= 0 ? "up" : "down"
+          },
+          products: {
+            total: totalProducts,
+            growth: productsGrowth.toFixed(1),
+            trend: productsGrowth >= 0 ? "up" : "down"
+          }
+        }
       });
     } catch (error) {
       console.error("Get admin dashboard data error:", error);

@@ -55,6 +55,33 @@ export default function AdminDashboard() {
       };
       soldCount: number;
     }[];
+    monthlySalesData: {
+      month: string;
+      revenue: number;
+      orders: number;
+    }[];
+    metrics: {
+      revenue: {
+        total: number;
+        growth: string;
+        trend: "up" | "down";
+      };
+      orders: {
+        total: number;
+        growth: string;
+        trend: "up" | "down";
+      };
+      users: {
+        total: number;
+        growth: string;
+        trend: "up" | "down";
+      };
+      products: {
+        total: number;
+        growth: string;
+        trend: "up" | "down";
+      };
+    };
   }
 
   // Default dashboard data to handle null/undefined values
@@ -64,7 +91,14 @@ export default function AdminDashboard() {
     totalUsers: 0,
     totalProducts: 0,
     recentOrders: [],
-    topProducts: []
+    topProducts: [],
+    monthlySalesData: [],
+    metrics: {
+      revenue: { total: 0, growth: "0.0", trend: "up" },
+      orders: { total: 0, growth: "0.0", trend: "up" },
+      users: { total: 0, growth: "0.0", trend: "up" },
+      products: { total: 0, growth: "0.0", trend: "up" }
+    }
   };
 
   const { data: dashboardData = defaultDashboardData, isLoading: dataLoading } = useQuery<DashboardData>({
@@ -117,31 +151,31 @@ export default function AdminDashboard() {
   const metrics = [
     {
       title: "Total Revenue",
-      value: `$${dashboardData.totalRevenue.toFixed(2)}`,
+      value: `$${dashboardData.metrics.revenue.total.toFixed(2)}`,
       icon: DollarSign,
-      change: "+12.5%",
-      trend: "up",
+      change: `${dashboardData.metrics.revenue.growth}%`,
+      trend: dashboardData.metrics.revenue.trend,
     },
     {
       title: "Total Orders",
-      value: dashboardData.totalOrders,
+      value: dashboardData.metrics.orders.total,
       icon: ShoppingBag,
-      change: "+7.2%",
-      trend: "up",
+      change: `${dashboardData.metrics.orders.growth}%`,
+      trend: dashboardData.metrics.orders.trend,
     },
     {
       title: "Total Customers",
-      value: dashboardData.totalUsers,
+      value: dashboardData.metrics.users.total,
       icon: Users,
-      change: "+4.6%",
-      trend: "up",
+      change: `${dashboardData.metrics.users.growth}%`,
+      trend: dashboardData.metrics.users.trend,
     },
     {
       title: "Total Products",
-      value: dashboardData.totalProducts,
+      value: dashboardData.metrics.products.total,
       icon: Package,
-      change: "+2.3%",
-      trend: "up",
+      change: `${dashboardData.metrics.products.growth}%`,
+      trend: dashboardData.metrics.products.trend,
     },
   ];
   
@@ -319,16 +353,8 @@ export default function AdminDashboard() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {["Direct", "Organic Search", "Social Media", "Referral", "Email"].map((source, i) => (
-                  <div key={i} className="flex items-center justify-between">
-                    <div className="flex items-center">
-                      <div className={`w-3 h-3 rounded-full mr-2 bg-chart-${i + 1}`}></div>
-                      <span>{source}</span>
-                    </div>
-                    <span>{Math.floor(Math.random() * 50) + 10}%</span>
-                  </div>
-                ))}
+              <div className="p-8 text-center">
+                <p className="text-muted-foreground">Traffic source analytics will be available in the next update</p>
               </div>
             </CardContent>
           </Card>

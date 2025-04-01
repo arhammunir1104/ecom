@@ -9,58 +9,8 @@ import {
   Tooltip,
   Legend,
 } from "recharts";
-
-// Sample data - In a real app, this would come from the API
-const generateSampleData = () => {
-  const months = [
-    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
-  ];
-  
-  const currentMonth = new Date().getMonth();
-  
-  // Generate data for the past 12 months
-  return months.map((month, index) => {
-    // Seasonal variations
-    let factor = 1;
-    
-    // Summer and winter have higher sales
-    if (index >= 5 && index <= 7) factor = 1.5; // Summer
-    if (index >= 10 || index <= 1) factor = 1.3; // Winter
-
-    // Create slight upward trend over the year
-    const trendFactor = 1 + (index * 0.02);
-    
-    // Base values with some randomness
-    const baseRevenue = 2000 * factor * trendFactor;
-    const baseOrders = 120 * factor * trendFactor;
-    
-    // Add randomness (up to ±20%)
-    const randomFactorRevenue = 0.8 + (Math.random() * 0.4);
-    const randomFactorOrders = 0.8 + (Math.random() * 0.4);
-    
-    return {
-      month,
-      revenue: Math.round(baseRevenue * randomFactorRevenue),
-      orders: Math.round(baseOrders * randomFactorOrders),
-    };
-  }).slice(currentMonth + 1).concat(months.slice(0, currentMonth + 1).map((month, index) => {
-    const factor = 1 + (index * 0.05);
-    const baseRevenue = 2000 * factor;
-    const baseOrders = 120 * factor;
-    
-    const randomFactorRevenue = 0.8 + (Math.random() * 0.4);
-    const randomFactorOrders = 0.8 + (Math.random() * 0.4);
-    
-    return {
-      month,
-      revenue: Math.round(baseRevenue * randomFactorRevenue),
-      orders: Math.round(baseOrders * randomFactorOrders),
-    };
-  }));
-};
-
-const data = generateSampleData();
+import { useQuery } from "@tanstack/react-query";
+import { Loader2 } from "lucide-react";
 
 // Format currency for tooltip
 const formatCurrency = (value: number) => {
@@ -92,10 +42,31 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 };
 
 const SalesChart = () => {
+  // Fetch dashboard data from API
+  const { data: dashboardData, isLoading, error } = useQuery({
+    queryKey: ['/api/admin/dashboard'],
+  });
+
+  if (isLoading) {
+    return (
+      <div className="flex justify-center items-center p-8">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (error || !dashboardData?.monthlySalesData) {
+    return (
+      <div className="p-4 text-center">
+        <p className="text-red-500">Failed to load sales data</p>
+      </div>
+    );
+  }
+
   return (
     <ResponsiveContainer width="100%" height={350}>
       <LineChart
-        data={data}
+        data={dashboardData.monthlySalesData}
         margin={{
           top: 5,
           right: 30,

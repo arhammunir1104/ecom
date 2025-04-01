@@ -10,32 +10,8 @@ import {
   Legend,
   Cell,
 } from "recharts";
-
-// Sample data - In a real app, this would come from the API
-const generateSampleData = () => {
-  const products = [
-    "Pink Floral Dress",
-    "Elegant White Blouse",
-    "High-Waisted Pants",
-    "Pearl Necklace",
-    "Gold Earrings",
-  ];
-  
-  return products.map((product, index) => {
-    // Base sales values
-    const baseSales = 100 - (index * 15); // Decreasing sales by index to show a ranking
-    
-    // Add randomness (up to ±15%)
-    const randomFactor = 0.85 + (Math.random() * 0.3);
-    
-    return {
-      name: product,
-      sales: Math.round(baseSales * randomFactor),
-    };
-  }).sort((a, b) => b.sales - a.sales); // Sort by sales in descending order
-};
-
-const data = generateSampleData();
+import { useQuery } from "@tanstack/react-query";
+import { Loader2 } from "lucide-react";
 
 // Colors for the bars
 const colors = [
@@ -63,10 +39,37 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 };
 
 const ProductsChart = () => {
+  // Fetch dashboard data from API
+  const { data: dashboardData, isLoading, error } = useQuery({
+    queryKey: ['/api/admin/dashboard'],
+  });
+
+  if (isLoading) {
+    return (
+      <div className="flex justify-center items-center p-8">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (error || !dashboardData?.topProducts) {
+    return (
+      <div className="p-4 text-center">
+        <p className="text-red-500">Failed to load product data</p>
+      </div>
+    );
+  }
+
+  // Format the data for the chart
+  const chartData = dashboardData.topProducts.map((item: any) => ({
+    name: item.product.name,
+    sales: item.soldCount
+  }));
+
   return (
     <ResponsiveContainer width="100%" height={350}>
       <BarChart
-        data={data}
+        data={chartData}
         layout="vertical"
         margin={{
           top: 5,
@@ -95,7 +98,7 @@ const ProductsChart = () => {
         <Tooltip content={<CustomTooltip />} />
         <Legend />
         <Bar dataKey="sales" name="Sales (units)" radius={[0, 4, 4, 0]}>
-          {data.map((entry, index) => (
+          {chartData.map((entry, index) => (
             <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />
           ))}
         </Bar>
