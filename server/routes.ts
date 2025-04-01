@@ -2750,32 +2750,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
           const resolvedProducts = await Promise.all(productPromises);
           dbWishlistItems = resolvedProducts.filter(product => product !== null);
+          console.log(`Retrieved ${dbWishlistItems.length} wishlist items from PostgreSQL for user ${user.id}`);
         }
         
-        // Next, try to get wishlist items from Firebase using our new utility function
-        let firebaseWishlistItems = [];
-        if (user.firebaseUid) {
-          try {
-            // Use the imported Firebase admin functions
-            firebaseWishlistItems = await firebaseAdmin.getUserWishlist(user.firebaseUid);
-            console.log(`Retrieved ${firebaseWishlistItems.length} wishlist items from Firebase for user ${user.firebaseUid}`);
-          } catch (firebaseErr) {
-            console.error(`Error fetching wishlist from Firebase for user ${user.firebaseUid}:`, firebaseErr);
-          }
-        }
-        
-        // Combine the results, removing duplicates
-        const seenProductIds = new Set();
+        // Initialize wishlistItems from PostgreSQL data immediately to avoid UI blocking
         wishlistItems = [...dbWishlistItems];
         
-        for (const item of firebaseWishlistItems) {
-          if (!seenProductIds.has(item.id)) {
-            wishlistItems.push(item);
-            seenProductIds.add(item.id);
-          }
+        // We'll attempt to get Firebase data in a non-blocking way
+        // Create a timeout promise that will resolve after 1.5 seconds
+        const timeoutPromise = new Promise((resolve) => {
+          setTimeout(() => {
+            console.warn(`Timeout reached waiting for Firebase wishlist data - proceeding without it`);
+            resolve(null);
+          }, 1500); // 1.5 seconds timeout
+        });
+        
+        if (user.firebaseUid) {
+          // Try to get Firebase data but with a timeout
+          // Don't await this Promise.race, let it run in the background
+          Promise.race([
+            (async () => {
+              try {
+                // Get Firebase wishlist items
+                const firebaseWishlistItems = await firebaseAdmin.getUserWishlist(user.firebaseUid);
+                console.log(`Retrieved ${firebaseWishlistItems.length} wishlist items from Firebase for user ${user.firebaseUid}`);
+                
+                // This part will only run if Firebase data is returned before the timeout
+                // It won't affect the initial response as we're not awaiting this promise
+                return firebaseWishlistItems;
+              } catch (firebaseErr) {
+                console.error(`Error fetching wishlist from Firebase for user ${user.firebaseUid}:`, firebaseErr);
+                return null;
+              }
+            })(),
+            timeoutPromise
+          ]).catch(err => {
+            console.error("Error in Firebase wishlist retrieval:", err);
+            return null;
+          });
         }
         
-        console.log(`Total wishlist items after combining sources: ${wishlistItems.length}`);
+        // Log what we have from PostgreSQL before sending the response
+        console.log(`Total wishlist items from PostgreSQL: ${wishlistItems.length}`);
       } catch (wishlistError) {
         console.error("Error fetching wishlist:", wishlistError);
       }
@@ -2861,16 +2877,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Get user engagement metrics (Firebase)
       let firebaseUserData = null;
+      
+      // Create a promise that resolves with null after 2 seconds to avoid blocking the UI
+      const timeoutPromise = new Promise<null>((resolve) => {
+        setTimeout(() => {
+          console.warn(`Timeout reached waiting for Firebase data - proceeding without it`);
+          resolve(null);
+        }, 2000); // 2 seconds timeout
+      });
+      
+      // Use Promise.race to either get the Firebase data or timeout
       if (user.firebaseUid) {
         try {
-          // Try to get Firebase user data with properly typed return value
-          // Use the imported Firebase admin functions
-          // This now returns FirebaseUser | null with proper typings
-          firebaseUserData = await firebaseAdmin.getFirestoreUser(user.firebaseUid);
+          // Try to get Firebase user data with a timeout
+          firebaseUserData = await Promise.race([
+            (async () => {
+              try {
+                // Use the imported Firebase admin functions
+                return await firebaseAdmin.getFirestoreUser(user.firebaseUid);
+              } catch (innerError) {
+                console.error("Inner error fetching Firebase user data:", innerError);
+                return null;
+              }
+            })(),
+            timeoutPromise
+          ]);
           
           if (firebaseUserData) {
-            // Log that we successfully got Firebase user data
+            // Log that we successfully got Firebase data
             console.log(`Successfully retrieved Firebase user data for ${user.firebaseUid} with ${firebaseUserData.cartItems?.length || 0} cart items and ${firebaseUserData.wishlistItems?.length || 0} wishlist items`);
+          } else {
+            console.log(`No Firebase data retrieved for ${user.firebaseUid} or timeout occurred`);
           }
         } catch (firebaseError) {
           console.error("Error fetching Firebase user data:", firebaseError);

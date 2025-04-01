@@ -649,6 +649,27 @@ export const getUserWishlist = async (userId: string): Promise<FirebaseProduct[]
 
 // Get a user from Firestore
 export const getFirestoreUser = async (uid: string): Promise<FirebaseUser | null> => {
+  // Create a timeout promise that resolves after 5 seconds
+  const timeoutPromise = new Promise<FirebaseUser | null>((resolve) => {
+    setTimeout(() => {
+      console.warn(`Timeout reached while getting Firestore user data for UID: ${uid}`);
+      // Return a minimal user object with empty cart and wishlist
+      resolve({
+        id: uid,
+        email: null,
+        displayName: null,
+        photoURL: null,
+        phoneNumber: null,
+        emailVerified: false,
+        role: 'user',
+        createdAt: null,
+        lastSignInTime: null,
+        cartItems: [],
+        wishlistItems: []
+      });
+    }, 5000); // 5 seconds timeout
+  });
+
   try {
     console.log(`Getting Firestore user data for UID: ${uid}`);
     if (!isFirebaseInitialized) {
@@ -656,66 +677,87 @@ export const getFirestoreUser = async (uid: string): Promise<FirebaseUser | null
       initializeFirebase();
     }
     
-    // First try to get from Firestore
-    const userData = await getDocument(USERS_COLLECTION, uid) as FirebaseDocument;
-    
-    // If found in Firestore, return it
-    if (userData) {
-      console.log(`Found Firestore user data for UID: ${uid}`);
-      
-      // Get cart items with product details
-      const cartItems = await getUserCart(uid);
-      
-      // Get wishlist items with product details
-      const wishlistItems = await getUserWishlist(uid);
-      
-      // Create a properly typed user object
-      const user: FirebaseUser = {
-        id: userData.id,
-        email: userData.email,
-        displayName: userData.displayName,
-        photoURL: userData.photoURL,
-        phoneNumber: userData.phoneNumber,
-        emailVerified: userData.emailVerified,
-        role: userData.role,
-        createdAt: userData.createdAt,
-        lastSignInTime: userData.lastSignInTime,
-        cartItems,
-        wishlistItems
-      };
-      
-      return user;
-    }
-    
-    // If not found in Firestore, try to get from Auth
-    try {
-      if (firebaseAuth) {
-        const userRecord = await firebaseAuth.getUser(uid);
-        console.log(`Found Firebase Auth user record for UID: ${uid}`);
-        
-        // Create a minimal user object from Auth data
-        const user: FirebaseUser = {
-          id: userRecord.uid,
-          email: userRecord.email,
-          displayName: userRecord.displayName,
-          photoURL: userRecord.photoURL,
-          phoneNumber: userRecord.phoneNumber,
-          emailVerified: userRecord.emailVerified,
-          role: 'user', // Default role
-          createdAt: userRecord.metadata.creationTime,
-          lastSignInTime: userRecord.metadata.lastSignInTime,
-          cartItems: [],
-          wishlistItems: []
-        };
-        
-        return user;
-      }
-    } catch (authError) {
-      console.error(`Error retrieving user ${uid} from Firebase Auth:`, authError);
-    }
-    
-    console.log(`No Firestore or Auth data found for UID: ${uid}`);
-    return null;
+    // Race between the actual data fetching and the timeout
+    return await Promise.race([
+      (async () => {
+        try {
+          // First try to get from Firestore
+          const userData = await getDocument(USERS_COLLECTION, uid) as FirebaseDocument;
+          
+          // If found in Firestore, return it
+          if (userData) {
+            console.log(`Found Firestore user data for UID: ${uid}`);
+            
+            // Get cart items with product details
+            let cartItems = [];
+            try {
+              cartItems = await getUserCart(uid);
+            } catch (cartError) {
+              console.error(`Error fetching cart for ${uid}:`, cartError);
+            }
+            
+            // Get wishlist items with product details
+            let wishlistItems = [];
+            try {
+              wishlistItems = await getUserWishlist(uid);
+            } catch (wishlistError) {
+              console.error(`Error fetching wishlist for ${uid}:`, wishlistError);
+            }
+            
+            // Create a properly typed user object
+            const user: FirebaseUser = {
+              id: userData.id,
+              email: userData.email,
+              displayName: userData.displayName,
+              photoURL: userData.photoURL,
+              phoneNumber: userData.phoneNumber,
+              emailVerified: userData.emailVerified,
+              role: userData.role,
+              createdAt: userData.createdAt,
+              lastSignInTime: userData.lastSignInTime,
+              cartItems,
+              wishlistItems
+            };
+            
+            return user;
+          }
+          
+          // If not found in Firestore, try to get from Auth
+          if (firebaseAuth) {
+            try {
+              const userRecord = await firebaseAuth.getUser(uid);
+              console.log(`Found Firebase Auth user record for UID: ${uid}`);
+              
+              // Create a minimal user object from Auth data
+              const user: FirebaseUser = {
+                id: userRecord.uid,
+                email: userRecord.email,
+                displayName: userRecord.displayName,
+                photoURL: userRecord.photoURL,
+                phoneNumber: userRecord.phoneNumber,
+                emailVerified: userRecord.emailVerified,
+                role: 'user', // Default role
+                createdAt: userRecord.metadata.creationTime,
+                lastSignInTime: userRecord.metadata.lastSignInTime,
+                cartItems: [],
+                wishlistItems: []
+              };
+              
+              return user;
+            } catch (authError) {
+              console.error(`Error retrieving user ${uid} from Firebase Auth:`, authError);
+            }
+          }
+          
+          console.log(`No Firestore or Auth data found for UID: ${uid}`);
+          return null;
+        } catch (innerError) {
+          console.error(`Inner error getting Firestore user ${uid}:`, innerError);
+          return null;
+        }
+      })(),
+      timeoutPromise
+    ]);
   } catch (error) {
     console.error(`Error getting Firestore user ${uid}:`, error);
     return null;
