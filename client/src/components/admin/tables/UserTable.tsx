@@ -1,4 +1,4 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import {
   Table,
   TableBody,
@@ -607,75 +607,75 @@ const UserTable = ({ users }: UserTableProps) => {
                       <CardTitle>Shopping Activity</CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-8">
-                      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
-                        <div className="flex flex-col items-center justify-center p-4 bg-gradient-to-br from-white to-gray-50 rounded-md border border-gray-100 shadow-sm">
-                          <div className="bg-purple-100 p-2 rounded-full mb-2">
-                            <CreditCard className="h-7 w-7 text-purple-600" />
+                      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 md:gap-4">
+                        <div className="flex flex-col items-center justify-center p-3 bg-white rounded-md border border-gray-100 shadow-sm">
+                          <div className="bg-purple-100 p-2 rounded-full mb-1 flex-shrink-0">
+                            <CreditCard className="h-5 w-5 text-purple-600" />
                           </div>
-                          <p className="text-2xl font-bold text-purple-700">
+                          <p className="text-lg sm:text-xl md:text-2xl font-bold text-purple-700 truncate w-full text-center">
                             ${userDetails.stats.totalSpent.toFixed(2)}
                           </p>
-                          <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mt-1">
+                          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mt-1 truncate w-full text-center">
                             Total Spent
                           </p>
                         </div>
                         
-                        <div className="flex flex-col items-center justify-center p-4 bg-gradient-to-br from-white to-gray-50 rounded-md border border-gray-100 shadow-sm">
-                          <div className="bg-green-100 p-2 rounded-full mb-2">
-                            <ShoppingBag className="h-7 w-7 text-green-600" />
+                        <div className="flex flex-col items-center justify-center p-3 bg-white rounded-md border border-gray-100 shadow-sm">
+                          <div className="bg-green-100 p-2 rounded-full mb-1 flex-shrink-0">
+                            <ShoppingBag className="h-5 w-5 text-green-600" />
                           </div>
-                          <p className="text-2xl font-bold text-green-700">
+                          <p className="text-lg sm:text-xl md:text-2xl font-bold text-green-700">
                             {userDetails.stats.totalOrders}
                           </p>
-                          <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mt-1">
+                          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mt-1 truncate w-full text-center">
                             Orders
                           </p>
                         </div>
                         
-                        <div className="flex flex-col items-center justify-center p-4 bg-gradient-to-br from-white to-gray-50 rounded-md border border-gray-100 shadow-sm">
-                          <div className="bg-red-100 p-2 rounded-full mb-2">
-                            <Heart className="h-7 w-7 text-red-600" />
+                        <div className="flex flex-col items-center justify-center p-3 bg-white rounded-md border border-gray-100 shadow-sm">
+                          <div className="bg-red-100 p-2 rounded-full mb-1 flex-shrink-0">
+                            <Heart className="h-5 w-5 text-red-600" />
                           </div>
-                          <p className="text-2xl font-bold text-red-700">
+                          <p className="text-lg sm:text-xl md:text-2xl font-bold text-red-700">
                             {userDetails.stats.totalWishlistItems}
                           </p>
-                          <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mt-1">
-                            Wishlist Items
+                          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mt-1 truncate w-full text-center">
+                            Wishlist
                           </p>
                         </div>
                         
-                        <div className="flex flex-col items-center justify-center p-4 bg-gradient-to-br from-white to-gray-50 rounded-md border border-gray-100 shadow-sm">
-                          <div className="bg-blue-100 p-2 rounded-full mb-2">
-                            <ShoppingCart className="h-7 w-7 text-blue-600" />
+                        <div className="flex flex-col items-center justify-center p-3 bg-white rounded-md border border-gray-100 shadow-sm">
+                          <div className="bg-blue-100 p-2 rounded-full mb-1 flex-shrink-0">
+                            <ShoppingCart className="h-5 w-5 text-blue-600" />
                           </div>
-                          <p className="text-2xl font-bold text-blue-700">
+                          <p className="text-lg sm:text-xl md:text-2xl font-bold text-blue-700">
                             {userDetails.stats.totalCartItems || 0}
                           </p>
-                          <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mt-1">
-                            Cart Items
+                          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mt-1 truncate w-full text-center">
+                            Cart
                           </p>
                         </div>
                         
-                        <div className="flex flex-col items-center justify-center p-4 bg-gradient-to-br from-white to-gray-50 rounded-md border border-gray-100 shadow-sm">
-                          <div className="bg-yellow-100 p-2 rounded-full mb-2">
-                            <Star className="h-7 w-7 text-yellow-600" />
+                        <div className="flex flex-col items-center justify-center p-3 bg-white rounded-md border border-gray-100 shadow-sm">
+                          <div className="bg-yellow-100 p-2 rounded-full mb-1 flex-shrink-0">
+                            <Star className="h-5 w-5 text-yellow-600" />
                           </div>
-                          <div className="flex text-yellow-500 mb-1">
+                          <div className="flex text-yellow-500">
                             {Array.from({ length: 5 }).map((_, index) => (
-                              <div key={index} className="text-lg">
+                              <span key={index} className="text-sm md:text-base">
                                 {index < Math.round(userDetails.stats.averageReviewRating || 0) ? 
                                   "★" : "☆"}
-                              </div>
+                              </span>
                             ))}
                           </div>
-                          <p className="text-xl font-bold text-yellow-700">
+                          <p className="text-base sm:text-lg font-bold text-yellow-700 flex items-center">
                             {userDetails.stats.averageReviewRating?.toFixed(1) || '0.0'}
                             <span className="text-xs text-gray-500 ml-1">
                               ({userDetails.stats.totalReviews || 0})
                             </span>
                           </p>
-                          <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mt-1">
-                            Avg Rating
+                          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mt-1 truncate w-full text-center">
+                            Rating
                           </p>
                         </div>
                       </div>
@@ -736,111 +736,131 @@ const UserTable = ({ users }: UserTableProps) => {
                   </CardHeader>
                   <CardContent>
                     {userDetails.orders && userDetails.orders.length > 0 ? (
-                      <div className="space-y-8">
+                      <div>
                         <Table>
                           <TableHeader>
                             <TableRow>
                               <TableHead>Order ID</TableHead>
                               <TableHead>Date</TableHead>
                               <TableHead>Status</TableHead>
-                              <TableHead>Items</TableHead>
+                              <TableHead>Products</TableHead>
                               <TableHead>Total</TableHead>
                               <TableHead className="text-right">Actions</TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
                             {userDetails.orders.map((order: any) => (
-                              <TableRow key={order.id} className="group">
-                                <TableCell className="font-medium">#{order.id}</TableCell>
-                                <TableCell className="whitespace-nowrap">
-                                  {format(new Date(order.createdAt), "PP")}
-                                </TableCell>
-                                <TableCell>
-                                  <Badge
-                                    variant={
-                                      order.status === "delivered" || order.status === "completed"
-                                        ? "default"
-                                        : order.status === "cancelled"
-                                        ? "destructive"
-                                        : "outline"
-                                    }
-                                    className="capitalize"
-                                  >
-                                    {order.status}
-                                  </Badge>
-                                </TableCell>
-                                <TableCell>{order.items.length} items</TableCell>
-                                <TableCell className="font-medium">
-                                  ${order.totalAmount.toFixed(2)}
-                                </TableCell>
-                                <TableCell className="text-right">
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-8 opacity-0 group-hover:opacity-100 transition-opacity"
-                                    onClick={() => window.open(`/orders/${order.id}`, '_blank')}
-                                  >
-                                    View Details
-                                  </Button>
-                                </TableCell>
-                              </TableRow>
+                              <React.Fragment key={order.id}>
+                                <TableRow className="group hover:bg-gray-50">
+                                  <TableCell className="font-medium">#{order.id}</TableCell>
+                                  <TableCell className="whitespace-nowrap">
+                                    {format(new Date(order.createdAt), "PPP")}
+                                  </TableCell>
+                                  <TableCell>
+                                    <Badge
+                                      variant={
+                                        order.status === "delivered" || order.status === "completed"
+                                          ? "default"
+                                          : order.status === "cancelled"
+                                          ? "destructive"
+                                          : "outline"
+                                      }
+                                      className="capitalize"
+                                    >
+                                      {order.status}
+                                    </Badge>
+                                  </TableCell>
+                                  <TableCell>
+                                    <div className="flex -space-x-2 overflow-hidden">
+                                      {order.items.slice(0, 3).map((item: any, idx: number) => (
+                                        <div 
+                                          key={idx} 
+                                          className="inline-block h-8 w-8 rounded-full border-2 border-white"
+                                          title={item.name}
+                                        >
+                                          {item.images?.length > 0 || item.image ? (
+                                            <img 
+                                              src={item.images?.length > 0 ? item.images[0] : 
+                                                  Array.isArray(item.image) ? item.image[0] : item.image} 
+                                              alt={item.name}
+                                              className="h-full w-full object-cover rounded-full"
+                                            />
+                                          ) : (
+                                            <div className="h-full w-full bg-gray-100 rounded-full flex items-center justify-center">
+                                              <ImageIcon className="h-4 w-4 text-gray-400" />
+                                            </div>
+                                          )}
+                                        </div>
+                                      ))}
+                                      {order.items.length > 3 && (
+                                        <div className="inline-block h-8 w-8 rounded-full border-2 border-white bg-gray-100 flex items-center justify-center">
+                                          <span className="text-xs font-medium text-gray-500">+{order.items.length - 3}</span>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </TableCell>
+                                  <TableCell className="font-medium">
+                                    ${order.totalAmount.toFixed(2)}
+                                  </TableCell>
+                                  <TableCell className="text-right">
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-8"
+                                      onClick={() => window.open(`/orders/${order.id}`, '_blank')}
+                                    >
+                                      <ExternalLink className="h-4 w-4 mr-1" />
+                                      Details
+                                    </Button>
+                                  </TableCell>
+                                </TableRow>
+                                
+                                {/* Expandable product list for this order */}
+                                <TableRow className="bg-gray-50/50 hover:bg-gray-50/80 group-hover:table-row hidden">
+                                  <TableCell colSpan={6} className="p-2">
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                                      {order.items.map((item: any, idx: number) => (
+                                        <div key={idx} className="flex items-center space-x-2 p-2 rounded border bg-white">
+                                          <div className="w-12 h-12 flex-shrink-0 rounded overflow-hidden">
+                                            {item.images?.length > 0 || item.image ? (
+                                              <img 
+                                                src={item.images?.length > 0 ? item.images[0] : 
+                                                    Array.isArray(item.image) ? item.image[0] : item.image} 
+                                                alt={item.name}
+                                                className="h-full w-full object-cover"
+                                              />
+                                            ) : (
+                                              <div className="h-full w-full bg-gray-100 flex items-center justify-center">
+                                                <ImageIcon className="h-5 w-5 text-gray-400" />
+                                              </div>
+                                            )}
+                                          </div>
+                                          <div className="flex-grow min-w-0">
+                                            <h4 className="font-medium text-sm line-clamp-1">{item.name}</h4>
+                                            <div className="flex justify-between text-xs text-gray-500">
+                                              <span>${typeof item.price === 'number' ? item.price.toFixed(2) : '0.00'}</span>
+                                              <span>Qty: {item.quantity || 1}</span>
+                                            </div>
+                                          </div>
+                                          {item.productId && (
+                                            <Button 
+                                              variant="ghost" 
+                                              size="icon"
+                                              className="h-8 w-8 flex-shrink-0"
+                                              onClick={() => window.open(`/product/${item.productId}`, '_blank')}
+                                            >
+                                              <ExternalLink className="h-4 w-4" />
+                                            </Button>
+                                          )}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </TableCell>
+                                </TableRow>
+                              </React.Fragment>
                             ))}
                           </TableBody>
                         </Table>
-
-                        {/* Order items section for the latest order */}
-                        {userDetails.orders.length > 0 && (
-                          <div className="mt-8 border rounded-md p-4">
-                            <h3 className="text-lg font-medium mb-4">Latest Order Items</h3>
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                              {userDetails.orders[0].items.map((item: any, idx: number) => (
-                                <div key={idx} className="border rounded-md p-4 flex flex-col gap-2">
-                                  {/* Product Image */}
-                                  {item.images?.length > 0 || item.image ? (
-                                    <div className="aspect-square overflow-hidden rounded-md">
-                                      <img 
-                                        src={item.images?.length > 0 ? item.images[0] : 
-                                            Array.isArray(item.image) ? item.image[0] : item.image} 
-                                        alt={item.name}
-                                        className="h-full w-full object-cover"
-                                      />
-                                    </div>
-                                  ) : (
-                                    <div className="aspect-square bg-gray-100 rounded-md flex items-center justify-center">
-                                      <ImageIcon className="h-10 w-10 text-gray-400" />
-                                    </div>
-                                  )}
-                                  
-                                  {/* Product Details */}
-                                  <div>
-                                    <h4 className="font-medium line-clamp-2">{item.name}</h4>
-                                    <div className="flex justify-between items-center mt-1">
-                                      <div className="flex flex-col">
-                                        <p className="text-sm font-medium">
-                                          ${typeof item.price === 'number' ? item.price.toFixed(2) : '0.00'}
-                                        </p>
-                                        <p className="text-xs text-muted-foreground">
-                                          Qty: {item.quantity || 1}
-                                        </p>
-                                      </div>
-                                      {item.productId && (
-                                        <Button 
-                                          variant="ghost" 
-                                          size="sm" 
-                                          className="h-8 px-2"
-                                          onClick={() => window.open(`/product/${item.productId}`, '_blank')}
-                                        >
-                                          <ExternalLink className="h-4 w-4 mr-1" />
-                                          View
-                                        </Button>
-                                      )}
-                                    </div>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
                       </div>
                     ) : (
                       <div className="text-center py-8 text-gray-500">
