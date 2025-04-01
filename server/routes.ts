@@ -3848,57 +3848,130 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-  // Step 3: Reset password with valid token
+  // Step 3: Reset password with valid token - handles both Firebase and PostgreSQL users
   app.post("/api/auth/reset-password", async (req, res) => {
     try {
-      const { userId, resetToken, newPassword } = req.body;
+      const { userId, resetToken, newPassword, email } = req.body;
       
-      if (!userId || !resetToken || !newPassword) {
-        return res.status(400).json({ message: "User ID, reset token, and new password are required" });
+      if (!newPassword) {
+        return res.status(400).json({ message: "New password is required" });
       }
       
-      // Verify reset token
-      const isValid = await storage.verifyResetToken(userId, resetToken);
+      // Either userId+resetToken OR email+resetToken must be provided
+      if ((!userId || !resetToken) && (!email || !resetToken)) {
+        return res.status(400).json({ message: "Either userId with resetToken, or email with resetToken is required" });
+      }
+      
+      let user = null;
+      let isValid = false;
+      
+      // If email is provided, find user by email first
+      if (email) {
+        user = await storage.getUserByEmail(email);
+        if (user) {
+          console.log(`Found user by email: ${email}, user ID: ${user.id}`);
+          // Check if token is valid for this user
+          isValid = await storage.verifyResetToken(user.id, resetToken);
+          // Also try with email directly as the key
+          if (!isValid) {
+            isValid = await storage.verifyResetToken(email, resetToken);
+          }
+          // Also try with Firebase UID if available
+          if (!isValid && user.firebaseUid) {
+            isValid = await storage.verifyResetToken(user.firebaseUid, resetToken);
+          }
+        }
+      } else {
+        // Verify reset token by userId
+        isValid = await storage.verifyResetToken(userId, resetToken);
+        if (isValid) {
+          user = await storage.getUser(userId);
+        }
+      }
+      
       if (!isValid) {
         return res.status(400).json({ message: "Invalid or expired reset token" });
       }
       
-      // Get user
-      const user = await storage.getUser(userId);
       if (!user) {
         return res.status(404).json({ message: "User not found" });
       }
       
-      // For Firebase auth users, we're handling password updates through firebase
-      if (user.firebaseUid) {
-        // Password updates need to be handled in the client directly through Firebase
-        return res.status(200).json({ 
-          isFirebaseUser: true,
-          message: "For security reasons, Firebase users need to reset their password directly through the Firebase auth system" 
-        });
-      }
+      console.log(`Proceeding with password reset for user ID: ${user.id}, email: ${user.email}`);
       
-      // Update password for non-Firebase users with proper hashing
+      // Update user in PostgreSQL
+      let postgresUpdated = false;
       try {
-        // Import the password hashing function
+        // Hash the password for PostgreSQL storage
         const { hashPassword } = await import("./utils/auth");
-        
-        // Hash the password before storing it
         const hashedPassword = await hashPassword(newPassword);
         
-        // Update with the hashed password
-        await storage.updateUser(userId, { password: hashedPassword });
+        // Update the hashed password in PostgreSQL
+        const updatedUser = await storage.updateUser(user.id, { password: hashedPassword });
         
-        console.log(`Password reset completed successfully for user ID: ${userId}`);
-      } catch (hashError) {
-        console.error("Error hashing password during reset:", hashError);
-        throw new Error("Failed to process password reset");
+        if (updatedUser) {
+          postgresUpdated = true;
+          console.log(`PostgreSQL password updated successfully for user ID: ${user.id}`);
+        } else {
+          console.error(`Failed to update PostgreSQL password for user ID: ${user.id}`);
+        }
+      } catch (pgError) {
+        console.error(`Error updating PostgreSQL password:`, pgError);
       }
       
-      // Clear the reset token
-      await storage.clearResetToken(userId);
+      // Update the password in Firebase if this is a Firebase user
+      let firebaseUpdated = false;
+      if (user.firebaseUid) {
+        try {
+          console.log(`Updating Firebase password for user with UID: ${user.firebaseUid}`);
+          const { resetUserPassword } = await import("./utils/firebaseAdmin");
+          
+          // Update Firebase password directly using Admin SDK
+          firebaseUpdated = await resetUserPassword(user.email, newPassword);
+          
+          if (firebaseUpdated) {
+            console.log(`Firebase password updated successfully for user ID: ${user.id}`);
+          } else {
+            console.error(`Failed to update Firebase password for user ID: ${user.id}`);
+          }
+        } catch (fbError) {
+          console.error(`Error updating Firebase password:`, fbError);
+        }
+      }
       
-      return res.status(200).json({ message: "Password has been reset successfully" });
+      // Clear reset token regardless of outcome
+      await storage.clearResetToken(user.id);
+      if (user.email) await storage.clearResetToken(user.email);
+      if (user.firebaseUid) await storage.clearResetToken(user.firebaseUid);
+      
+      // Determine response based on what was updated
+      if (postgresUpdated && (firebaseUpdated || !user.firebaseUid)) {
+        return res.status(200).json({ 
+          success: true,
+          message: "Password has been reset successfully"
+        });
+      } else if (postgresUpdated) {
+        return res.status(207).json({
+          success: true,
+          message: "Password was updated in database but Firebase update failed",
+          postgresUpdated,
+          firebaseUpdated
+        });
+      } else if (firebaseUpdated) {
+        return res.status(207).json({
+          success: true,
+          message: "Password was updated in Firebase but database update failed",
+          postgresUpdated,
+          firebaseUpdated
+        });
+      } else {
+        return res.status(500).json({
+          success: false,
+          message: "Failed to update password in any system",
+          postgresUpdated,
+          firebaseUpdated
+        });
+      }
     } catch (error) {
       console.error("Error in reset-password:", error);
       return res.status(500).json({ message: "Internal server error" });

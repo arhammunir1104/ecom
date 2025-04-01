@@ -133,158 +133,110 @@ export default function ResetPassword() {
     
     setIsLoading(true);
     try {
-      // First, check if the OTP and reset process is valid
-      try {
-        const resetDocRef = doc(db, "passwordResets", resetDocId);
-        const resetDoc = await getDoc(resetDocRef);
-        
-        // Ensure that the OTP verification was completed
-        if (!resetDoc.exists() || !resetDoc.data().verified) {
-          toast({
-            title: "Verification Required",
-            description: "You must verify your identity first",
-            variant: "destructive",
-          });
-          setLocation("/auth/verify-reset-code");
-          return;
-        }
-        
-        console.log("Verified reset document found, proceeding with password reset");
-        
-        // Add detailed logging to track the reset process
-        const verificationCode = resetDoc.data().otp === "VERIFIED" 
-          ? resetDocId 
-          : resetDoc.data().otp || resetDocId;
-        
-        // First, use the server to verify the reset code before attempting to reset the password
+      console.log("Processing direct password reset for email:", email);
+      
+      // Get the resetToken from session storage or from the reset verification
+      let resetToken = sessionStorage.getItem("resetToken");
+      
+      // If no reset token in session, try to get it from the Firebase document
+      if (!resetToken) {
         try {
-          console.log(`Verifying reset code with server for email: ${email}`);
-          const verifyResponse = await axios.post('/api/auth/verify-reset-code', {
-            email,
-            code: verificationCode
-          });
+          const resetDocRef = doc(db, "passwordResets", resetDocId);
+          const resetDoc = await getDoc(resetDocRef);
           
-          if (verifyResponse?.data?.success) {
-            console.log("Server verification successful:", verifyResponse.data);
-          } else {
-            console.warn("Server verification returned invalid status:", verifyResponse?.data);
-          }
-        } catch (verifyError) {
-          console.error("Error verifying reset code with server:", verifyError);
-          // We'll still proceed with Firebase reset even if this fails
-        }
-        
-        // Use our improved resetPasswordWithOTP function
-        const success = await resetPasswordWithOTP(
-          email,
-          values.password,
-          resetDocId
-        );
-        
-        if (success) {
-          console.log("Password reset request processed successfully");
-          setResetComplete(true);
-          
-          // Explicitly sync the password with the database too
-          try {
-            await axios.post('/api/auth/sync-password', {
-              email,
-              password: values.password,
-              forceSyncAll: true // Force sync across all systems
+          if (!resetDoc.exists() || !resetDoc.data().verified) {
+            toast({
+              title: "Verification Required",
+              description: "You must verify your identity first",
+              variant: "destructive",
             });
-            console.log("Password sync with database completed");
-          } catch (syncError) {
-            console.warn("Password sync with database failed:", syncError);
-            // Continue anyway since Firebase Auth was updated
+            setLocation("/auth/verify-reset-code");
+            return;
           }
           
-          toast({
-            title: "Password Reset Successful",
-            description: "Your password has been reset. You can now log in with your new password.",
-            variant: "default",
-          });
-          
-          // Clear session storage
-          sessionStorage.removeItem("resetEmail");
-          sessionStorage.removeItem("resetDocId");
-          
-          // Sign out any current session to ensure the user logs in with new password
-          if (auth.currentUser) {
-            await auth.signOut();
-          }
-        } else {
-          throw new Error("Failed to reset password. Please try again.");
-        }
-        
-      } catch (authError: any) {
-        console.error("Auth error during password reset:", authError);
-        
-        if (authError.code === 'auth/requires-recent-login') {
-          // User needs to re-authenticate before changing password
-          toast({
-            title: "Authentication Required",
-            description: "For security reasons, please log in again before changing your password.",
-            variant: "destructive",
-          });
-          
-          // Sign out and redirect to login
-          await auth.signOut();
-          setLocation("/auth/login");
-          return;
-        }
-        
-        // Fall back to standard email reset if there was an error with direct update
-        try {
-          console.log("Falling back to standard password reset email for:", email);
-          await sendPasswordResetEmail(auth, email);
-          
-          // Also attempt to sync with the PostgreSQL database
-          try {
-            await axios.post('/api/auth/request-password-reset', {
-              email,
-              resetCode: resetDocId
-            });
-            console.log("Database password reset request sent");
-          } catch (dbResetError) {
-            console.warn("Error requesting database password reset:", dbResetError);
-          }
-          
-          setResetComplete(true);
-          
-          toast({
-            title: "Password Reset Email Sent",
-            description: "Please check your email to complete the password reset process.",
-            variant: "default",
-          });
-          
-          // Clear session storage
-          sessionStorage.removeItem("resetEmail");
-          sessionStorage.removeItem("resetDocId");
-        } catch (resetError: any) {
-          console.error("Reset email error:", resetError);
-          
-          let errorMessage = "An error occurred while resetting your password.";
-          
-          if (resetError.code === "auth/user-not-found") {
-            errorMessage = "No account found with this email address.";
-          } else if (resetError.code === "auth/invalid-email") {
-            errorMessage = "Invalid email address format.";
-          }
-          
-          toast({
-            title: "Reset Failed",
-            description: errorMessage,
-            variant: "destructive",
-          });
+          console.log("Verified reset document found, using it for password reset");
+          resetToken = resetDoc.data().otp || resetDocId;
+        } catch (docError) {
+          console.error("Error getting reset document:", docError);
+          // We'll continue with resetDocId as a fallback
+          resetToken = resetDocId;
         }
       }
-    } catch (error: any) {
-      console.error("Error resetting password:", error);
-      toast({
-        title: "Error",
-        description: error.message || "An error occurred. Please try again.",
-        variant: "destructive",
+      
+      console.log(`Using reset token: ${resetToken} for password reset`);
+      
+      // Directly call our server-side reset endpoint that handles both Firebase and PostgreSQL
+      const response = await axios.post('/api/auth/reset-password', {
+        email: email,
+        resetToken: resetToken,
+        newPassword: values.password
       });
+      
+      console.log("Password reset response:", response.data);
+      
+      if (response.data.success) {
+        console.log("Password reset successful");
+        setResetComplete(true);
+        
+        toast({
+          title: "Password Reset Successful",
+          description: "Your password has been reset. You can now log in with your new password.",
+          variant: "default",
+        });
+        
+        // Clear session storage
+        sessionStorage.removeItem("resetEmail");
+        sessionStorage.removeItem("resetDocId");
+        sessionStorage.removeItem("resetToken");
+        
+        // Sign out any current session to ensure the user logs in with new password
+        if (auth.currentUser) {
+          await auth.signOut();
+        }
+      } else {
+        throw new Error(response.data.message || "Failed to reset password. Please try again.");
+      }
+    } catch (error: any) {
+      console.error("Error in password reset:", error);
+      
+      // Handle specific error codes
+      if (error.response?.data?.message) {
+        toast({
+          title: "Error",
+          description: error.response.data.message,
+          variant: "destructive",
+        });
+      } else if (error.code === 'auth/requires-recent-login') {
+        toast({
+          title: "Authentication Required",
+          description: "For security reasons, please log in again before changing your password.",
+          variant: "destructive",
+        });
+        
+        // Sign out and redirect to login
+        await auth.signOut();
+        setLocation("/auth/login");
+        return;
+      } else {
+        toast({
+          title: "Error",
+          description: error.message || "An error occurred while resetting your password. Please try again.",
+          variant: "destructive",
+        });
+      }
+      
+      // If there was a critical error, redirect back to the forgot password page
+      if (error.response?.status === 400 || error.response?.status === 404) {
+        toast({
+          title: "Reset Failed",
+          description: "Your reset token may have expired. Please restart the password reset process.",
+          variant: "destructive",
+        });
+        
+        setTimeout(() => {
+          setLocation("/auth/forgot-password");
+        }, 3000);
+      }
     } finally {
       setIsLoading(false);
     }

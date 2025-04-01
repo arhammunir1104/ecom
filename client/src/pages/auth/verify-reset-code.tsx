@@ -123,10 +123,13 @@ export default function VerifyResetCode() {
   }, [timeLeft, toast, setLocation]);
 
   const onSubmit = async (values: VerifyOtpFormValues) => {
-    if (!resetDocId) return;
+    if (!resetDocId || !email) return;
     
     setIsLoading(true);
     try {
+      console.log("Verifying reset code with server for email:", email);
+      
+      // First, verify the OTP with Firebase
       const resetDocRef = doc(db, "passwordResets", resetDocId);
       const resetDoc = await getDoc(resetDocRef);
       
@@ -179,6 +182,37 @@ export default function VerifyResetCode() {
           variant: "destructive"
         });
         return;
+      }
+      
+      // Also verify with our server to ensure PostgreSQL database recognizes this code
+      try {
+        const response = await fetch('/api/auth/verify-reset-code', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            email: email,
+            code: values.otp
+          })
+        });
+        
+        const serverResult = await response.json();
+        
+        if (serverResult.success) {
+          console.log("Server verification successful");
+          // Store the reset token from server response for direct API use
+          if (serverResult.resetToken) {
+            sessionStorage.setItem("resetToken", serverResult.resetToken);
+            console.log("Reset token saved to session storage");
+          }
+        } else {
+          console.warn("Server verification failed:", serverResult.message);
+          // We'll still proceed with Firebase verification
+        }
+      } catch (serverError) {
+        console.error("Error verifying with server:", serverError);
+        // Continue anyway with local Firebase verification
       }
       
       // Mark code as verified and erase OTP for security
