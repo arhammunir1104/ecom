@@ -28,8 +28,8 @@ export const initializeFirebaseAdmin = () => {
     const app = admin.initializeApp({
       projectId: process.env.VITE_FIREBASE_PROJECT_ID,
       credential: admin.credential.cert({
-        projectId: process.env.VITE_FIREBASE_PROJECT_ID,
-        clientEmail: process.env.FIREBASE_CLIENT_EMAIL || `firebase-adminsdk@${process.env.VITE_FIREBASE_PROJECT_ID}.iam.gserviceaccount.com`,
+        projectId: process.env.VITE_FIREBASE_PROJECT_ID || 'dummy-project-id',
+        clientEmail: process.env.FIREBASE_CLIENT_EMAIL || `firebase-adminsdk-dummy@example.com`,
         // We won't have the private key, so we'll just handle this as a graceful degradation case
         privateKey: process.env.FIREBASE_PRIVATE_KEY || 'dummy-key',
       }),
@@ -50,12 +50,17 @@ export const initializeFirebaseAdmin = () => {
  * Get Firebase Admin Auth instance
  */
 export const getFirebaseAdminAuth = () => {
-  // Initialize if not already done
-  const app = initializeFirebaseAdmin();
-  if (!app) {
+  try {
+    // Initialize if not already done
+    const app = initializeFirebaseAdmin();
+    if (!app) {
+      throw new Error("Firebase Admin SDK initialization failed");
+    }
+    return getAuth();
+  } catch (error) {
+    console.error("Error getting Firebase Admin Auth:", error);
     throw new Error("Firebase Admin SDK initialization failed");
   }
-  return getAuth();
 };
 
 /**

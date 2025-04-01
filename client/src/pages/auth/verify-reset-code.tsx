@@ -200,11 +200,22 @@ export default function VerifyResetCode() {
         const serverResult = await response.json();
         
         if (serverResult.success) {
-          console.log("Server verification successful");
+          console.log("Server verification successful:", serverResult);
           // Store the reset token from server response for direct API use
           if (serverResult.resetToken) {
             sessionStorage.setItem("resetToken", serverResult.resetToken);
-            console.log("Reset token saved to session storage");
+            console.log("Reset token saved to session storage:", serverResult.resetToken);
+            
+            // Also save userId if it's in the response
+            if (serverResult.userId) {
+              sessionStorage.setItem("resetUserId", serverResult.userId.toString());
+              console.log("User ID saved to session storage:", serverResult.userId);
+            }
+            
+            // Log what's in the session storage right after saving
+            console.log("After saving - resetToken from storage:", sessionStorage.getItem("resetToken"));
+          } else {
+            console.error("No reset token in server response");
           }
         } else {
           console.warn("Server verification failed:", serverResult.message);
@@ -246,7 +257,23 @@ export default function VerifyResetCode() {
     // Store email in session storage for the reset page
     if (email) {
       sessionStorage.setItem("resetEmail", email);
+      
+      // Log to verify email is stored correctly
+      console.log("Reset email set in session storage:", email);
     }
+    
+    // Check if we have a reset token in session storage
+    const storedToken = sessionStorage.getItem("resetToken");
+    if (!storedToken) {
+      toast({
+        title: "Error",
+        description: "Reset token not found. Please try verifying again.",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    console.log("Reset token found in session storage before navigation");
     
     // Navigate to reset password page
     setLocation("/auth/reset-password");

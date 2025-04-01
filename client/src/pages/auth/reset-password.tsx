@@ -54,11 +54,14 @@ export default function ResetPassword() {
   });
 
   useEffect(() => {
-    // Get email and reset document ID from session storage
+    // Get email from session storage
     const storedEmail = sessionStorage.getItem("resetEmail");
     const docId = sessionStorage.getItem("resetDocId");
+    const resetToken = sessionStorage.getItem("resetToken");
     
-    if (!storedEmail || !docId) {
+    console.log("Init reset password with:", { storedEmail, docId, hasToken: !!resetToken });
+    
+    if (!storedEmail) {
       toast({
         title: "Session Expired",
         description: "Please restart the password reset process",
@@ -68,68 +71,26 @@ export default function ResetPassword() {
       return;
     }
     
+    if (!resetToken) {
+      toast({
+        title: "Verification Required",
+        description: "You need to verify your identity first",
+        variant: "destructive",
+      });
+      setLocation("/auth/verify-reset-code");
+      return;
+    }
+    
     setEmail(storedEmail);
-    setResetDocId(docId);
+    if (docId) setResetDocId(docId);
     
-    // Validate that the reset request was verified
-    const validateResetRequest = async () => {
-      try {
-        const resetDocRef = doc(db, "passwordResets", docId);
-        const resetDoc = await getDoc(resetDocRef);
-        
-        if (!resetDoc.exists()) {
-          toast({
-            title: "Invalid Reset Request",
-            description: "Please restart the password reset process",
-            variant: "destructive",
-          });
-          setLocation("/auth/forgot-password");
-          return;
-        }
-        
-        const data = resetDoc.data();
-        
-        // Check if verified
-        if (!data.verified) {
-          toast({
-            title: "Verification Required",
-            description: "Please verify your email first",
-            variant: "destructive",
-          });
-          setLocation("/auth/verify-reset-code");
-          return;
-        }
-        
-        // Check expiration (10 minutes after verification)
-        const verifiedAt = data.verifiedAt.toDate();
-        const expiryTime = new Date(verifiedAt.getTime() + 10 * 60000); // 10 minutes
-        const now = new Date();
-        
-        if (now > expiryTime) {
-          toast({
-            title: "Reset Link Expired",
-            description: "Please restart the password reset process",
-            variant: "destructive",
-          });
-          setLocation("/auth/forgot-password");
-          return;
-        }
-      } catch (error) {
-        console.error("Error validating reset request:", error);
-        toast({
-          title: "Error",
-          description: "An error occurred. Please try again.",
-          variant: "destructive",
-        });
-        setLocation("/auth/forgot-password");
-      }
-    };
-    
-    validateResetRequest();
+    // We don't need to validate from Firebase document anymore
+    // We trust the server-side token validation instead
+    console.log("Reset token is present, ready to reset password");
   }, [toast, setLocation]);
 
   const onSubmit = async (values: ResetPasswordFormValues) => {
-    if (!email || !resetDocId) return;
+    if (!email) return;
     
     setIsLoading(true);
     try {

@@ -3939,39 +3939,54 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
-      // Clear reset token regardless of outcome
-      await storage.clearResetToken(user.id);
-      if (user.email) await storage.clearResetToken(user.email);
-      if (user.firebaseUid) await storage.clearResetToken(user.firebaseUid);
+      // Determine response first based on what was updated
+      let response;
+      let statusCode;
       
-      // Determine response based on what was updated
       if (postgresUpdated && (firebaseUpdated || !user.firebaseUid)) {
-        return res.status(200).json({ 
+        statusCode = 200;
+        response = { 
           success: true,
           message: "Password has been reset successfully"
-        });
+        };
       } else if (postgresUpdated) {
-        return res.status(207).json({
+        statusCode = 207;
+        response = {
           success: true,
           message: "Password was updated in database but Firebase update failed",
           postgresUpdated,
           firebaseUpdated
-        });
+        };
       } else if (firebaseUpdated) {
-        return res.status(207).json({
+        statusCode = 207;
+        response = {
           success: true,
           message: "Password was updated in Firebase but database update failed",
           postgresUpdated,
           firebaseUpdated
-        });
+        };
       } else {
-        return res.status(500).json({
+        statusCode = 500;
+        response = {
           success: false,
           message: "Failed to update password in any system",
           postgresUpdated,
           firebaseUpdated
-        });
+        };
       }
+      
+      // If we're successful (either fully or partially), clear the reset token
+      if (response.success) {
+        console.log("Password update successful, clearing reset tokens");
+        await storage.clearResetToken(user.id);
+        if (user.email) await storage.clearResetToken(user.email);
+        if (user.firebaseUid) await storage.clearResetToken(user.firebaseUid);
+      } else {
+        console.log("Password update failed, preserving reset tokens for retry");
+      }
+      
+      // Send the response
+      return res.status(statusCode).json(response);
     } catch (error) {
       console.error("Error in reset-password:", error);
       return res.status(500).json({ message: "Internal server error" });
