@@ -760,48 +760,18 @@ export const updateUserRole = async (
   role: "admin" | "user"
 ): Promise<void> => {
   try {
-    console.log(`Updating user ${uid} role to ${role} - CLIENT APPROACH`);
+    console.log(`Directly updating user ${uid} role to ${role}`);
     
-    // First try the regular approach
-    try {
-      await updateUserProfile(uid, {
-        role: role
-      });
-      console.log(`User role updated successfully via updateUserProfile`);
-      return;
-    } catch (profileUpdateError) {
-      console.error("Regular update failed, trying direct Firestore approach:", profileUpdateError);
-    }
-    
-    // If regular approach fails, try direct Firestore access
+    // Get direct Firestore reference to the user document
     const userRef = doc(db, USERS_COLLECTION, uid);
     
-    // Check if document exists first
-    const userDoc = await getDoc(userRef);
+    // Simply update the role field with merge option
+    await setDoc(userRef, {
+      role: role,
+      updatedAt: serverTimestamp()
+    }, { merge: true });
     
-    if (userDoc.exists()) {
-      console.log("User document exists, updating...");
-      
-      // Update just the role field using merge option
-      await setDoc(userRef, {
-        role: role,
-        updatedAt: serverTimestamp()
-      }, { merge: true });
-      
-      console.log(`User role updated successfully via direct Firestore access`);
-    } else {
-      console.log("User document doesn't exist, creating...");
-      
-      // Create a new document
-      await setDoc(userRef, {
-        uid: uid,
-        role: role,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
-      });
-      
-      console.log(`User document created with role ${role}`);
-    }
+    console.log(`User role updated successfully to ${role}`);
   } catch (error) {
     console.error("Error updating user role:", error);
     throw error;
