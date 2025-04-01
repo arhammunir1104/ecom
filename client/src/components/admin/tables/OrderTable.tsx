@@ -176,7 +176,7 @@ const OrderTable = ({ orders }: OrderTableProps) => {
       
       toast({
         title: "Order Updated",
-        description: `Order #${order.id.slice(0, 8)} status changed to ${newStatus}`,
+        description: `Order #${typeof order.id === 'string' ? order.id.slice(0, 8) : order.id} status changed to ${newStatus}`,
       });
       
       setSelectedOrder(null);
