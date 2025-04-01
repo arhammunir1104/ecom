@@ -446,6 +446,8 @@ export const updateUserRole = async (firebaseUid: string, role: "admin" | "user"
       console.warn('Firebase is not initialized, initializing now');
       initializeFirebase();
       
+      console.log(`Firebase initialized status: ${isFirebaseInitialized}`);
+      
       if (!isFirebaseInitialized) {
         throw new Error('Failed to initialize Firebase');
       }
@@ -454,36 +456,93 @@ export const updateUserRole = async (firebaseUid: string, role: "admin" | "user"
     // First check if the user document exists
     const firestore = db();
     const userRef = firestore.collection(USERS_COLLECTION).doc(firebaseUid);
-    const userDoc = await userRef.get();
     
-    if (!userDoc.exists) {
-      console.error(`User ${firebaseUid} not found in Firestore`);
-      
-      // If document doesn't exist, try to create it instead of failing
-      console.log(`Attempting to create user document for ${firebaseUid}`);
+    console.log(`Attempting to get document for user ${firebaseUid}`);
+    
+    try {
+      // Attempt to directly update without checking first
+      console.log('Using direct update approach for reliability');
       await userRef.set({
         uid: firebaseUid,
         role,
-        createdAt: new Date(),
         updatedAt: new Date()
-      });
+      }, { merge: true }); // Using merge: true to only update specified fields
       
-      console.log(`Created new user document with role ${role}`);
-      return { id: firebaseUid, role };
+      console.log(`Role for user ${firebaseUid} successfully updated to ${role} using merge`);
+      
+      // Get the updated document to return
+      const updatedDoc = await userRef.get();
+      if (updatedDoc.exists) {
+        console.log('Successfully retrieved updated document');
+        return { id: updatedDoc.id, ...updatedDoc.data() };
+      } else {
+        console.log('Document still doesn\'t exist after update');
+        return { id: firebaseUid, role };
+      }
+    } catch (updateError) {
+      console.error('Error with direct update approach:', updateError);
+      console.log('Falling back to REST API approach');
+      
+      // Fallback to direct REST API call
+      try {
+        // Create a direct REST API call to Firebase
+        const projectId = process.env.VITE_FIREBASE_PROJECT_ID || "softgirlfashion";
+        const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/users/${firebaseUid}`;
+        
+        console.log(`Attempting REST API call to ${url}`);
+        
+        const https = require('https');
+        
+        // Prepare data for the request
+        const data = JSON.stringify({
+          fields: {
+            role: { stringValue: role },
+            updatedAt: { timestampValue: new Date().toISOString() }
+          }
+        });
+        
+        // Create a promise for the request
+        const result = new Promise((resolve, reject) => {
+          const req = https.request(
+            url,
+            {
+              method: 'PATCH',
+              headers: {
+                'Content-Type': 'application/json',
+                'Content-Length': data.length
+              }
+            },
+            (res) => {
+              let responseData = '';
+              res.on('data', (chunk) => { responseData += chunk; });
+              res.on('end', () => {
+                console.log('REST API response:', res.statusCode);
+                if (res.statusCode >= 200 && res.statusCode < 300) {
+                  resolve(JSON.parse(responseData));
+                } else {
+                  reject(new Error(`HTTP error ${res.statusCode}: ${responseData}`));
+                }
+              });
+            }
+          );
+          
+          req.on('error', (e) => {
+            console.error('REST API request error:', e);
+            reject(e);
+          });
+          
+          req.write(data);
+          req.end();
+        });
+        
+        await result;
+        console.log('REST API update successful');
+        return { id: firebaseUid, role };
+      } catch (restError) {
+        console.error('REST API approach also failed:', restError);
+        throw restError;
+      }
     }
-    
-    // Update the role field
-    console.log(`Found existing user document, updating role to ${role}`);
-    await userRef.update({
-      role,
-      updatedAt: new Date()
-    });
-    
-    console.log(`Role for user ${firebaseUid} successfully updated to ${role}`);
-    
-    // Get the updated user document
-    const updatedDoc = await userRef.get();
-    return { id: updatedDoc.id, ...updatedDoc.data() };
   } catch (error) {
     console.error(`Error updating role for user ${firebaseUid}:`, error);
     throw error;

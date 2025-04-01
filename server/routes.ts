@@ -2273,41 +2273,114 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // If user has a Firebase UID, update their role in Firebase too
       let firebaseSuccess = false;
+      let firebaseError = null;
+      
       if (user.firebaseUid) {
+        console.log(`Attempting to update Firebase role for UID: ${user.firebaseUid} to ${role}`);
+        
+        // Try multiple methods to update the user role in Firebase
+        
+        // Method 1: Use our custom Firebase utility function
         try {
-          // First try the direct Firebase Admin SDK approach
+          console.log("Method 1: Using Firebase utility function...");
           const { updateUserRole } = require('./utils/firebase');
           await updateUserRole(user.firebaseUid, role as "admin" | "user");
-          console.log(`Firebase role updated successfully for UID: ${user.firebaseUid}`);
+          console.log(`Firebase role updated successfully via method 1 for UID: ${user.firebaseUid}`);
           firebaseSuccess = true;
-        } catch (firebaseError) {
-          console.error("Failed to update Firebase role using admin SDK:", firebaseError);
+        } catch (error) {
+          console.error("Method 1 failed:", error);
+          firebaseError = error;
           
-          // Try alternative method - using Firestore admin directly
+          // Method 2: Direct Firestore admin SDK
           try {
+            console.log("Method 2: Using direct Firestore admin SDK...");
             const admin = require('firebase-admin');
             if (!admin.apps.length) {
-              // Initialize Firebase Admin if not already done
               console.log("Initializing Firebase Admin directly");
-              admin.initializeApp({
-                credential: admin.credential.cert(require('../firebase-admin.json'))
-              });
+              try {
+                admin.initializeApp({
+                  credential: admin.credential.cert(require('../firebase-admin.json'))
+                });
+              } catch (initError) {
+                console.error("Failed to initialize Firebase Admin:", initError);
+                // Continue to next method if this fails
+              }
             }
             
-            // Update the user document directly
-            await admin.firestore()
-              .collection('users')
-              .doc(user.firebaseUid)
-              .update({ 
-                role, 
-                updatedAt: new Date() 
+            if (admin.apps.length > 0) {
+              // Try set with merge option instead of update to handle non-existent documents
+              await admin.firestore()
+                .collection('users')
+                .doc(user.firebaseUid)
+                .set({ 
+                  role, 
+                  updatedAt: new Date(),
+                  uid: user.firebaseUid // Ensure UID is set
+                }, { merge: true });
+                
+              console.log(`Firebase role updated successfully via method 2`);
+              firebaseSuccess = true;
+            }
+          } catch (method2Error) {
+            console.error("Method 2 failed:", method2Error);
+            
+            // Method 3: REST API direct call to Firebase
+            try {
+              console.log("Method 3: Using REST API direct call...");
+              const https = require('https');
+              const projectId = process.env.VITE_FIREBASE_PROJECT_ID || "softgirlfashion";
+              const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/users/${user.firebaseUid}`;
+              
+              console.log(`Attempting REST API call to ${url}`);
+              
+              // Prepare data for the request
+              const data = JSON.stringify({
+                fields: {
+                  role: { stringValue: role },
+                  updatedAt: { timestampValue: new Date().toISOString() }
+                }
               });
               
-            console.log(`Firebase role updated successfully using alternative method`);
-            firebaseSuccess = true;
-          } catch (altError) {
-            console.error("Failed using alternative method too:", altError);
-            // We continue since the database update was successful
+              // Create a promise for the request
+              const result = await new Promise((resolve, reject) => {
+                const req = https.request(
+                  url,
+                  {
+                    method: 'PATCH',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      'Content-Length': data.length
+                    }
+                  },
+                  (res) => {
+                    let responseData = '';
+                    res.on('data', (chunk) => { responseData += chunk; });
+                    res.on('end', () => {
+                      console.log('REST API response:', res.statusCode);
+                      if (res.statusCode >= 200 && res.statusCode < 300) {
+                        resolve(JSON.parse(responseData));
+                      } else {
+                        reject(new Error(`HTTP error ${res.statusCode}: ${responseData}`));
+                      }
+                    });
+                  }
+                );
+                
+                req.on('error', (e) => {
+                  console.error('REST API request error:', e);
+                  reject(e);
+                });
+                
+                req.write(data);
+                req.end();
+              });
+              
+              console.log('REST API update successful');
+              firebaseSuccess = true;
+            } catch (method3Error) {
+              console.error("Method 3 failed:", method3Error);
+              // All methods failed - we'll return firebaseSuccess = false
+            }
           }
         }
       }

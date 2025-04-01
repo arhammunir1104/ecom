@@ -7,6 +7,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import * as firebaseService from "@/lib/firebaseService";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -83,6 +84,8 @@ const UserTable = ({ users }: UserTableProps) => {
     message: string;
   } | null>(null);
   
+  // Use the updateUserRole function from Firebase service directly
+
   // Mutation for updating user role
   const updateRoleMutation = useMutation({
     mutationFn: async ({ userId, role }: { userId: number; role: string }) => {
@@ -90,9 +93,20 @@ const UserTable = ({ users }: UserTableProps) => {
         // Reset Firebase sync status
         setFirebaseSyncStatus(null);
         
-        // Simplified approach: use the server-side role update endpoint
+        // Find the user to get their Firebase UID - we need this for the client-side update
+        let userFirebaseUid = '';
+        
+        // First, try to find the user's Firebase UID from the users prop we already have
+        const existingUser = users.find(u => u.id === userId);
+        if (existingUser && existingUser.firebaseUid) {
+          userFirebaseUid = existingUser.firebaseUid;
+        }
+        
+        console.log(`Updating role for user id ${userId} with Firebase UID ${userFirebaseUid}`);
+        
+        // 1. First, try standard server-side API to update both database and Firebase
         // This handles both database update and Firebase update in one call
-        const response = await apiRequest("POST", "/api/direct-update-role", {
+        const response = await apiRequest("POST", "/api/admin/users/role", {
           userId, 
           role
         });
@@ -106,19 +120,59 @@ const UserTable = ({ users }: UserTableProps) => {
 
         const responseData = await response.json();
         
-        // Track Firebase sync status
-        if (responseData.firebaseSuccess === true) {
-          setFirebaseSyncStatus({
-            userId,
-            status: 'success',
-            message: 'Database and Firebase roles updated successfully'
-          });
-        } else if (responseData.firebaseSuccess === false) {
-          setFirebaseSyncStatus({
-            userId,
-            status: 'warning',
-            message: 'Database updated but Firebase sync failed. Roles may be out of sync.'
-          });
+        // If no Firebase UID found yet, try to get it from the response
+        if (!userFirebaseUid && responseData.user && responseData.user.firebaseUid) {
+          userFirebaseUid = responseData.user.firebaseUid;
+        }
+        
+        // 2. If the server-side Firebase update failed but we have a Firebase UID,
+        // try the client-side approach as a backup
+        if (responseData.firebaseSuccess === false && userFirebaseUid) {
+          console.log(`Server-side Firebase update failed, trying client-side update for UID: ${userFirebaseUid}`);
+          
+          try {
+            // Use the client-side Firebase service function
+            await firebaseService.updateUserRole(userFirebaseUid, role as any);
+            
+            console.log("Client-side Firebase update succeeded");
+            
+            // Update status to show partial success with client-side backup
+            setFirebaseSyncStatus({
+              userId,
+              status: 'success',
+              message: 'Role updated in database and Firebase (via client-side fallback)'
+            });
+            
+            // Return the updated user with an overridden firebaseSuccess flag
+            return {
+              ...responseData.user,
+              _firebaseSuccess: true
+            };
+          } catch (firebaseError) {
+            console.error("Client-side Firebase update also failed:", firebaseError);
+            
+            // Keep the warning status since client-side also failed
+            setFirebaseSyncStatus({
+              userId,
+              status: 'warning',
+              message: 'Database updated but Firebase sync failed despite backup attempts. Roles may be out of sync.'
+            });
+          }
+        } else {
+          // Track Firebase sync status from server response
+          if (responseData.firebaseSuccess === true) {
+            setFirebaseSyncStatus({
+              userId,
+              status: 'success',
+              message: 'Database and Firebase roles updated successfully'
+            });
+          } else if (responseData.firebaseSuccess === false) {
+            setFirebaseSyncStatus({
+              userId,
+              status: 'warning',
+              message: 'Database updated but Firebase sync failed. Roles may be out of sync.'
+            });
+          }
         }
         
         return responseData.user;
