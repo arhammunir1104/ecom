@@ -54,7 +54,7 @@ export default function AdminProducts() {
   const [page, setPage] = useState(1);
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
-  
+
   // Redirect if not admin
   useEffect(() => {
     if (isAuthenticated && !isAdmin) {
@@ -67,93 +67,98 @@ export default function AdminProducts() {
     queryKey: ["/api/products"],
     enabled: isAdmin && isAuthenticated,
   });
-  
+
   // Fetch categories for filter
   const { data: categories = [] } = useQuery<Category[]>({
     queryKey: ["/api/categories"],
     enabled: isAdmin && isAuthenticated,
   });
-  
+
   // Filter and paginate products
-  const filteredProducts = products.filter((product: Product) => {
-    let match = true;
-    
-    if (searchQuery) {
-      match = product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-              product.description.toLowerCase().includes(searchQuery.toLowerCase());
-    }
-    
-    if (match && categoryFilter && categoryFilter !== 'all') {
-      match = product.categoryId === parseInt(categoryFilter);
-    }
-    
-    if (match && statusFilter && statusFilter !== 'all') {
-      if (statusFilter === "in-stock") {
-        match = product.stock > 0;
-      } else if (statusFilter === "out-of-stock") {
-        match = product.stock === 0;
-      } else if (statusFilter === "featured") {
-        match = product.featured;
-      } else if (statusFilter === "trending") {
-        match = product.trending;
+  const filteredProducts =
+    products.filter((product: Product) => {
+      let match = true;
+
+      if (searchQuery) {
+        match =
+          product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          product.description.toLowerCase().includes(searchQuery.toLowerCase());
       }
-    }
-    
-    return match;
-  }) || [];
-  
+
+      if (match && categoryFilter && categoryFilter !== "all") {
+        match = product.categoryId === parseInt(categoryFilter);
+      }
+
+      if (match && statusFilter && statusFilter !== "all") {
+        if (statusFilter === "in-stock") {
+          match = product.stock > 0;
+        } else if (statusFilter === "out-of-stock") {
+          match = product.stock === 0;
+        } else if (statusFilter === "featured") {
+          match = product.featured;
+        } else if (statusFilter === "trending") {
+          match = product.trending;
+        }
+      }
+
+      return match;
+    }) || [];
+
   // Items per page
   const itemsPerPage = 10;
   const totalPages = Math.ceil(filteredProducts.length / itemsPerPage);
   const paginatedProducts = filteredProducts.slice(
     (page - 1) * itemsPerPage,
-    page * itemsPerPage
+    page * itemsPerPage,
   );
-  
+
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     setPage(1); // Reset to first page on new search
   };
-  
+
   const handleCategoryChange = (value: string) => {
     setCategoryFilter(value);
     setPage(1);
   };
-  
+
   const handleStatusChange = (value: string) => {
     setStatusFilter(value);
     setPage(1);
   };
-  
+
   const handleClearFilters = () => {
     setSearchQuery("");
     setCategoryFilter("all");
     setStatusFilter("all");
     setPage(1);
   };
-  
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
         <div>
-          <h2 className="text-3xl font-playfair font-bold tracking-tight">Products</h2>
-          <p className="text-muted-foreground">
-            Manage your product inventory
-          </p>
+          <h2 className="text-3xl font-playfair font-bold tracking-tight">
+            Products
+          </h2>
+          <p className="text-muted-foreground">Manage your product inventory</p>
         </div>
-        <Button 
-          onClick={() => navigate("/admin/products/add")} 
-          className="bg-purple text-white"
+        <Button
+          onClick={() => navigate("/admin/products/add")}
+          className="bg-pink-300 text-white"
         >
           <PlusCircle className="mr-2 h-4 w-4" />
           Add Product
         </Button>
       </div>
-      
+
       <div className="rounded-md border">
         <div className="flex flex-col md:flex-row gap-4 p-4 items-end">
           <div className="flex-1">
-            <form onSubmit={handleSearch} className="flex w-full max-w-sm space-x-2">
+            <form
+              onSubmit={handleSearch}
+              className="flex w-full max-w-sm space-x-2"
+            >
               <div className="relative flex-1">
                 <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
@@ -163,27 +168,35 @@ export default function AdminProducts() {
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
               </div>
-              <Button type="submit">Search</Button>
+              <Button type="submit" className="text-white">
+                Search
+              </Button>
             </form>
           </div>
-          
+
           <div className="flex flex-col sm:flex-row gap-4">
             <div className="w-[180px]">
-              <Select value={categoryFilter} onValueChange={handleCategoryChange}>
+              <Select
+                value={categoryFilter}
+                onValueChange={handleCategoryChange}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="All Categories" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Categories</SelectItem>
-                  {categories?.map(category => (
-                    <SelectItem key={category.id} value={category.id.toString()}>
+                  {categories?.map((category) => (
+                    <SelectItem
+                      key={category.id}
+                      value={category.id.toString()}
+                    >
                       {category.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
-            
+
             <div className="w-[180px]">
               <Select value={statusFilter} onValueChange={handleStatusChange}>
                 <SelectTrigger>
@@ -198,13 +211,13 @@ export default function AdminProducts() {
                 </SelectContent>
               </Select>
             </div>
-            
+
             <Button variant="outline" onClick={handleClearFilters}>
               Clear Filters
             </Button>
           </div>
         </div>
-        
+
         {isLoading ? (
           <div className="flex justify-center items-center p-8">
             <Loader2 className="h-8 w-8 animate-spin text-purple" />
@@ -215,7 +228,7 @@ export default function AdminProducts() {
               products={paginatedProducts}
               categories={categories || []}
             />
-            
+
             {totalPages > 1 && (
               <div className="p-4 border-t">
                 <Pagination>
@@ -223,10 +236,12 @@ export default function AdminProducts() {
                     <PaginationItem>
                       <PaginationPrevious
                         onClick={() => page > 1 && setPage(page - 1)}
-                        className={page <= 1 ? "pointer-events-none opacity-50" : ""}
+                        className={
+                          page <= 1 ? "pointer-events-none opacity-50" : ""
+                        }
                       />
                     </PaginationItem>
-                    
+
                     {Array.from({ length: totalPages }).map((_, i) => (
                       <PaginationItem key={i}>
                         <PaginationLink
@@ -237,11 +252,15 @@ export default function AdminProducts() {
                         </PaginationLink>
                       </PaginationItem>
                     ))}
-                    
+
                     <PaginationItem>
                       <PaginationNext
                         onClick={() => page < totalPages && setPage(page + 1)}
-                        className={page >= totalPages ? "pointer-events-none opacity-50" : ""}
+                        className={
+                          page >= totalPages
+                            ? "pointer-events-none opacity-50"
+                            : ""
+                        }
                       />
                     </PaginationItem>
                   </PaginationContent>

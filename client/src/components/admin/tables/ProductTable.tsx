@@ -31,17 +31,17 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { 
-  PencilIcon, 
-  Trash2, 
-  MoreHorizontal, 
-  Star, 
-  Flame, 
-  Eye, 
-  Copy, 
-  ArrowUp, 
-  ArrowDown, 
-  Loader2 
+import {
+  PencilIcon,
+  Trash2,
+  MoreHorizontal,
+  Star,
+  Flame,
+  Eye,
+  Copy,
+  ArrowUp,
+  ArrowDown,
+  Loader2,
 } from "lucide-react";
 
 // Define Product and Category interfaces
@@ -79,24 +79,24 @@ const ProductTable = ({ products, categories }: ProductTableProps) => {
   const { toast } = useToast();
   const [isDeletingId, setIsDeletingId] = useState<number | null>(null);
   const [productToDelete, setProductToDelete] = useState<Product | null>(null);
-  
+
   const getCategoryName = (categoryId: number | null | undefined) => {
     if (!categoryId) return "Uncategorized";
-    const category = categories.find(c => c.id === categoryId);
+    const category = categories.find((c) => c.id === categoryId);
     return category ? category.name : "Unknown";
   };
-  
+
   const handleDeleteProduct = async () => {
     if (!productToDelete) return;
-    
+
     setIsDeletingId(productToDelete.id);
-    
+
     try {
       await apiRequest("DELETE", `/api/products/${productToDelete.id}`);
-      
+
       // Invalidate query to refresh product list
       queryClient.invalidateQueries({ queryKey: ["/api/products"] });
-      
+
       toast({
         title: "Product Deleted",
         description: `"${productToDelete.name}" has been deleted successfully`,
@@ -112,20 +112,23 @@ const ProductTable = ({ products, categories }: ProductTableProps) => {
       setProductToDelete(null);
     }
   };
-  
-  const handleToggleFeature = async (product: Product, feature: 'featured' | 'trending') => {
+
+  const handleToggleFeature = async (
+    product: Product,
+    feature: "featured" | "trending",
+  ) => {
     try {
       await apiRequest("PUT", `/api/products/${product.id}`, {
         ...product,
         [feature]: !product[feature],
       });
-      
+
       // Invalidate query to refresh product list
       queryClient.invalidateQueries({ queryKey: ["/api/products"] });
-      
+
       toast({
         title: "Product Updated",
-        description: `"${product.name}" has been ${product[feature] ? 'removed from' : 'added to'} ${feature} products`,
+        description: `"${product.name}" has been ${product[feature] ? "removed from" : "added to"} ${feature} products`,
       });
     } catch (error: any) {
       toast({
@@ -135,7 +138,7 @@ const ProductTable = ({ products, categories }: ProductTableProps) => {
       });
     }
   };
-  
+
   return (
     <Table>
       <TableHeader>
@@ -154,9 +157,9 @@ const ProductTable = ({ products, categories }: ProductTableProps) => {
             <TableCell>
               <div className="flex items-center gap-3">
                 {product.images && product.images.length > 0 ? (
-                  <img 
-                    src={product.images[0]} 
-                    alt={product.name} 
+                  <img
+                    src={product.images[0]}
+                    alt={product.name}
                     className="h-12 w-12 rounded object-cover"
                   />
                 ) : (
@@ -180,7 +183,9 @@ const ProductTable = ({ products, categories }: ProductTableProps) => {
             <TableCell>
               {product.discountPrice ? (
                 <div>
-                  <span className="font-medium">${product.discountPrice.toFixed(2)}</span>
+                  <span className="font-medium">
+                    ${product.discountPrice.toFixed(2)}
+                  </span>
                   <span className="text-sm text-muted-foreground line-through ml-2">
                     ${product.price.toFixed(2)}
                   </span>
@@ -190,26 +195,26 @@ const ProductTable = ({ products, categories }: ProductTableProps) => {
               )}
             </TableCell>
             <TableCell>
-              <span className={`${product.stock > 0 ? 'text-green-600' : 'text-red-500'}`}>
+              <span
+                className={`${product.stock > 0 ? "text-green-600" : "text-red-500"}`}
+              >
                 {product.stock} in stock
               </span>
             </TableCell>
             <TableCell>
               <div className="flex flex-wrap gap-1">
                 {product.featured && (
-                  <Badge className="bg-gold text-white">
+                  <Badge className="bg-pink-200 text-white">
                     <Star className="h-3 w-3 mr-1" /> Featured
                   </Badge>
                 )}
                 {product.trending && (
-                  <Badge className="bg-pink-light text-purple">
+                  <Badge className="bg-pink-200 text-white">
                     <Flame className="h-3 w-3 mr-1" /> Trending
                   </Badge>
                 )}
                 {product.stock === 0 && (
-                  <Badge variant="destructive">
-                    Out of Stock
-                  </Badge>
+                  <Badge variant="destructive">Out of Stock</Badge>
                 )}
               </div>
             </TableCell>
@@ -223,11 +228,17 @@ const ProductTable = ({ products, categories }: ProductTableProps) => {
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
                   <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                  <DropdownMenuItem onClick={() => navigate(`/product/${product.id}`)}>
+                  <DropdownMenuItem
+                    onClick={() => navigate(`/product/${product.id}`)}
+                  >
                     <Eye className="mr-2 h-4 w-4" />
                     View Product
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => navigate(`/admin/products/edit/${product.id}`)}>
+                  <DropdownMenuItem
+                    onClick={() =>
+                      navigate(`/admin/products/edit/${product.id}`)
+                    }
+                  >
                     <PencilIcon className="mr-2 h-4 w-4" />
                     Edit Product
                   </DropdownMenuItem>
@@ -236,13 +247,21 @@ const ProductTable = ({ products, categories }: ProductTableProps) => {
                     Duplicate
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => handleToggleFeature(product, 'featured')}>
+                  <DropdownMenuItem
+                    onClick={() => handleToggleFeature(product, "featured")}
+                  >
                     <Star className="mr-2 h-4 w-4" />
-                    {product.featured ? 'Remove from Featured' : 'Mark as Featured'}
+                    {product.featured
+                      ? "Remove from Featured"
+                      : "Mark as Featured"}
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => handleToggleFeature(product, 'trending')}>
+                  <DropdownMenuItem
+                    onClick={() => handleToggleFeature(product, "trending")}
+                  >
                     <Flame className="mr-2 h-4 w-4" />
-                    {product.trending ? 'Remove from Trending' : 'Mark as Trending'}
+                    {product.trending
+                      ? "Remove from Trending"
+                      : "Mark as Trending"}
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
@@ -258,14 +277,18 @@ const ProductTable = ({ products, categories }: ProductTableProps) => {
           </TableRow>
         ))}
       </TableBody>
-      
+
       {/* Delete confirmation dialog */}
-      <AlertDialog open={!!productToDelete} onOpenChange={(open) => !open && setProductToDelete(null)}>
+      <AlertDialog
+        open={!!productToDelete}
+        onOpenChange={(open) => !open && setProductToDelete(null)}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Product</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete "{productToDelete?.name}"? This action cannot be undone.
+              Are you sure you want to delete "{productToDelete?.name}"? This
+              action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

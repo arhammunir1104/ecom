@@ -1,8 +1,6 @@
 import { useState } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Card,
-} from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import {
   Carousel,
   CarouselContent,
@@ -68,7 +66,7 @@ const ProductImages = ({ images }: ProductImagesProps) => {
             }`}
             onClick={handleZoomToggle}
             onMouseMove={handleMouseMove}
-            style={{ paddingTop: "100%" }}
+            style={{ paddingTop: "120%" }}
           >
             {images.map((image, index) => (
               <div
@@ -80,12 +78,12 @@ const ProductImages = ({ images }: ProductImagesProps) => {
                 <img
                   src={image}
                   alt={`Product image ${index + 1}`}
-                  className="w-full h-full object-cover"
+                  className="w-full h-full object-contain"
                   style={
                     isZoomed
                       ? {
                           transformOrigin: `${zoomPosition.x * 100}% ${zoomPosition.y * 100}%`,
-                          transform: "scale(2)",
+                          transform: "scale(2.5)"
                         }
                       : {}
                   }

@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 import {
   Table,
   TableBody,
@@ -38,7 +40,8 @@ import {
   XCircle, 
   Package, 
   Loader2,
-  RotateCw
+  RotateCw,
+  FileText
 } from "lucide-react";
 import { format } from "date-fns";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -146,6 +149,100 @@ const OrderTable = ({ orders }: OrderTableProps) => {
     }
   };
 
+  const generateInvoice = (order: Order) => {
+    try {
+      const doc = new jsPDF();
+      
+      // Add logo and header
+      doc.setFontSize(20);
+      doc.setTextColor(44, 62, 80);
+      doc.text("SoftGirlFashion", 105, 20, { align: "center" });
+      
+      doc.setFontSize(12);
+      doc.text("INVOICE", 105, 30, { align: "center" });
+      
+      // Add invoice details
+      doc.setFontSize(10);
+      doc.setTextColor(100, 100, 100);
+      doc.text("Invoice #:", 20, 45);
+      doc.text(`INV-${typeof order.id === 'string' ? order.id : order.id.toString()}`, 50, 45);
+      
+      doc.text("Date:", 20, 52);
+      doc.text(format(new Date(order.orderDate), 'MMM dd, yyyy'), 50, 52);
+      
+      doc.text("Status:", 20, 59);
+      doc.text(order.status, 50, 59);
+      
+      // Add customer details
+      doc.setFontSize(12);
+      doc.setTextColor(44, 62, 80);
+      doc.text("BILL TO:", 20, 75);
+      
+      doc.setFontSize(10);
+      doc.setTextColor(100, 100, 100);
+      doc.text(order.shippingAddress.fullName, 20, 82);
+      doc.text(formatAddress(order.shippingAddress), 20, 89);
+      doc.text(order.shippingAddress.phone, 20, 96);
+      
+      // Add table header
+      const tableColumn = ["Item", "Qty", "Price", "Total"];
+      const tableRows: any[] = [];
+      
+      // Add rows to table data
+      order.items.forEach(item => {
+        const itemData = [
+          item.name,
+          item.quantity.toString(),
+          `$${item.price.toFixed(2)}`,
+          `$${item.subtotal.toFixed(2)}`
+        ];
+        tableRows.push(itemData);
+      });
+      
+      // Generate table
+      autoTable(doc, {
+        head: [tableColumn],
+        body: tableRows,
+        startY: 110,
+        theme: 'grid',
+        styles: { fontSize: 9, cellPadding: 3 },
+        headStyles: { fillColor: [236, 64, 122], textColor: [255, 255, 255] }
+      });
+      
+      // Calculate the final Y position after the table
+      // @ts-ignore - this is a valid property from autotable but TypeScript doesn't recognize it
+      const finalY = (doc as any).lastAutoTable.finalY + 10;
+      
+      // Add summary
+      doc.setFontSize(10);
+      doc.text("Total Amount:", 140, finalY);
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'bold');
+      doc.text(`$${order.totalAmount.toFixed(2)}`, 170, finalY, { align: "right" });
+      
+      // Add footer
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8);
+      doc.setTextColor(150, 150, 150);
+      doc.text("Thank you for shopping with SoftGirlFashion!", 105, 280, { align: "center" });
+      
+      // Save the PDF
+      doc.save(`SoftGirlFashion_Invoice_${typeof order.id === 'string' ? order.id : order.id.toString()}.pdf`);
+      
+      toast({
+        title: "Invoice Generated",
+        description: "The invoice has been downloaded successfully.",
+      });
+    } catch (error: any) {
+      console.error("Error generating invoice:", error);
+      toast({
+        title: "Error",
+        description: "Failed to generate invoice: " + (error.message || "Unknown error"),
+        variant: "destructive",
+      });
+    }
+  };
+
   const handleUpdateStatus = async (order: Order, newStatus: Order['status']) => {
     setIsUpdatingId(order.id);
     try {
@@ -243,6 +340,10 @@ const OrderTable = ({ orders }: OrderTableProps) => {
                     <DropdownMenuItem onClick={() => setViewOrderDetails(order)}>
                       <Eye className="mr-2 h-4 w-4" />
                       View Details
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => generateInvoice(order)}>
+                      <FileText className="mr-2 h-4 w-4" />
+                      Generate Invoice
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuLabel>Update Status</DropdownMenuLabel>

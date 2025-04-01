@@ -35,11 +35,24 @@ const Home = () => {
   return (
     <div className="bg-beige-light">
       <HeroBanner banners={heroData || []} isLoading={isLoadingHero} />
-      <CategoryShowcase categories={categories || []} isLoading={isLoadingCategories} />
-      <FeaturedProducts products={featuredProducts || []} isLoading={isLoadingFeatured} />
+      <CategoryShowcase
+        categories={categories || []}
+        isLoading={isLoadingCategories}
+      />
+      <FeaturedProducts
+        products={featuredProducts || []}
+        isLoading={isLoadingFeatured}
+      />
       <PromoBanner />
-      <TrendingSection products={trendingProducts || []} isLoading={isLoadingTrending} />
-      <Testimonials testimonials={testimonials || []} isLoading={isLoadingTestimonials} />
+      {console.log(trendingProducts)}
+      <TrendingSection
+        products={trendingProducts || []}
+        isLoading={isLoadingTrending}
+      />
+      <Testimonials
+        testimonials={testimonials || []}
+        isLoading={isLoadingTestimonials}
+      />
       <InstagramFeed />
       <Newsletter />
     </div>

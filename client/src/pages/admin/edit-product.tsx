@@ -647,31 +647,57 @@ export default function AdminEditProduct() {
             </div>
           </div>
           
-          <div className="flex justify-end space-x-4">
+          <div className="flex justify-between items-center">
             <Button 
               type="button" 
-              variant="outline" 
-              onClick={() => navigate("/admin/products")}
+              variant="secondary"
+              onClick={() => product && navigate(`/product/${product.id}`)}
+              className="flex items-center"
             >
-              Cancel
+              <svg 
+                xmlns="http://www.w3.org/2000/svg" 
+                width="24" 
+                height="24" 
+                viewBox="0 0 24 24" 
+                fill="none" 
+                stroke="currentColor" 
+                strokeWidth="2" 
+                strokeLinecap="round" 
+                strokeLinejoin="round" 
+                className="mr-2 h-4 w-4"
+              >
+                <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
+                <circle cx="12" cy="12" r="3" />
+              </svg>
+              View on User Side
             </Button>
-            <Button 
-              type="submit" 
-              className="bg-purple hover:bg-purple/90 text-white"
-              disabled={isSubmitting}
-            >
-              {isSubmitting ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Updating...
-                </>
-              ) : (
-                <>
-                  <CheckCircle className="mr-2 h-4 w-4" />
-                  Update Product
-                </>
-              )}
-            </Button>
+            
+            <div className="flex space-x-4">
+              <Button 
+                type="button" 
+                variant="outline" 
+                onClick={() => navigate("/admin/products")}
+              >
+                Cancel
+              </Button>
+              <Button 
+                type="submit" 
+                className="bg-purple hover:bg-purple/90 text-white"
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Updating...
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle className="mr-2 h-4 w-4" />
+                    Update Product
+                  </>
+                )}
+              </Button>
+            </div>
           </div>
         </form>
       </Form>
