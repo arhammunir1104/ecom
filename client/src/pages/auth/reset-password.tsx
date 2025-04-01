@@ -147,72 +147,26 @@ export default function ResetPassword() {
           return;
         }
         
-        // Get the current Firebase user
-        const currentUser = auth.currentUser;
+        // For non-authenticated users we need to use the sendPasswordResetEmail flow
+        // This is more reliable when the user is not logged in
         
-        // Create an API endpoint request to update the password
-        const response = await fetch('/api/auth/firebase-password-reset', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            email,
-            newPassword: values.password,
-            resetDocId
-          })
-        });
+        // Send a regular Firebase password reset email
+        await sendPasswordResetEmail(auth, email);
         
-        // Get the response data
-        const responseData = await response.json();
-        
-        // If the server succeeded, or indicated we should use client-side fallback
-        if (response.ok && responseData.success) {
-          console.log("Password reset successful via server:", responseData.message);
-        } else {
-          // If no current user is logged in, re-authenticate using the reset email flow
-          if (!currentUser) {
-            // Send a regular Firebase password reset email
-            await sendPasswordResetEmail(auth, email);
-            
-            toast({
-              title: "Password Reset Email Sent",
-              description: "Please check your email to complete the password reset process.",
-              variant: "default",
-            });
-            
-            // Mark the reset as processed
-            await updateDoc(resetDocRef, {
-              resetProcessed: true,
-              resetProcessedAt: new Date(),
-            });
-            
-            setResetComplete(true);
-            
-            // Clear session storage
-            sessionStorage.removeItem("resetEmail");
-            sessionStorage.removeItem("resetDocId");
-            return;
-          }
-          
-          // If user is logged in, update their password directly
-          // We need to import the proper function from Firebase auth
-          const { updatePassword } = await import("firebase/auth");
-          await updatePassword(currentUser, values.password);
-        }
-        
-        // If we got here, either the API call worked or we updated the password via client SDK
-        
-        // Mark the reset as complete in Firestore
+        // Mark the reset as processed
         await updateDoc(resetDocRef, {
           resetComplete: true,
           resetCompletedAt: new Date(),
+          resetProcessed: true,
+          resetProcessedAt: new Date(),
         });
         
         setResetComplete(true);
+        
         toast({
-          title: "Password Reset Successful",
-          description: "Your password has been successfully reset. You can now log in with your new password.",
+          title: "Password Reset Email Sent",
+          description: "Please check your email to complete the password reset process. Click the link in that email to set your new password.",
+          variant: "default",
         });
         
         // Clear session storage
@@ -220,7 +174,9 @@ export default function ResetPassword() {
         sessionStorage.removeItem("resetDocId");
         
         // Sign out any current session to ensure the user logs in with new password
-        await auth.signOut();
+        if (auth.currentUser) {
+          await auth.signOut();
+        }
         
       } catch (authError: any) {
         console.error("Auth error:", authError);
