@@ -52,6 +52,7 @@ export const getFirebaseAdminAuth = () => {
  */
 export const resetUserPassword = async (email: string, newPassword: string): Promise<boolean> => {
   try {
+    console.log(`Attempting to reset password for user ${email} using Firebase Admin SDK`);
     const auth = getFirebaseAdminAuth();
     
     // Get user by email
@@ -62,22 +63,41 @@ export const resetUserPassword = async (email: string, newPassword: string): Pro
       });
     
     if (!userRecord) {
-      console.error('User not found:', email);
+      console.error('User not found in Firebase:', email);
       return false;
     }
+    
+    console.log(`Found user in Firebase with UID: ${userRecord.uid}`);
     
     // Update user's password
     await auth.updateUser(userRecord.uid, {
       password: newPassword
     }).catch(error => {
-      console.error('Error updating user password:', error);
+      console.error('Error updating user password in Firebase:', error);
       throw error;
     });
     
-    console.log('Password updated successfully for user:', email);
+    // Also update the password in Firestore if we have access
+    try {
+      const app = initializeFirebaseAdmin();
+      const db = getFirestore(app);
+      
+      // We don't store raw passwords in Firestore, just mark that it was reset
+      const userRef = db.collection('users').doc(userRecord.uid);
+      await userRef.update({
+        passwordLastUpdated: new Date(),
+        updatedAt: new Date()
+      });
+      console.log('Password update timestamp added to Firestore for user:', email);
+    } catch (firestoreError) {
+      console.warn('Could not update Firestore password timestamp:', firestoreError);
+      // Non-critical error, continue
+    }
+    
+    console.log('Password updated successfully in Firebase Auth for user:', email);
     return true;
   } catch (error) {
-    console.error('Error resetting password:', error);
+    console.error('Error resetting password with Firebase Admin:', error);
     return false;
   }
 };

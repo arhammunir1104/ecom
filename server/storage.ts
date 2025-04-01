@@ -29,6 +29,7 @@ export interface IStorage {
   saveResetToken(userId: number | string, token: string): Promise<void>;
   verifyResetToken(userId: number | string, token: string): Promise<boolean>;
   clearResetToken(userId: number | string): Promise<void>;
+  getAllResetTokens(): Record<string, string>; // For debugging
 
   // Category methods
   getCategory(id: number): Promise<Category | undefined>;
@@ -1029,6 +1030,20 @@ export class DatabaseStorage implements IStorage {
       return {};
     }
   }
+  
+  // For debugging purposes - returns all reset tokens in the system
+  getAllResetTokens(): Record<string, string> {
+    try {
+      const result: Record<string, string> = {};
+      this.passwordResetTokens.forEach((value, key) => {
+        result[String(key)] = value;
+      });
+      return result;
+    } catch (error) {
+      console.error("Error getting all reset tokens:", error);
+      return {};
+    }
+  }
 
   async saveResetToken(userId: number | string, token: string): Promise<void> {
     try {
@@ -1497,6 +1512,23 @@ export class DatabaseStorage implements IStorage {
     } catch (error) {
       console.error("Database error in getAllTestimonials:", error);
       return [];
+    }
+  }
+  
+  // For debugging purposes - returns all reset tokens in the system
+  getAllResetTokens(): Record<string, string> {
+    try {
+      const result: Record<string, string> = {};
+      // In the database implementation, we need to access the in-memory Map
+      // that's used to store reset tokens temporarily
+      // This is basically the same as MemStorage implementation but using our class property
+      this.passwordResetTokens.forEach((value, key) => {
+        result[String(key)] = value;
+      });
+      return result;
+    } catch (error) {
+      console.error("Error getting all reset tokens:", error);
+      return {};
     }
   }
 }

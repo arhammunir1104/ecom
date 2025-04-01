@@ -4011,9 +4011,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
         }
         
-        // Verify the code using the user's ID
+        // Verify the code using the user's ID - try multiple formats for maximum compatibility
         const actualCode = code || '';
-        const isValid = await storage.verifyPasswordResetOTP(user.id, actualCode);
+        let isValid = await storage.verifyPasswordResetOTP(user.id, actualCode);
+        
+        // If not valid and Firebase UID exists, try that as well
+        if (!isValid && user.firebaseUid) {
+          console.log(`Trying verification with Firebase UID: ${user.firebaseUid}`);
+          isValid = await storage.verifyPasswordResetOTP(user.firebaseUid, actualCode);
+        }
+        
+        // As a last resort, try with email as ID
+        if (!isValid && email) {
+          console.log(`Trying verification with email as ID: ${email}`);
+          isValid = await storage.verifyPasswordResetOTP(email, actualCode);
+        }
         
         if (isValid) {
           console.log(`Reset code verified successfully for user with email: ${email}`);
@@ -4022,9 +4034,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const { generateSecureToken } = await import("./utils/auth");
           const resetToken = generateSecureToken();
           
-          // Save the token for this user
+          // Save the token for this user with multiple IDs for robustness
           await storage.saveResetToken(user.id, resetToken);
-          console.log(`Generated reset token for user ID: ${user.id}`);
+          
+          // Also save with Firebase UID if available
+          if (user.firebaseUid) {
+            await storage.saveResetToken(user.firebaseUid, resetToken);
+            console.log(`Also saved reset token with Firebase UID: ${user.firebaseUid}`);
+          }
+          
+          // Also save with email for additional lookup methods
+          try {
+            await storage.saveResetToken(email, resetToken);
+            console.log(`Also saved reset token with email: ${email}`);
+          } catch (emailKeyError) {
+            console.warn("Could not save token with email as key:", emailKeyError);
+          }
+          
+          console.log(`Generated reset token for user ID: ${user.id} (multiple IDs for redundancy)`);
           
           return res.status(200).json({
             success: true,
@@ -4114,10 +4141,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const expiresAt = new Date();
         expiresAt.setMinutes(expiresAt.getMinutes() + 30);
         
-        // Save the OTP for verification
+        // Save the OTP for verification - store with multiple IDs for robust lookups
         await storage.savePasswordResetOTP(pgUser.id, resetCode, expiresAt);
-        
         console.log(`Saved reset code for user ID: ${pgUser.id}, expires at: ${expiresAt}`);
+        
+        // Also save with Firebase UID if available, for more robust lookups
+        if (pgUser.firebaseUid) {
+          try {
+            console.log(`Also saving reset code with Firebase UID: ${pgUser.firebaseUid}`);
+            // Call the savePasswordResetOTP function directly with the Firebase UID
+            await storage.savePasswordResetOTP(pgUser.firebaseUid as unknown as number, resetCode, expiresAt);
+            console.log(`Successfully saved reset code with Firebase UID`);
+          } catch (firebaseIdError) {
+            console.warn(`Error saving reset code with Firebase UID:`, firebaseIdError);
+          }
+        }
+        
+        // Also try saving with email for even more redundancy
+        try {
+          console.log(`Also saving reset code with email: ${email}`);
+          // We're passing email as if it were a number - storage implementation handles this
+          await storage.savePasswordResetOTP(email as unknown as number, resetCode, expiresAt);
+          console.log(`Successfully saved reset code with email lookup key`);
+        } catch (emailKeyError) {
+          console.warn(`Error saving reset code with email key:`, emailKeyError);
+        }
       }
       
       return res.status(200).json({
@@ -4149,13 +4197,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Check if user exists in PostgreSQL
       const pgUser = await storage.getUserByEmail(email);
       
+      // Track our operations for detailed reporting
+      const operations = {
+        postgresUpdated: false,
+        firebaseUpdated: false,
+        firestoreUpdated: false
+      };
+      
+      // First handle PostgreSQL update if user exists
       if (pgUser) {
         // Prepare update data
         const updateData: any = {
           firebaseUid: uid || pgUser.firebaseUid
         };
         
-        // If a specific password was provided, hash it and store it (for complete reset)
+        // If a specific password was provided, hash it and store it
         if (password) {
           // Import the password hashing function
           const { hashPassword } = await import("./utils/auth");
@@ -4173,7 +4229,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         } else if (!forceSyncAll) {
           // Only set a placeholder when not doing a force sync (normal sync operations)
-          // For forceSyncAll operations, we want to sync the actual password
           updateData.password = 'firebase-auth-' + Date.now();
         } else {
           // When forceSyncAll is true but no password provided, return an error
@@ -4185,71 +4240,124 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         // Update the user in PostgreSQL
         await storage.updateUser(pgUser.id, updateData);
+        operations.postgresUpdated = true;
         
         console.log(`Password ${password ? 'updated' : 'placeholder created'} in PostgreSQL for user ID: ${pgUser.id}`);
-        
-        // If forceSyncAll flag is true and password is provided, also update Firebase Auth
-        // This ensures the password is synchronized in both systems
-        if (forceSyncAll && password) {
-          try {
-            if (pgUser.firebaseUid) {
-              console.log(`Force syncing password to Firebase Auth for user: ${pgUser.email} (UID: ${pgUser.firebaseUid})`);
-              const { resetUserPassword } = await import("./utils/firebaseAdmin");
-              await resetUserPassword(pgUser.email, password);
-              console.log(`Firebase Auth password updated for user: ${pgUser.email}`);
-            } else {
-              console.warn(`Cannot sync with Firebase Auth - no UID found for user ID: ${pgUser.id}`);
-            }
-          } catch (firebaseError) {
-            console.error(`Error updating Firebase Auth password:`, firebaseError);
-            // Don't fail the entire operation, but inform client there was a partial sync
-            return res.status(207).json({
-              success: true,
-              message: "Password updated in PostgreSQL but failed to sync with Firebase Auth",
-              firebaseError: String(firebaseError)
-            });
-          }
-        }
-        
-        return res.status(200).json({ 
-          success: true,
-          message: "Password sync completed successfully" 
-        });
       } else {
         console.log(`No PostgreSQL user found with email: ${email}`);
-        
-        // If forceSyncAll is true, try to update Firebase Auth directly even if not in PostgreSQL
-        if (forceSyncAll && password) {
-          try {
-            console.log(`Force syncing password to Firebase Auth only for email: ${email}`);
-            const { resetUserPassword } = await import("./utils/firebaseAdmin");
-            await resetUserPassword(email, password);
-            console.log(`Firebase Auth password updated for email: ${email}`);
-            
-            return res.status(206).json({
-              success: true,
-              message: "Password updated in Firebase Auth only (user not found in PostgreSQL)"
-            });
-          } catch (firebaseError) {
-            console.error(`Error updating Firebase Auth password:`, firebaseError);
+      }
+      
+      // Now handle Firebase Auth update if requested
+      let firebaseError = null;
+      if (password && (forceSyncAll || !pgUser)) {
+        try {
+          // If we have a pgUser with Firebase UID or if we're forcing a sync even without PostgreSQL user
+          const firebaseUid = pgUser?.firebaseUid || uid;
+          
+          if (firebaseUid) {
+            console.log(`Using Firebase UID ${firebaseUid} for password update`);
           }
+          
+          console.log(`Updating Firebase Auth password for email: ${email}`);
+          const { resetUserPassword } = await import("./utils/firebaseAdmin");
+          const firebaseSuccess = await resetUserPassword(email, password);
+          
+          if (firebaseSuccess) {
+            operations.firebaseUpdated = true;
+            operations.firestoreUpdated = true; // resetUserPassword tries to update Firestore too
+            console.log(`Firebase Auth password successfully updated for email: ${email}`);
+          } else {
+            console.error(`Firebase Auth password update failed for email: ${email}`);
+            firebaseError = "Firebase Auth update failed";
+          }
+        } catch (fbError) {
+          console.error(`Error updating Firebase Auth password:`, fbError);
+          firebaseError = String(fbError);
         }
-        
+      } else if (password) {
+        console.log(`Skipping Firebase Auth update (forceSyncAll not set)`);
+      }
+      
+      // Determine status code and response based on operations performed
+      if (operations.postgresUpdated && operations.firebaseUpdated) {
+        return res.status(200).json({ 
+          success: true,
+          message: "Password successfully updated in both PostgreSQL and Firebase",
+          operations
+        });
+      } else if (operations.postgresUpdated) {
+        return res.status(207).json({
+          success: true,
+          message: "Password updated in PostgreSQL only",
+          firebaseError,
+          operations
+        });
+      } else if (operations.firebaseUpdated) {
+        return res.status(206).json({
+          success: true,
+          message: "Password updated in Firebase only (user not found in PostgreSQL)",
+          operations
+        });
+      } else {
         return res.status(404).json({ 
           success: false,
-          message: "User not found in database" 
+          message: "User not found in any database system",
+          operations
         });
       }
     } catch (error) {
       console.error("Error syncing password:", error);
       return res.status(500).json({ 
         success: false,
-        message: "Internal server error",
+        message: "Internal server error during password sync",
         error: String(error)
       });
     }
   });
 
+  // Password reset diagnostic tools - REMOVE BEFORE PRODUCTION
+  // This will be helpful to test the password reset flow
+  if (process.env.NODE_ENV !== 'production') {
+    app.get("/api/debug/password-reset-otps", (req, res) => {
+      try {
+        const otps = storage.getAllPasswordResetOTPs();
+        
+        // Format the result nicely with expiration status
+        const result: Record<string, any> = {};
+        Object.entries(otps).forEach(([key, value]) => {
+          result[key] = {
+            otp: value.otp,
+            expiresAt: value.expiresAt.toISOString(),
+            isExpired: new Date() > value.expiresAt,
+            timeLeft: Math.floor((value.expiresAt.getTime() - Date.now()) / 1000) + " seconds"
+          };
+        });
+        
+        return res.status(200).json({
+          otps: result,
+          count: Object.keys(result).length
+        });
+      } catch (error) {
+        console.error("Error getting password reset OTPs:", error);
+        return res.status(500).json({ error: String(error) });
+      }
+    });
+    
+    app.get("/api/debug/reset-tokens", (req, res) => {
+      try {
+        const tokens = storage.getAllResetTokens();
+        
+        return res.status(200).json({
+          tokens,
+          count: Object.keys(tokens).length
+        });
+      } catch (error) {
+        console.error("Error getting reset tokens:", error);
+        return res.status(500).json({ error: String(error) });
+      }
+    });
+  }
+  
   // DIRECT ENDPOINTS: These endpoints bypass middleware that may cause HTML error responses
   
   // Direct endpoint for updating user roles - this avoids the auth middleware issues

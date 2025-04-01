@@ -524,7 +524,8 @@ export const resetPasswordWithOTP = async (email: string, newPassword: string, r
   try {
     console.log(`Processing password reset for ${email} with verification code`);
     
-    // First verify if the reset code is valid through our backend
+    // Step 1: Verify the reset code is valid through our backend
+    console.log('Verifying reset code with backend server...');
     const verifyResponse = await axios.post('/api/auth/verify-reset-code', {
       email,
       code: resetCode
@@ -537,89 +538,120 @@ export const resetPasswordWithOTP = async (email: string, newPassword: string, r
     
     console.log('Reset code verified, proceeding with password reset');
     
-    // Ensure password is synced right away with PostgreSQL as a failsafe
+    // Step 2: Try the Admin API first (most reliable approach)
+    // This will update both Firebase and PostgreSQL in one go if the server has proper Firebase admin credentials
     try {
-      console.log('Pre-syncing password with PostgreSQL for consistency');
+      console.log('Attempting to reset password via server Admin API...');
+      const adminResetResponse = await axios.post('/api/auth/firebase-password-reset', {
+        email,
+        newPassword,
+        resetDocId: resetCode
+      });
+      
+      if (adminResetResponse.data && adminResetResponse.data.success) {
+        console.log('Password reset successful via Admin API');
+        
+        // Double-check sync with PostgreSQL for redundancy
+        try {
+          console.log('Ensuring PostgreSQL database is synced...');
+          await axios.post('/api/auth/sync-password', {
+            email,
+            password: newPassword,
+            forceSyncAll: true // Ensure both datastores are updated
+          });
+          console.log('Password sync with PostgreSQL confirmed');
+        } catch (syncError) {
+          console.warn('Additional PostgreSQL sync failed but initial reset was successful:', syncError);
+          // Continue since the main reset worked
+        }
+        
+        return true;
+      }
+      
+      if (adminResetResponse.data && adminResetResponse.data.clientSideFallback) {
+        console.log('Admin API requested client-side fallback:', adminResetResponse.data.message);
+        // Continue to client-side methods
+      } else if (adminResetResponse.status !== 200) {
+        throw new Error(`Admin API error: ${adminResetResponse.data?.message || 'Unknown error'}`);
+      }
+    } catch (adminApiError) {
+      console.warn('Admin API error, trying alternative methods:', adminApiError);
+    }
+    
+    // Step 3: Try the sync-password endpoint explicitly 
+    // This is the most direct way to update both systems
+    try {
+      console.log('Using direct sync-password endpoint to update both databases...');
+      const syncResponse = await axios.post('/api/auth/sync-password', {
+        email,
+        password: newPassword,
+        forceSyncAll: true // Critical flag to ensure BOTH Firebase and PostgreSQL are updated
+      });
+      
+      if (syncResponse.data && syncResponse.data.success) {
+        console.log('Password successfully synced across all databases');
+        return true;
+      }
+    } catch (syncError) {
+      console.warn('Direct password sync failed, will try more methods:', syncError);
+    }
+    
+    // Step 4: Try using a temporary token to sign in and update password
+    try {
+      console.log('Attempting temporary token authentication method...');
+      const userCredential = await axios.post('/api/auth/get-temp-token', {
+        email,
+        resetCode
+      });
+      
+      if (userCredential.data && userCredential.data.token) {
+        // Sign in with the temporary token
+        await signInWithCustomToken(auth, userCredential.data.token);
+        
+        // Now we're signed in, we can update the password
+        const currentUser = auth.currentUser;
+        if (currentUser) {
+          await updatePassword(currentUser, newPassword);
+          console.log('Firebase password updated successfully via temporary auth');
+          
+          // Make sure to sync with PostgreSQL
+          try {
+            await axios.post('/api/auth/sync-password', {
+              email,
+              uid: currentUser.uid,
+              password: newPassword,
+              forceSyncAll: true
+            });
+            console.log('Password successfully synced with PostgreSQL database');
+          } catch (syncError) {
+            console.warn('Error syncing with PostgreSQL after Firebase update:', syncError);
+            // Continue anyway since Firebase auth is updated
+          }
+          
+          // Sign out after password change
+          await firebaseSignOut(auth);
+          return true;
+        }
+      }
+    } catch (tempAuthError) {
+      console.warn('Temporary auth method failed:', tempAuthError);
+    }
+    
+    // Step 5: Last resort - standard password reset email flow
+    console.log('Falling back to standard password reset email flow...');
+    await sendPasswordResetEmail(auth, email);
+    
+    // Also make one final attempt to update the PostgreSQL database directly
+    try {
       await axios.post('/api/auth/sync-password', {
         email,
         password: newPassword,
-        forceSyncAll: true // Ensure both datastores are updated
+        forceSyncAll: true
       });
-    } catch (syncError) {
-      console.warn('Pre-sync with PostgreSQL failed:', syncError);
-      // Continue with the reset process anyway
+      console.log('Final attempt to sync PostgreSQL password succeeded');
+    } catch (finalSyncError) {
+      console.warn('Final PostgreSQL sync attempt failed:', finalSyncError);
     }
-    
-    try {
-      // First try to use the Firebase Admin API through our endpoint
-      // This will update both Firebase and PostgreSQL in one go
-      try {
-        const adminResetResponse = await axios.post('/api/auth/firebase-password-reset', {
-          email,
-          newPassword,
-          resetDocId: resetCode
-        });
-        
-        if (adminResetResponse.data && adminResetResponse.data.success) {
-          console.log('Password reset successful via Admin API');
-          return true;
-        }
-        
-        if (adminResetResponse.data && adminResetResponse.data.clientSideFallback) {
-          console.log('Admin API requested client-side fallback:', adminResetResponse.data.message);
-          // Continue to client-side methods
-        } else if (adminResetResponse.status !== 200) {
-          throw new Error(`Admin API error: ${adminResetResponse.data?.message || 'Unknown error'}`);
-        }
-      } catch (adminApiError) {
-        console.warn('Admin API error, falling back to client methods:', adminApiError);
-      }
-      
-      // Try method #2: Use a temporary token to sign in
-      try {
-        // Try to find user by email and obtain credentials
-        const userCredential = await axios.post('/api/auth/get-temp-token', {
-          email,
-          resetCode
-        });
-        
-        if (userCredential.data && userCredential.data.token) {
-          // Sign in with the temporary token
-          await signInWithCustomToken(auth, userCredential.data.token);
-          
-          // Now we're signed in, we can update the password
-          const currentUser = auth.currentUser;
-          if (currentUser) {
-            await updatePassword(currentUser, newPassword);
-            console.log('Password updated successfully via temporary auth');
-            
-            // Sync the password with PostgreSQL - include the new password
-            try {
-              await axios.post('/api/auth/sync-password', {
-                email,
-                uid: currentUser.uid,
-                password: newPassword // Include the actual password for syncing
-              });
-              console.log('Password sync requested for PostgreSQL with new password');
-            } catch (syncError) {
-              console.warn('Error syncing password with PostgreSQL:', syncError);
-              // Continue anyway since Firebase auth is updated
-            }
-            
-            // Sign out after password change
-            await firebaseSignOut(auth);
-            return true;
-          }
-        }
-      } catch (tempAuthError) {
-        console.warn('Could not use temporary auth, falling back to standard reset flow', tempAuthError);
-      }
-    } catch (authError) {
-      console.warn('All direct auth methods failed, falling back to standard reset flow', authError);
-    }
-    
-    // If we couldn't do a direct update, use the standard password reset flow
-    await sendPasswordResetEmail(auth, email);
     
     // Update the reset document in Firestore if ID is provided
     if (resetCode && resetCode.length > 10) { // Likely a Firestore doc ID not just a code
@@ -631,11 +663,10 @@ export const resetPasswordWithOTP = async (email: string, newPassword: string, r
         });
       } catch (docError) {
         console.warn('Error updating reset document:', docError);
-        // Continue anyway as the main reset email is sent
       }
     }
     
-    console.log("Password reset email sent successfully to:", email);
+    console.log("Password reset email sent as fallback to:", email);
     return true;
   } catch (error) {
     console.error("Error processing password reset:", error);
