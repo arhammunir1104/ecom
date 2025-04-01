@@ -29,11 +29,7 @@ const ProductDetails = ({ id }: ProductDetailsProps) => {
     retryDelay: 1000
   });
 
-  // Fetch product reviews
-  const { data: reviews, isLoading: isLoadingReviews } = useQuery({
-    queryKey: [`/api/reviews/product/${id}`],
-    enabled: !!product,
-  });
+  // Using Firebase for reviews now, no need to fetch from API
 
   // Fetch related products
   const { data: relatedProducts, isLoading: isLoadingRelated } = useQuery<Product[]>({
@@ -111,9 +107,7 @@ const ProductDetails = ({ id }: ProductDetailsProps) => {
           <Separator className="my-12" />
 
           <ReviewsSection 
-            productId={id} 
-            reviews={reviews || []} 
-            isLoading={isLoadingReviews} 
+            productId={id}
           />
 
           <Separator className="my-12" />

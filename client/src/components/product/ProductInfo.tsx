@@ -1,6 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Product, Category } from "@shared/schema";
 import { useCart } from "@/hooks/useCart";
+import { useAuth } from "@/hooks/useAuth";
+import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -12,6 +14,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Heart, Share2, ShoppingBag, Truck, RotateCcw, ShieldCheck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { addToWishlist, isInWishlist, removeFromWishlist } from "@/lib/firebaseService";
 
 interface ProductInfoProps {
   product: Product;
@@ -22,7 +25,11 @@ const ProductInfo = ({ product, category }: ProductInfoProps) => {
   const [quantity, setQuantity] = useState(1);
   const [selectedSize, setSelectedSize] = useState("");
   const [selectedColor, setSelectedColor] = useState("");
+  const [isWishlisted, setIsWishlisted] = useState(false);
+  const [isWishlistLoading, setIsWishlistLoading] = useState(false);
   const { addToCart } = useCart();
+  const { user } = useAuth();
+  const { toast } = useToast();
   
   const {
     id,
@@ -35,8 +42,79 @@ const ProductInfo = ({ product, category }: ProductInfoProps) => {
     stock,
   } = product;
   
+  useEffect(() => {
+    const checkWishlistStatus = async () => {
+      if (user?.uid) {
+        try {
+          const result = await isInWishlist(user.uid, id);
+          setIsWishlisted(result);
+        } catch (error) {
+          console.error("Failed to check wishlist status:", error);
+        }
+      }
+    };
+    
+    checkWishlistStatus();
+  }, [user, id]);
+
   const handleAddToCart = () => {
     addToCart(product, quantity);
+    toast({
+      title: "Added to cart",
+      description: `${name} has been added to your cart`
+    });
+  };
+  
+  const handleToggleWishlist = async () => {
+    if (!user) {
+      toast({
+        title: "Please sign in",
+        description: "You need to be signed in to add items to your wishlist",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    setIsWishlistLoading(true);
+    
+    try {
+      if (isWishlisted) {
+        await removeFromWishlist(user.uid, id);
+        setIsWishlisted(false);
+        toast({
+          title: "Removed from wishlist",
+          description: `${name} has been removed from your wishlist`
+        });
+      } else {
+        // Get the first image if available
+        let productImage = "";
+        if (Array.isArray(product.images) && product.images.length > 0) {
+          productImage = product.images[0];
+        }
+        
+        await addToWishlist(user.uid, {
+          id,
+          name,
+          price,
+          discountPrice,
+          image: productImage
+        });
+        setIsWishlisted(true);
+        toast({
+          title: "Added to wishlist",
+          description: `${name} has been added to your wishlist`
+        });
+      }
+    } catch (error) {
+      console.error("Error toggling wishlist:", error);
+      toast({
+        title: "Error",
+        description: "Failed to update your wishlist. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsWishlistLoading(false);
+    }
   };
   
   const formattedSizes = Array.isArray(sizes) ? sizes : [];
@@ -170,8 +248,15 @@ const ProductInfo = ({ product, category }: ProductInfoProps) => {
           {inStock ? "Add to Cart" : "Out of Stock"}
         </Button>
         
-        <Button variant="outline" size="icon">
-          <Heart className="h-5 w-5" />
+        <Button 
+          variant="outline" 
+          size="icon"
+          onClick={handleToggleWishlist}
+          disabled={isWishlistLoading}
+        >
+          <Heart 
+            className={`h-5 w-5 ${isWishlisted ? "fill-red-500 text-red-500" : ""}`} 
+          />
         </Button>
       </div>
       

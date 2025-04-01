@@ -1998,6 +1998,186 @@ export const isInWishlist = async (
   }
 };
 
+// Review-related types
+interface ProductReview {
+  id?: string;
+  productId: number | string;
+  userId: string;
+  username: string;
+  rating: number;
+  comment: string;
+  userPhotoURL?: string;
+  purchaseVerified: boolean;
+  createdAt: Timestamp;
+}
+
+interface ReviewsData {
+  totalReviews: number;
+  averageRating: number;
+  lastUpdated: Timestamp;
+}
+
+// Review collection references
+const getReviewsColRef = () => collection(db, 'reviews');
+const getProductReviewsColRef = (productId: number | string) => 
+  collection(db, 'products', productId.toString(), 'reviews');
+const getProductReviewStatsDocRef = (productId: number | string) => 
+  doc(db, 'products', productId.toString());
+
+/**
+ * Add a review to a product
+ */
+export const addProductReview = async (
+  userId: string,
+  productId: number | string,
+  reviewData: {
+    rating: number;
+    comment: string;
+    username: string;
+    userPhotoURL?: string;
+    purchaseVerified?: boolean;
+  }
+): Promise<ProductReview> => {
+  try {
+    // First check if user has already reviewed this product
+    const existingReview = await getUserProductReview(userId, productId);
+    
+    if (existingReview) {
+      throw new Error("You have already reviewed this product");
+    }
+    
+    // Get user profile to include name
+    const userProfile = await getUserProfile(userId);
+    
+    if (!userProfile) {
+      throw new Error("User profile not found");
+    }
+    
+    // Use the provided purchaseVerified value or determine it
+    const purchaseVerified = reviewData.purchaseVerified !== undefined 
+      ? reviewData.purchaseVerified 
+      : false; // Default to false if not explicitly set
+    
+    // Create a new review
+    const reviewDataWithTimestamp: ProductReview = {
+      productId,
+      userId,
+      username: userProfile.username || reviewData.username,
+      rating: reviewData.rating,
+      comment: reviewData.comment,
+      userPhotoURL: userProfile.photoURL || reviewData.userPhotoURL,
+      purchaseVerified,
+      createdAt: serverTimestamp() as Timestamp
+    };
+    
+    // Add to both the general reviews collection and the product-specific collection
+    const reviewRef = await addDoc(getReviewsColRef(), reviewDataWithTimestamp);
+    const productReviewRef = await addDoc(getProductReviewsColRef(productId), reviewDataWithTimestamp);
+    
+    // Update the product's review stats
+    await updateProductReviewStats(productId);
+    
+    return {
+      id: reviewRef.id,
+      ...reviewDataWithTimestamp
+    };
+  } catch (error) {
+    console.error("Error adding product review:", error);
+    throw error;
+  }
+};
+
+/**
+ * Get a user's review for a specific product
+ */
+export const getUserProductReview = async (
+  userId: string,
+  productId: number | string
+): Promise<ProductReview | null> => {
+  try {
+    const reviewsQuery = query(
+      getReviewsColRef(),
+      where("userId", "==", userId),
+      where("productId", "==", productId)
+    );
+    
+    const reviewsSnapshot = await getDocs(reviewsQuery);
+    
+    if (reviewsSnapshot.empty) {
+      return null;
+    }
+    
+    const reviewDoc = reviewsSnapshot.docs[0];
+    return { id: reviewDoc.id, ...reviewDoc.data() } as ProductReview;
+  } catch (error) {
+    console.error("Error fetching user product review:", error);
+    return null;
+  }
+};
+
+/**
+ * Get all reviews for a specific product
+ */
+export const getProductReviews = async (
+  productId: number | string
+): Promise<ProductReview[]> => {
+  try {
+    const reviewsQuery = query(
+      getProductReviewsColRef(productId),
+      orderBy("createdAt", "desc")
+    );
+    
+    const reviewsSnapshot = await getDocs(reviewsQuery);
+    
+    if (reviewsSnapshot.empty) {
+      return [];
+    }
+    
+    return reviewsSnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    })) as ProductReview[];
+  } catch (error) {
+    console.error("Error fetching product reviews:", error);
+    return [];
+  }
+};
+
+/**
+ * Update review statistics for a product
+ */
+export const updateProductReviewStats = async (
+  productId: number | string
+): Promise<ReviewsData | null> => {
+  try {
+    const reviews = await getProductReviews(productId);
+    
+    if (!reviews.length) {
+      return null;
+    }
+    
+    const totalReviews = reviews.length;
+    const totalRating = reviews.reduce((sum, review) => sum + review.rating, 0);
+    const averageRating = totalRating / totalReviews;
+    
+    const statsData: ReviewsData = {
+      totalReviews,
+      averageRating,
+      lastUpdated: serverTimestamp() as Timestamp
+    };
+    
+    // Update the product document with review stats
+    await updateDoc(getProductReviewStatsDocRef(productId), {
+      reviewStats: statsData
+    });
+    
+    return statsData;
+  } catch (error) {
+    console.error("Error updating product review stats:", error);
+    return null;
+  }
+};
+
 /**
  * Clear the entire wishlist
  */

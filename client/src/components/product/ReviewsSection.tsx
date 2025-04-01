@@ -1,7 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { 
@@ -12,27 +11,83 @@ import {
   SelectValue 
 } from "@/components/ui/select";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { StarIcon } from "lucide-react";
-import { Review } from "@shared/schema";
+import { AlertCircle, StarIcon } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { 
+  addProductReview, 
+  getProductReviews, 
+  getUserProductReview
+} from "@/lib/firebaseService";
 
-interface ReviewsSectionProps {
-  productId: number;
-  reviews: Review[];
-  isLoading: boolean;
+// Import this type to match what's returned from Firebase
+interface ProductReview {
+  id?: string;
+  productId: number | string;
+  userId: string;
+  username: string;
+  rating: number;
+  comment: string;
+  userPhotoURL?: string;
+  purchaseVerified: boolean;
+  createdAt: { toDate: () => Date };
 }
 
-const ReviewsSection = ({ productId, reviews, isLoading }: ReviewsSectionProps) => {
+interface ReviewsSectionProps {
+  productId: number | string;
+}
+
+const ReviewsSection = ({ productId }: ReviewsSectionProps) => {
   const { user, isAuthenticated } = useAuth();
   const { toast } = useToast();
+  const [reviews, setReviews] = useState<ProductReview[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [hasUserReviewed, setHasUserReviewed] = useState(false);
   const [newReview, setNewReview] = useState("");
   const [rating, setRating] = useState("5");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  // Load reviews from Firestore
+  useEffect(() => {
+    const loadReviews = async () => {
+      setIsLoading(true);
+      try {
+        const productReviews = await getProductReviews(productId);
+        setReviews(productReviews);
+        
+        // Check if current user has already reviewed this product
+        if (user?.uid) {
+          const userReview = await getUserProductReview(user.uid, productId);
+          setHasUserReviewed(!!userReview);
+        }
+      } catch (error) {
+        console.error("Error loading reviews:", error);
+        toast({
+          title: "Error",
+          description: "Failed to load product reviews",
+          variant: "destructive",
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    loadReviews();
+  }, [productId, user, toast]);
 
   const handleSubmitReview = async () => {
-    if (!isAuthenticated) {
+    if (!isAuthenticated || !user?.uid) {
       toast({
         title: "Please login",
         description: "You need to be logged in to submit a review",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (hasUserReviewed) {
+      toast({
+        title: "Already reviewed",
+        description: "You have already submitted a review for this product",
         variant: "destructive",
       });
       return;
@@ -50,11 +105,27 @@ const ReviewsSection = ({ productId, reviews, isLoading }: ReviewsSectionProps) 
     setIsSubmitting(true);
 
     try {
-      await apiRequest("POST", "/api/reviews", {
-        productId,
+      // Getting proper display name for the review
+      const displayName = user.email?.split('@')[0] || "Anonymous User";
+      
+      // Check if user has purchased the product
+      // In a real implementation, we would fetch order history and verify purchase
+      // For now, we're marking all reviews as unverified purchases
+      const hasPurchased = false; // This would be replaced with actual purchase verification
+      
+      // Submit review using Firebase
+      await addProductReview(user.uid, productId, {
         rating: parseInt(rating),
         comment: newReview,
+        username: displayName,
+        userPhotoURL: undefined, // Keep as undefined since the Firebase User doesn't have photoURL
+        purchaseVerified: hasPurchased
       });
+
+      // Reload reviews to show the new one
+      const updatedReviews = await getProductReviews(productId);
+      setReviews(updatedReviews);
+      setHasUserReviewed(true);
 
       toast({
         title: "Review submitted",
@@ -63,10 +134,11 @@ const ReviewsSection = ({ productId, reviews, isLoading }: ReviewsSectionProps) 
       
       setNewReview("");
       setRating("5");
-    } catch (error) {
+    } catch (error: any) {
+      console.error("Error submitting review:", error);
       toast({
         title: "Error",
-        description: "Failed to submit your review",
+        description: error.message || "Failed to submit your review",
         variant: "destructive",
       });
     } finally {
@@ -176,12 +248,22 @@ const ReviewsSection = ({ productId, reviews, isLoading }: ReviewsSectionProps) 
                       {review.userId.toString().charAt(0).toUpperCase()}
                     </AvatarFallback>
                   </Avatar>
-                  <span className="font-medium">
-                    {review.userId === user?.id ? "You" : `User ${review.userId}`}
-                  </span>
+                  <div>
+                    <span className="font-medium">
+                      {review.userId === user?.uid ? "You" : review.username}
+                    </span>
+                    {review.purchaseVerified && (
+                      <span className="inline-flex items-center ml-2 px-1.5 py-0.5 rounded text-xs bg-green-100 text-green-800">
+                        <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
+                        </svg>
+                        Verified Purchase
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <span className="text-sm text-gray-500">
-                  {new Date(review.createdAt).toLocaleDateString()}
+                  {review.createdAt?.toDate ? review.createdAt.toDate().toLocaleDateString() : 'Unknown date'}
                 </span>
               </div>
               <div className="flex mb-2">{renderStars(review.rating)}</div>
