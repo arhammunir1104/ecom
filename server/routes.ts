@@ -3698,7 +3698,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Import the Firebase Admin utility
         const { resetUserPassword } = await import('./utils/firebaseAdmin');
         
-        // Call our utility function to reset the password
+        // Step 1: Reset password in Firebase Authentication
         const success = await resetUserPassword(email, newPassword);
         
         if (!success) {
@@ -3710,7 +3710,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
         }
         
-        console.log(`Password successfully updated for user: ${email}`);
+        console.log(`Password successfully updated in Firebase Auth for user: ${email}`);
+        
+        // Step 2: Also update the password in PostgreSQL for data consistency
+        try {
+          // Find the user in PostgreSQL by email
+          const pgUser = await storage.getUserByEmail(email);
+          
+          if (pgUser) {
+            // Update the PostgreSQL user's password
+            // Note: In a real production app, this password would be properly hashed
+            // For Firebase users, we use a placeholder value as they authenticate through Firebase
+            await storage.updateUser(pgUser.id, { 
+              password: 'firebase-auth-' + Date.now() // Use a unique placeholder value
+            });
+            
+            console.log(`PostgreSQL password placeholder updated for user ID: ${pgUser.id}`);
+          } else {
+            console.log(`No PostgreSQL user found with email: ${email}`);
+          }
+        } catch (pgError) {
+          console.error('Error updating PostgreSQL user password:', pgError);
+          // Continue with success response since Firebase Auth was updated successfully
+        }
         
         return res.status(200).json({ 
           success: true,
@@ -3788,6 +3810,52 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error in reset-password:", error);
       return res.status(500).json({ message: "Internal server error" });
+    }
+  });
+  
+  // Endpoint to sync Firebase user password with PostgreSQL
+  app.post("/api/auth/sync-password", async (req, res) => {
+    try {
+      const { email, uid } = req.body;
+      
+      if (!email) {
+        return res.status(400).json({ 
+          success: false,
+          message: "Email is required" 
+        });
+      }
+      
+      console.log(`Password sync requested for email: ${email}`);
+      
+      // Check if user exists in PostgreSQL
+      const pgUser = await storage.getUserByEmail(email);
+      
+      if (pgUser) {
+        // Update the password placeholder in PostgreSQL
+        await storage.updateUser(pgUser.id, { 
+          password: 'firebase-auth-' + Date.now(),
+          firebaseUid: uid || pgUser.firebaseUid
+        });
+        
+        console.log(`Password placeholder updated in PostgreSQL for user ID: ${pgUser.id}`);
+        
+        return res.status(200).json({ 
+          success: true,
+          message: "Password sync completed successfully" 
+        });
+      } else {
+        console.log(`No PostgreSQL user found with email: ${email}`);
+        return res.status(404).json({ 
+          success: false,
+          message: "User not found in database" 
+        });
+      }
+    } catch (error) {
+      console.error("Error syncing password:", error);
+      return res.status(500).json({ 
+        success: false,
+        message: "Internal server error" 
+      });
     }
   });
 

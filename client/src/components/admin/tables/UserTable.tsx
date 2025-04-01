@@ -881,10 +881,7 @@ const UserTable = ({ users }: UserTableProps) => {
                                       size="sm"
                                       className="h-8"
                                       onClick={() =>
-                                        window.open(
-                                          `/orders/${order.id}`,
-                                          "_blank",
-                                        )
+                                        window.open(`/admin/orders`, "_blank")
                                       }
                                     >
                                       <ExternalLink className="h-4 w-4 mr-1" />
@@ -1154,7 +1151,11 @@ const UserTable = ({ users }: UserTableProps) => {
                                 Average Order Value
                               </h4>
                               <p className="text-2xl font-semibold">
-                                ${(userDetails.stats.totalSpent / userDetails.orders.length).toFixed(2)}
+                                $
+                                {(
+                                  userDetails.stats.totalSpent /
+                                  userDetails.orders.length
+                                ).toFixed(2)}
                               </p>
                             </div>
                             <div className="bg-gray-50 p-4 rounded-lg">
@@ -1162,8 +1163,15 @@ const UserTable = ({ users }: UserTableProps) => {
                                 Total Items Purchased
                               </h4>
                               <p className="text-2xl font-semibold">
-                                {userDetails.orders.reduce((total, order) => 
-                                  total + order.items.reduce((sum, item) => sum + (item.quantity || 1), 0), 0)}
+                                {userDetails.orders.reduce(
+                                  (total, order) =>
+                                    total +
+                                    order.items.reduce(
+                                      (sum, item) => sum + (item.quantity || 1),
+                                      0,
+                                    ),
+                                  0,
+                                )}
                               </p>
                             </div>
                             <div className="bg-gray-50 p-4 rounded-lg">
@@ -1171,7 +1179,10 @@ const UserTable = ({ users }: UserTableProps) => {
                                 Last Purchase
                               </h4>
                               <p className="text-lg font-semibold">
-                                {format(new Date(userDetails.orders[0].createdAt), "PPP")}
+                                {format(
+                                  new Date(userDetails.orders[0].createdAt),
+                                  "PPP",
+                                )}
                               </p>
                             </div>
                           </div>
@@ -1180,34 +1191,36 @@ const UserTable = ({ users }: UserTableProps) => {
                           {(() => {
                             // Group orders by product
                             const products = new Map();
-                            
-                            userDetails.orders.forEach(order => {
-                              order.items.forEach(item => {
+
+                            userDetails.orders.forEach((order) => {
+                              order.items.forEach((item) => {
                                 const id = item.id || item.productId;
                                 if (!id) return;
-                                
+
                                 if (!products.has(id)) {
                                   products.set(id, {
                                     id: id,
                                     name: item.name || `Product #${id}`,
                                     count: 0,
-                                    totalSpent: 0
+                                    totalSpent: 0,
                                   });
                                 }
-                                
+
                                 const product = products.get(id);
                                 const quantity = item.quantity || 1;
                                 product.count += quantity;
-                                product.totalSpent += (item.price || 0) * quantity;
+                                product.totalSpent +=
+                                  (item.price || 0) * quantity;
                               });
                             });
-                            
+
                             // Convert to array and sort
-                            const productList = Array.from(products.values())
-                              .sort((a, b) => b.count - a.count);
-                              
+                            const productList = Array.from(
+                              products.values(),
+                            ).sort((a, b) => b.count - a.count);
+
                             if (productList.length === 0) return null;
-                            
+
                             return (
                               <div>
                                 <h4 className="font-medium mb-2">
@@ -1222,15 +1235,17 @@ const UserTable = ({ users }: UserTableProps) => {
                                     </TableRow>
                                   </TableHeader>
                                   <TableBody>
-                                    {productList.slice(0, 5).map((product: any) => (
-                                      <TableRow key={product.id}>
-                                        <TableCell>{product.name}</TableCell>
-                                        <TableCell>{product.count}</TableCell>
-                                        <TableCell>
-                                          ${product.totalSpent.toFixed(2)}
-                                        </TableCell>
-                                      </TableRow>
-                                    ))}
+                                    {productList
+                                      .slice(0, 5)
+                                      .map((product: any) => (
+                                        <TableRow key={product.id}>
+                                          <TableCell>{product.name}</TableCell>
+                                          <TableCell>{product.count}</TableCell>
+                                          <TableCell>
+                                            ${product.totalSpent.toFixed(2)}
+                                          </TableCell>
+                                        </TableRow>
+                                      ))}
                                   </TableBody>
                                 </Table>
                               </div>
@@ -1241,36 +1256,40 @@ const UserTable = ({ users }: UserTableProps) => {
                           {(() => {
                             // Group orders by category
                             const categories = new Map();
-                            
-                            userDetails.orders.forEach(order => {
-                              order.items.forEach(item => {
+
+                            userDetails.orders.forEach((order) => {
+                              order.items.forEach((item) => {
                                 const categoryId = item.categoryId;
                                 if (!categoryId) return;
-                                
-                                const categoryName = item.categoryName || `Category #${categoryId}`;
-                                
+
+                                const categoryName =
+                                  item.categoryName ||
+                                  `Category #${categoryId}`;
+
                                 if (!categories.has(categoryId)) {
                                   categories.set(categoryId, {
                                     id: categoryId,
                                     name: categoryName,
                                     count: 0,
-                                    totalSpent: 0
+                                    totalSpent: 0,
                                   });
                                 }
-                                
+
                                 const category = categories.get(categoryId);
                                 const quantity = item.quantity || 1;
                                 category.count += quantity;
-                                category.totalSpent += (item.price || 0) * quantity;
+                                category.totalSpent +=
+                                  (item.price || 0) * quantity;
                               });
                             });
-                            
+
                             // Convert to array and sort
-                            const categoryList = Array.from(categories.values())
-                              .sort((a, b) => b.count - a.count);
-                              
+                            const categoryList = Array.from(
+                              categories.values(),
+                            ).sort((a, b) => b.count - a.count);
+
                             if (categoryList.length === 0) return null;
-                            
+
                             return (
                               <div>
                                 <h4 className="font-medium mb-2">
@@ -1285,15 +1304,19 @@ const UserTable = ({ users }: UserTableProps) => {
                                     </TableRow>
                                   </TableHeader>
                                   <TableBody>
-                                    {categoryList.slice(0, 5).map((category: any) => (
-                                      <TableRow key={category.id}>
-                                        <TableCell>{category.name}</TableCell>
-                                        <TableCell>{category.count}</TableCell>
-                                        <TableCell>
-                                          ${category.totalSpent.toFixed(2)}
-                                        </TableCell>
-                                      </TableRow>
-                                    ))}
+                                    {categoryList
+                                      .slice(0, 5)
+                                      .map((category: any) => (
+                                        <TableRow key={category.id}>
+                                          <TableCell>{category.name}</TableCell>
+                                          <TableCell>
+                                            {category.count}
+                                          </TableCell>
+                                          <TableCell>
+                                            ${category.totalSpent.toFixed(2)}
+                                          </TableCell>
+                                        </TableRow>
+                                      ))}
                                   </TableBody>
                                 </Table>
                               </div>
@@ -1304,7 +1327,10 @@ const UserTable = ({ users }: UserTableProps) => {
                         <div className="text-center py-8 text-gray-500">
                           <BarChart className="mx-auto h-12 w-12 text-gray-300 mb-3" />
                           <p>No order history available</p>
-                          <p className="text-sm text-muted-foreground mt-1">Analytics are generated from the user's order history</p>
+                          <p className="text-sm text-muted-foreground mt-1">
+                            Analytics are generated from the user's order
+                            history
+                          </p>
                         </div>
                       )}
                     </CardContent>
