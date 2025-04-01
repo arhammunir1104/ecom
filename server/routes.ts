@@ -10,6 +10,7 @@ import * as firebaseAdmin from "./utils/firebase";
 import firebaseApp from "../client/src/lib/firebase";
 import * as firebaseAuth from "firebase/auth";
 import * as firebaseFirestore from "firebase/firestore";
+import { setupPasswordResetHandlers } from "./utils/passwordResetDisabled";
 
 // Augment the Express Request type to include the user property
 declare global {
@@ -406,6 +407,9 @@ const syncUserRole = async (firebaseUid: string, role: "admin" | "user") => {
 };
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Set up password reset handlers (disabled as per business requirements)
+  setupPasswordResetHandlers(app);
+  
   // Auth routes
   app.post("/api/auth/login", async (req, res) => {
     try {
@@ -3459,7 +3463,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Password reset endpoints
   // Handle OTP sending request from client-side
-  app.post("/api/auth/send-reset-otp", async (req, res) => {
+  app.post("/api/auth/send-reset-otp-disabled", async (req, res) => {
     try {
       const { email, otp } = req.body;
       
