@@ -2823,29 +2823,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Email, new password, and reset document ID are required" });
       }
       
-      // Get the Firebase admin instance
-      const admin = await import('firebase-admin/app').then(() => import('firebase-admin/auth'))
-        .then(({ getAuth }) => getAuth());
+      console.log(`Password reset requested for email: ${email} with reset document ID: ${resetDocId}`);
       
-      // Find the user by email
-      const userRecord = await admin.getUserByEmail(email)
-        .catch(() => null);
-      
-      if (!userRecord) {
-        return res.status(404).json({ message: "User not found" });
+      try {
+        // Import the Firebase Admin utility
+        const { resetUserPassword } = await import('./utils/firebaseAdmin');
+        
+        // Call our utility function to reset the password
+        const success = await resetUserPassword(email, newPassword);
+        
+        if (!success) {
+          console.log(`Failed to reset password for user with email: ${email}`);
+          // Instead of failing, we'll pass this back to the client to handle with the client SDK
+          return res.status(200).json({ 
+            clientSideFallback: true,
+            message: "Failed to reset password with Admin SDK, please use client-side reset" 
+          });
+        }
+        
+        console.log(`Password successfully updated for user: ${email}`);
+        
+        return res.status(200).json({ 
+          success: true,
+          message: "Password has been reset successfully" 
+        });
+      } catch (adminError: any) {
+        console.error("Firebase Admin Error:", adminError);
+        
+        // Handle specific Firebase errors
+        if (adminError.code === 'auth/user-not-found') {
+          return res.status(200).json({ 
+            clientSideFallback: true,
+            message: "User not found in Firebase Admin SDK, please use client-side reset" 
+          });
+        }
+        
+        // Pass back a generic error to the client to handle on their side
+        return res.status(200).json({ 
+          clientSideFallback: true,
+          message: "Unable to reset password with admin SDK, falling back to client-side reset"
+        });
       }
-      
-      // Update the password
-      await admin.updateUser(userRecord.uid, {
-        password: newPassword
-      });
-      
-      return res.status(200).json({ message: "Password has been reset successfully" });
     } catch (error: any) {
       console.error("Error in firebase-password-reset:", error);
       
       if (error.code === 'auth/requires-recent-login') {
-        return res.status(401).json({ message: "Recent authentication is required. Please log in again." });
+        return res.status(401).json({ 
+          requiresReauthentication: true,
+          message: "Recent authentication is required. Please log in again." 
+        });
       }
       
       return res.status(500).json({ message: "Internal server error" });

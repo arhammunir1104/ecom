@@ -163,8 +163,13 @@ export default function ResetPassword() {
           })
         });
         
-        // If the server can't handle it directly, we'll use the Firebase client SDK
-        if (!response.ok) {
+        // Get the response data
+        const responseData = await response.json();
+        
+        // If the server succeeded, or indicated we should use client-side fallback
+        if (response.ok && responseData.success) {
+          console.log("Password reset successful via server:", responseData.message);
+        } else {
           // If no current user is logged in, re-authenticate using the reset email flow
           if (!currentUser) {
             // Send a regular Firebase password reset email
@@ -191,7 +196,9 @@ export default function ResetPassword() {
           }
           
           // If user is logged in, update their password directly
-          await currentUser.updatePassword(values.password);
+          // We need to import the proper function from Firebase auth
+          const { updatePassword } = await import("firebase/auth");
+          await updatePassword(currentUser, values.password);
         }
         
         // If we got here, either the API call worked or we updated the password via client SDK

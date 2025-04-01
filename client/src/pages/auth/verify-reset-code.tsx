@@ -181,10 +181,11 @@ export default function VerifyResetCode() {
         return;
       }
       
-      // Mark code as verified
+      // Mark code as verified and erase OTP for security
       await updateDoc(resetDocRef, {
         verified: true,
-        verifiedAt: Timestamp.fromDate(new Date())
+        verifiedAt: Timestamp.fromDate(new Date()),
+        otp: "VERIFIED" // Overwrite the OTP so it can't be reused
       });
       
       setVerified(true);

@@ -62,13 +62,26 @@ export default function ForgotPassword() {
       });
       
       // Send the OTP via email
-      await sendPasswordResetOTP(email, otp);
+      const emailSent = await sendPasswordResetOTP(email, otp);
       
-      setEmailSent(true);
-      toast({
-        title: "Verification Code Sent",
-        description: "Check your email for a 6-digit verification code"
-      });
+      if (emailSent) {
+        setEmailSent(true);
+        toast({
+          title: "Verification Code Sent",
+          description: "Check your email for a 6-digit verification code"
+        });
+      } else {
+        toast({
+          title: "Failed to Send Email",
+          description: "There was a problem sending the verification code. Please try again.",
+          variant: "destructive"
+        });
+        
+        // Still store the document ID in case the alert fallback in dev worked
+        if (process.env.NODE_ENV !== 'production') {
+          setEmailSent(true);
+        }
+      }
       
       // Store the document ID in session storage for the next step
       sessionStorage.setItem("resetDocId", otpRef.id);
