@@ -38,6 +38,7 @@ import {
   Loader2,
   Heart,
   ShoppingCart,
+  BarChart,
   CreditCard,
 } from "lucide-react";
 import { format } from "date-fns";
@@ -227,17 +228,55 @@ const UserTable = ({ users }: UserTableProps) => {
       status: string;
       items: any[];
       totalAmount: number;
+      formattedDate?: string;
+      formattedTime?: string;
+      statusColor?: string;
     }>;
     wishlistItems: Array<{
       id: number;
       name: string;
       price: number;
     }>;
+    cartItems: Array<{
+      id?: number;
+      name: string;
+      price: number;
+      quantity?: number;
+      image?: string | string[];
+    }>;
+    reviews: Array<{
+      id: number;
+      productId: number;
+      rating: number;
+      comment: string;
+      createdAt: string;
+    }>;
     stats: {
       totalSpent: number;
       totalOrders: number;
       totalWishlistItems: number;
+      totalCartItems: number;
+      totalReviews: number;
+      averageReviewRating: number;
     };
+    analytics: {
+      productCategories: Array<{
+        id: string;
+        name: string;
+        count: number;
+        totalSpent: number;
+      }>;
+      totalItemsPurchased: number;
+      averageOrderValue: number;
+      mostPurchasedProducts: Array<{
+        id: string;
+        name: string;
+        count: number;
+        totalSpent: number;
+      }>;
+      lastPurchaseDate: string | null;
+    };
+    firebase?: any;
   }
 
   // Fetch user details when viewing profile
@@ -479,11 +518,12 @@ const UserTable = ({ users }: UserTableProps) => {
             </div>
           ) : userDetails ? (
             <Tabs defaultValue="overview" className="w-full">
-              <TabsList className="grid grid-cols-4 mb-4">
+              <TabsList className="grid grid-cols-5 mb-4">
                 <TabsTrigger value="overview">Overview</TabsTrigger>
                 <TabsTrigger value="orders">Orders</TabsTrigger>
                 <TabsTrigger value="wishlist">Wishlist</TabsTrigger>
                 <TabsTrigger value="cart">Cart</TabsTrigger>
+                <TabsTrigger value="analytics">Analytics</TabsTrigger>
               </TabsList>
 
               <TabsContent value="overview" className="space-y-4">
@@ -564,7 +604,7 @@ const UserTable = ({ users }: UserTableProps) => {
                       <CardTitle>Shopping Activity</CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-8">
-                      <div className="grid grid-cols-3 gap-4">
+                      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
                         <div className="flex flex-col items-center justify-center p-4 bg-gray-50 rounded-md">
                           <CreditCard className="h-8 w-8 text-purple mb-2" />
                           <p className="text-2xl font-bold">
@@ -590,6 +630,24 @@ const UserTable = ({ users }: UserTableProps) => {
                           </p>
                           <p className="text-sm text-muted-foreground">
                             Wishlist Items
+                          </p>
+                        </div>
+                        <div className="flex flex-col items-center justify-center p-4 bg-gray-50 rounded-md">
+                          <ShoppingCart className="h-8 w-8 text-purple mb-2" />
+                          <p className="text-2xl font-bold">
+                            {userDetails.stats.totalCartItems || 0}
+                          </p>
+                          <p className="text-sm text-muted-foreground">
+                            Cart Items
+                          </p>
+                        </div>
+                        <div className="flex flex-col items-center justify-center p-4 bg-gray-50 rounded-md">
+                          <BarChart className="h-8 w-8 text-purple mb-2" />
+                          <p className="text-2xl font-bold">
+                            {userDetails.stats.averageReviewRating?.toFixed(1) || '0.0'}
+                          </p>
+                          <p className="text-sm text-muted-foreground">
+                            Avg Rating
                           </p>
                         </div>
                       </div>
@@ -732,12 +790,141 @@ const UserTable = ({ users }: UserTableProps) => {
                     <CardDescription>Items currently in cart</CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <div className="text-center py-8 text-gray-500">
-                      <ShoppingCart className="mx-auto h-12 w-12 text-gray-300 mb-3" />
-                      <p>Cart information not available</p>
-                    </div>
+                    {userDetails.cartItems && userDetails.cartItems.length > 0 ? (
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {userDetails.cartItems.map((item: any, index: number) => (
+                          <div key={index} className="border rounded-md p-4 flex flex-col gap-2">
+                            {item.image && (
+                              <div className="aspect-square overflow-hidden rounded-md">
+                                <img 
+                                  src={Array.isArray(item.image) ? item.image[0] : item.image} 
+                                  alt={item.name}
+                                  className="h-full w-full object-cover"
+                                />
+                              </div>
+                            )}
+                            <h4 className="font-medium">{item.name}</h4>
+                            <div className="flex justify-between">
+                              <p className="text-sm text-muted-foreground">
+                                ${typeof item.price === 'number' ? item.price.toFixed(2) : '0.00'}
+                              </p>
+                              <p className="text-sm text-muted-foreground">
+                                Qty: {item.quantity || 1}
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-8 text-gray-500">
+                        <ShoppingCart className="mx-auto h-12 w-12 text-gray-300 mb-3" />
+                        <p>No items in cart</p>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
+              </TabsContent>
+              
+              <TabsContent value="analytics">
+                <div className="space-y-4">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Purchase Analytics</CardTitle>
+                      <CardDescription>
+                        Analysis of user purchase behavior
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      {userDetails.analytics ? (
+                        <div className="space-y-6">
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div className="bg-gray-50 p-4 rounded-lg">
+                              <h4 className="font-medium text-sm text-muted-foreground mb-1">
+                                Average Order Value
+                              </h4>
+                              <p className="text-2xl font-semibold">
+                                ${userDetails.analytics.averageOrderValue ? 
+                                  userDetails.analytics.averageOrderValue.toFixed(2) : '0.00'}
+                              </p>
+                            </div>
+                            <div className="bg-gray-50 p-4 rounded-lg">
+                              <h4 className="font-medium text-sm text-muted-foreground mb-1">
+                                Total Items Purchased
+                              </h4>
+                              <p className="text-2xl font-semibold">
+                                {userDetails.analytics.totalItemsPurchased || 0}
+                              </p>
+                            </div>
+                            <div className="bg-gray-50 p-4 rounded-lg">
+                              <h4 className="font-medium text-sm text-muted-foreground mb-1">
+                                Last Purchase
+                              </h4>
+                              <p className="text-lg font-semibold">
+                                {userDetails.analytics.lastPurchaseDate ? 
+                                  format(new Date(userDetails.analytics.lastPurchaseDate), "PPP") : 'Never'}
+                              </p>
+                            </div>
+                          </div>
+                          
+                          {userDetails.analytics.mostPurchasedProducts && 
+                            userDetails.analytics.mostPurchasedProducts.length > 0 && (
+                            <div>
+                              <h4 className="font-medium mb-2">Most Purchased Products</h4>
+                              <Table>
+                                <TableHeader>
+                                  <TableRow>
+                                    <TableHead>Product</TableHead>
+                                    <TableHead>Quantity</TableHead>
+                                    <TableHead>Total Spent</TableHead>
+                                  </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                  {userDetails.analytics.mostPurchasedProducts.slice(0, 5).map((product: any) => (
+                                    <TableRow key={product.id}>
+                                      <TableCell>{product.name}</TableCell>
+                                      <TableCell>{product.count}</TableCell>
+                                      <TableCell>${product.totalSpent.toFixed(2)}</TableCell>
+                                    </TableRow>
+                                  ))}
+                                </TableBody>
+                              </Table>
+                            </div>
+                          )}
+                          
+                          {userDetails.analytics.productCategories && 
+                            userDetails.analytics.productCategories.length > 0 && (
+                            <div>
+                              <h4 className="font-medium mb-2">Category Preferences</h4>
+                              <Table>
+                                <TableHeader>
+                                  <TableRow>
+                                    <TableHead>Category</TableHead>
+                                    <TableHead>Items Purchased</TableHead>
+                                    <TableHead>Total Spent</TableHead>
+                                  </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                  {userDetails.analytics.productCategories.slice(0, 5).map((category: any) => (
+                                    <TableRow key={category.id}>
+                                      <TableCell>{category.name}</TableCell>
+                                      <TableCell>{category.count}</TableCell>
+                                      <TableCell>${category.totalSpent.toFixed(2)}</TableCell>
+                                    </TableRow>
+                                  ))}
+                                </TableBody>
+                              </Table>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="text-center py-8 text-gray-500">
+                          <BarChart className="mx-auto h-12 w-12 text-gray-300 mb-3" />
+                          <p>No analytics data available</p>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </div>
               </TabsContent>
             </Tabs>
           ) : (

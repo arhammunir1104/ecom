@@ -2657,7 +2657,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-  // Get user details including orders, cart, wishlist
+  // Get comprehensive user details including orders, cart, wishlist, and product interactions
   app.get("/api/admin/users/:id/details", isAuthenticated, isAdmin, async (req, res) => {
     try {
       const userId = Number(req.params.id);
@@ -2672,36 +2672,195 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "User not found" });
       }
       
-      // Get user's orders
+      // Get user's orders with detailed product information
       const orders = await storage.getUserOrders(userId);
       
       // Calculate total spent
       const totalSpent = orders.reduce((sum, order) => sum + order.totalAmount, 0);
       
-      // Get wishlist items (if implemented)
+      // Get user's reviews
+      const reviews = await storage.getUserReviews(userId);
+      
+      // Get user's cart items
+      let cartItems = [];
+      try {
+        if (user.cartItems && Array.isArray(user.cartItems)) {
+          cartItems = user.cartItems;
+        } else if (storage.getUserCart) {
+          // If there's a dedicated cart method, use it
+          const cart = await storage.getUserCart(userId);
+          if (cart && cart.items) {
+            cartItems = cart.items;
+          }
+        }
+      } catch (cartError) {
+        console.error("Error fetching cart:", cartError);
+      }
+      
+      // Get wishlist items
       let wishlistItems = [];
-      if (user.wishlistItems && Array.isArray(user.wishlistItems)) {
-        wishlistItems = user.wishlistItems;
+      try {
+        if (user.wishlistItems && Array.isArray(user.wishlistItems)) {
+          wishlistItems = user.wishlistItems;
+        } else if (storage.getUserWishlist) {
+          // If there's a dedicated wishlist method, use it
+          const wishlist = await storage.getUserWishlist(userId);
+          if (wishlist && wishlist.items) {
+            wishlistItems = wishlist.items;
+          }
+        }
+      } catch (wishlistError) {
+        console.error("Error fetching wishlist:", wishlistError);
+      }
+      
+      // Aggregate user's purchase patterns
+      const purchaseAnalytics = {
+        productCategories: {},
+        totalItemsPurchased: 0,
+        averageOrderValue: totalSpent / (orders.length || 1),
+        mostPurchasedProducts: {},
+        lastPurchaseDate: orders.length > 0 ? orders.sort((a, b) => 
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0].createdAt : null
+      };
+      
+      // Analyze orders to extract purchase patterns
+      for (const order of orders) {
+        try {
+          // Count items purchased
+          if (order.items && Array.isArray(order.items)) {
+            purchaseAnalytics.totalItemsPurchased += order.items.reduce(
+              (sum, item) => sum + (item.quantity || 1), 0
+            );
+            
+            // Track most purchased products
+            for (const item of order.items) {
+              if (item.productId) {
+                const productId = typeof item.productId === 'object' ? 
+                  item.productId.toString() : item.productId;
+                  
+                if (!purchaseAnalytics.mostPurchasedProducts[productId]) {
+                  purchaseAnalytics.mostPurchasedProducts[productId] = {
+                    count: 0,
+                    name: item.name || `Product #${productId}`,
+                    totalSpent: 0
+                  };
+                }
+                
+                purchaseAnalytics.mostPurchasedProducts[productId].count += (item.quantity || 1);
+                purchaseAnalytics.mostPurchasedProducts[productId].totalSpent += 
+                  (item.price || 0) * (item.quantity || 1);
+              }
+            }
+          }
+          
+          // Track category preferences
+          if (order.items && Array.isArray(order.items)) {
+            for (const item of order.items) {
+              if (item.categoryId) {
+                const categoryId = typeof item.categoryId === 'object' ? 
+                  item.categoryId.toString() : item.categoryId;
+                  
+                if (!purchaseAnalytics.productCategories[categoryId]) {
+                  purchaseAnalytics.productCategories[categoryId] = {
+                    count: 0,
+                    name: item.categoryName || `Category #${categoryId}`,
+                    totalSpent: 0
+                  };
+                }
+                
+                purchaseAnalytics.productCategories[categoryId].count += (item.quantity || 1);
+                purchaseAnalytics.productCategories[categoryId].totalSpent += 
+                  (item.price || 0) * (item.quantity || 1);
+              }
+            }
+          }
+        } catch (orderAnalysisError) {
+          console.error("Error analyzing order:", orderAnalysisError);
+        }
+      }
+      
+      // Convert purchase analytics objects to arrays for easier client-side processing
+      const formattedAnalytics = {
+        ...purchaseAnalytics,
+        productCategories: Object.entries(purchaseAnalytics.productCategories).map(([id, data]) => ({
+          id,
+          ...data
+        })).sort((a, b) => b.count - a.count),
+        mostPurchasedProducts: Object.entries(purchaseAnalytics.mostPurchasedProducts).map(([id, data]) => ({
+          id,
+          ...data
+        })).sort((a, b) => b.count - a.count)
+      };
+      
+      // Get user engagement metrics (Firebase)
+      let firebaseUserData = null;
+      if (user.firebaseUid) {
+        try {
+          // Try to get Firebase user data, this is optional and won't fail if unavailable
+          const { getFirestoreUser } = require('./utils/firebase');
+          firebaseUserData = await getFirestoreUser(user.firebaseUid);
+        } catch (firebaseError) {
+          console.error("Error fetching Firebase user data:", firebaseError);
+        }
       }
       
       // Don't return sensitive information
       const { password, twoFactorSecret, ...userWithoutPassword } = user;
       
+      // Enrich the order data with formatted dates and status information
+      const enrichedOrders = orders.map(order => {
+        const createdDate = new Date(order.createdAt);
+        return {
+          ...order,
+          formattedDate: createdDate.toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
+          }),
+          formattedTime: createdDate.toLocaleTimeString('en-US'),
+          statusColor: getOrderStatusColor(order.status),
+          items: Array.isArray(order.items) ? order.items.map(item => ({
+            ...item,
+            subtotal: (item.price || 0) * (item.quantity || 1)
+          })) : []
+        };
+      });
+      
       res.json({
         user: userWithoutPassword,
-        orders,
+        orders: enrichedOrders,
         wishlistItems,
+        cartItems,
+        reviews,
         stats: {
           totalSpent,
           totalOrders: orders.length,
-          totalWishlistItems: wishlistItems.length
-        }
+          totalWishlistItems: wishlistItems.length,
+          totalCartItems: cartItems.length,
+          totalReviews: reviews.length,
+          averageReviewRating: reviews.length > 0 ? 
+            reviews.reduce((sum, review) => sum + review.rating, 0) / reviews.length : 0
+        },
+        analytics: formattedAnalytics,
+        firebase: firebaseUserData
       });
     } catch (error) {
       console.error("Get user details error:", error);
-      res.status(500).json({ message: "Server error" });
+      res.status(500).json({ message: "Server error", error: String(error) });
     }
   });
+  
+  // Helper function to get color for order status
+  function getOrderStatusColor(status) {
+    switch(status) {
+      case 'delivered': return 'green';
+      case 'shipped': return 'blue';
+      case 'processing': return 'orange';
+      case 'pending': return 'yellow';
+      case 'cancelled': return 'red';
+      default: return 'gray';
+    }
+  }
 
   // Two-factor authentication routes
   // Resend 2FA verification code
