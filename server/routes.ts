@@ -3533,13 +3533,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-  // Step 2: Verify OTP and generate token
-  app.post("/api/auth/verify-reset-code", async (req, res) => {
+  // Step 2: Verify OTP and generate token - DEPRECATED
+  app.post("/api/auth/verify-reset-code-old", async (req, res) => {
     try {
       // Support both email+code method and userId+otp method for compatibility
       const { userId, otp, email, code } = req.body;
       
-      console.log(`Received verification request with params:`, { 
+      console.log(`Received verification request to deprecated endpoint:`, { 
         userId: userId || 'not provided', 
         hasOtp: !!otp, 
         email: email || 'not provided', 
@@ -4067,7 +4067,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-  // Endpoint to verify reset code
+  // Improved endpoint to verify reset code
   app.post("/api/auth/verify-reset-code", async (req, res) => {
     try {
       const { userId, resetCode, email, code, otp } = req.body;

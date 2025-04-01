@@ -96,11 +96,23 @@ export default function ResetPassword() {
     try {
       console.log("Processing direct password reset for email:", email);
       
-      // Get the resetToken from session storage or from the reset verification
+      // Get the resetToken from multiple storage locations for redundancy
       let resetToken = sessionStorage.getItem("resetToken");
       
-      // If no reset token in session, we need to go back to verification
+      // Try localStorage as a backup if session storage failed
       if (!resetToken) {
+        resetToken = localStorage.getItem("temp_resetToken");
+        
+        if (resetToken) {
+          console.log("Retrieved reset token from localStorage backup");
+          // Move it back to session storage where it belongs
+          sessionStorage.setItem("resetToken", resetToken);
+        }
+      }
+      
+      // If no reset token in any storage, we need to go back to verification
+      if (!resetToken) {
+        console.error("No reset token found in any storage location");
         // We should not proceed without a valid reset token from the server
         toast({
           title: "Verification Required",
@@ -111,14 +123,33 @@ export default function ResetPassword() {
         return;
       }
       
+      // Get user ID from session storage if available (for more reliable verification)
+      const userId = sessionStorage.getItem("resetUserId");
+      
       console.log(`Using reset token: ${resetToken} for password reset`);
       
-      // Directly call our server-side reset endpoint that handles both Firebase and PostgreSQL
-      const response = await axios.post('/api/auth/reset-password', {
+      // Prepare request payload with all available identifiers for redundancy
+      const resetPayload: any = {
         email: email,
         resetToken: resetToken,
         newPassword: values.password
-      });
+      };
+      
+      // Add userId to payload if available
+      if (userId) {
+        resetPayload.userId = userId;
+        console.log(`Including userId: ${userId} in reset request`);
+      }
+      
+      // If we have a Firebase document ID, include it as well
+      if (resetDocId) {
+        resetPayload.resetDocId = resetDocId;
+        console.log(`Including resetDocId: ${resetDocId} in reset request`);
+      }
+      
+      // Directly call our server-side reset endpoint that handles both Firebase and PostgreSQL
+      console.log("Sending reset request with payload:", resetPayload);
+      const response = await axios.post('/api/auth/reset-password', resetPayload);
       
       console.log("Password reset response:", response.data);
       
@@ -132,10 +163,12 @@ export default function ResetPassword() {
           variant: "default",
         });
         
-        // Clear session storage
+        // Clear all storage
         sessionStorage.removeItem("resetEmail");
         sessionStorage.removeItem("resetDocId");
         sessionStorage.removeItem("resetToken");
+        sessionStorage.removeItem("resetUserId");
+        localStorage.removeItem("temp_resetToken");
         
         // Sign out any current session to ensure the user logs in with new password
         if (auth.currentUser) {

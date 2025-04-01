@@ -184,8 +184,11 @@ export default function VerifyResetCode() {
         return;
       }
       
-      // Also verify with our server to ensure PostgreSQL database recognizes this code
+      // CRITICAL: Always verify with our server first to ensure PostgreSQL database recognizes this code
       try {
+        // Log the values being sent to server
+        console.log(`Sending verification to server with email: ${email}, code: ${values.otp}`);
+        
         const response = await fetch('/api/auth/verify-reset-code', {
           method: 'POST',
           headers: {
@@ -197,13 +200,22 @@ export default function VerifyResetCode() {
           })
         });
         
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`Server verification failed with status ${response.status}: ${errorText}`);
+        }
+        
         const serverResult = await response.json();
         
         if (serverResult.success) {
           console.log("Server verification successful:", serverResult);
+          
           // Store the reset token from server response for direct API use
           if (serverResult.resetToken) {
+            // Save token with different storage mechanisms for redundancy
             sessionStorage.setItem("resetToken", serverResult.resetToken);
+            localStorage.setItem("temp_resetToken", serverResult.resetToken); // Backup
+            
             console.log("Reset token saved to session storage:", serverResult.resetToken);
             
             // Also save userId if it's in the response
@@ -216,14 +228,36 @@ export default function VerifyResetCode() {
             console.log("After saving - resetToken from storage:", sessionStorage.getItem("resetToken"));
           } else {
             console.error("No reset token in server response");
+            throw new Error("No reset token received from server");
           }
         } else {
           console.warn("Server verification failed:", serverResult.message);
-          // We'll still proceed with Firebase verification
+          throw new Error(serverResult.message || "Server verification failed");
         }
-      } catch (serverError) {
+      } catch (error) {
+        const serverError = error as Error;
         console.error("Error verifying with server:", serverError);
-        // Continue anyway with local Firebase verification
+        toast({
+          title: "Server Verification Failed",
+          description: serverError.message || "Failed to verify code with server. Please try again.",
+          variant: "destructive"
+        });
+        
+        // Update attempts in Firebase doc
+        try {
+          const resetDocRef = doc(db, "passwordResets", resetDocId);
+          const resetDoc = await getDoc(resetDocRef);
+          if (resetDoc.exists()) {
+            await updateDoc(resetDocRef, {
+              attempts: (resetDoc.data().attempts || 0) + 1
+            });
+          }
+        } catch (fbError) {
+          console.error("Error updating Firebase attempts:", fbError);
+        }
+        
+        setIsLoading(false);
+        return; // Stop execution if server verification fails
       }
       
       // Mark code as verified and erase OTP for security
