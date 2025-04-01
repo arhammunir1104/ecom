@@ -1,12 +1,13 @@
 import {
-  users, categories, products, reviews, orders, heroBanners, testimonials,
+  users, categories, products, reviews, orders, heroBanners, testimonials, passwordResetOTP,
   type User, type InsertUser,
   type Category, type InsertCategory,
   type Product, type InsertProduct,
   type Review, type InsertReview,
   type Order, type InsertOrder,
   type HeroBanner, type InsertHeroBanner,
-  type Testimonial, type InsertTestimonial
+  type Testimonial, type InsertTestimonial,
+  type PasswordResetOTP, type InsertPasswordResetOTP
 } from "@shared/schema";
 
 export interface IStorage {
@@ -23,13 +24,12 @@ export interface IStorage {
   getAllUsers(): Promise<User[]>;
   
   // Password reset methods
-  savePasswordResetOTP(userId: number, otp: string, expiresAt: Date): Promise<void>;
-  verifyPasswordResetOTP(userId: number | string, otp: string): Promise<boolean>;
-  getAllPasswordResetOTPs(): Record<string, { otp: string, expiresAt: Date }>;
-  saveResetToken(userId: number | string, token: string): Promise<void>;
-  verifyResetToken(userId: number | string, token: string): Promise<boolean>;
-  clearResetToken(userId: number | string): Promise<void>;
-  getAllResetTokens(): Record<string, string>; // For debugging
+  createPasswordResetOTP(email: string, otp: string): Promise<PasswordResetOTP>;
+  getPasswordResetOTPByEmail(email: string): Promise<PasswordResetOTP | undefined>;
+  verifyPasswordResetOTP(email: string, otp: string): Promise<boolean>;
+  incrementOTPAttempts(email: string): Promise<PasswordResetOTP | undefined>;
+  markOTPAsUsed(email: string): Promise<PasswordResetOTP | undefined>;
+  updateUserPassword(userId: number, newPassword: string): Promise<User | undefined>;
 
   // Category methods
   getCategory(id: number): Promise<Category | undefined>;
@@ -372,132 +372,150 @@ export class MemStorage implements IStorage {
   }
 
   // Password reset methods
-  async savePasswordResetOTP(userId: number, otp: string, expiresAt: Date): Promise<void> {
-    console.log(`Saving password reset OTP for user ID: ${userId}, OTP: ${otp}, expires: ${expiresAt}`);
-    // Store the OTP both as number and string key to ensure lookup works in both formats
-    this.passwordResetOTPs.set(userId, { otp, expiresAt });
-    this.passwordResetOTPs.set(userId.toString(), { otp, expiresAt });
+  async createPasswordResetOTP(email: string, otp: string): Promise<PasswordResetOTP> {
+    try {
+      const now = new Date();
+      // Set expiration to 5 minutes from now
+      const expiresAt = new Date(now.getTime() + 5 * 60 * 1000);
+      
+      const otpData: PasswordResetOTP = {
+        id: Math.floor(Math.random() * 1000000), // Generate a random ID for the in-memory storage
+        email,
+        otp,
+        expiresAt,
+        attempts: 0,
+        used: false,
+        createdAt: now
+      };
+      
+      // Store by email
+      this.passwordResetOTPs.set(email, { otp, expiresAt });
+      
+      console.log(`Created password reset OTP for email: ${email}, OTP: ${otp}, expires: ${expiresAt}`);
+      return otpData;
+    } catch (error) {
+      console.error("Error in createPasswordResetOTP:", error);
+      throw error;
+    }
   }
 
-  async verifyPasswordResetOTP(userId: number | string, otp: string): Promise<boolean> {
+  async getPasswordResetOTPByEmail(email: string): Promise<PasswordResetOTP | undefined> {
     try {
-      // Convert userId to string for consistent lookup
-      const userIdStr = String(userId);
-      console.log(`Verifying OTP for user ID: ${userIdStr}, OTP: ${otp}`);
+      const resetData = this.passwordResetOTPs.get(email);
+      if (!resetData) return undefined;
       
-      // Dump all keys for debugging
-      const allKeys: string[] = [];
-      this.passwordResetOTPs.forEach((value, key) => {
-        allKeys.push(String(key));
-      });
-      console.log(`Available OTP keys: [${allKeys.join(', ')}]`);
+      return {
+        id: Math.floor(Math.random() * 1000000), // Generate a random ID for the in-memory storage
+        email,
+        otp: resetData.otp,
+        expiresAt: resetData.expiresAt,
+        attempts: 0, // We don't track attempts in memory storage
+        used: false,
+        createdAt: new Date(resetData.expiresAt.getTime() - 5 * 60 * 1000) // Approximate creation time
+      };
+    } catch (error) {
+      console.error("Error in getPasswordResetOTPByEmail:", error);
+      return undefined;
+    }
+  }
+
+  async verifyPasswordResetOTP(email: string, otp: string): Promise<boolean> {
+    try {
+      console.log(`Verifying OTP for email: ${email}, OTP: ${otp}`);
       
-      // Debug: Log all current OTPs in the system
-      const allOtps = this.getAllPasswordResetOTPs();
-      console.log(`Current OTPs in system:`, allOtps);
-      
-      // First try with the userId as string
-      let resetData = this.passwordResetOTPs.get(userIdStr);
-      let matchKey = userIdStr;
-      
-      // If not found and userId is a string that represents a number, try with the number
-      if (!resetData && typeof userId === 'string' && !isNaN(Number(userId))) {
-        const numericId = Number(userId);
-        resetData = this.passwordResetOTPs.get(numericId);
-        if (resetData) matchKey = String(numericId);
-        console.log(`Tried numeric ID ${numericId}, found data: ${!!resetData}`);
-      }
-      
-      // If not found and userId is a number, try with string version
-      if (!resetData && typeof userId === 'number') {
-        const stringId = String(userId);
-        resetData = this.passwordResetOTPs.get(stringId);
-        if (resetData) matchKey = stringId;
-        console.log(`Tried string ID "${stringId}", found data: ${!!resetData}`);
-      }
-      
-      // If still not found, try with email if the userId looks like an email
-      if (!resetData && typeof userId === 'string' && userId.includes('@')) {
-        console.log(`Trying email lookup for: ${userId}`);
-        resetData = this.passwordResetOTPs.get(userId);
-        if (resetData) matchKey = userId;
-      }
-      
-      // Last resort: scan through all stored OTPs to find one with matching OTP value
-      if (!resetData) {
-        console.log(`No OTP found yet. Trying fallback lookup by OTP value.`);
-        let matchedKey: string | number | null = null;
-        
-        this.passwordResetOTPs.forEach((value, key) => {
-          if (value.otp === otp) {
-            console.log(`Found matching OTP with key: ${key}`);
-            resetData = value;
-            matchKey = String(key);
-            matchedKey = key;
-          }
-        });
-        
-        if (matchedKey) {
-          console.log(`Using matched key from scan: ${matchedKey}`);
-        }
-      }
+      const resetData = this.passwordResetOTPs.get(email);
       
       if (!resetData) {
-        console.log(`No OTP found for user ID: ${userIdStr} or OTP: ${otp}`);
+        console.log(`No OTP found for email: ${email}`);
         return false;
       }
       
-      console.log(`Found OTP for key: ${matchKey}, stored OTP: ${resetData.otp}, provided OTP: ${otp}`);
+      console.log(`Found OTP for email: ${email}, data:`, resetData);
       
-      // Check if OTP is expired
-      if (new Date() > resetData.expiresAt) {
-        console.log(`OTP expired for key: ${matchKey}`);
-        this.passwordResetOTPs.delete(userId);
-        this.passwordResetOTPs.delete(userIdStr);
-        if (typeof userId === 'string' && !isNaN(Number(userId))) {
-          this.passwordResetOTPs.delete(Number(userId));
-        }
+      // Check if OTP has expired
+      const now = new Date();
+      if (now > resetData.expiresAt) {
+        console.log(`OTP has expired. Expired at: ${resetData.expiresAt}, now: ${now}`);
         return false;
       }
       
-      // Validate OTP
-      const isValid = resetData.otp === otp;
-      console.log(`OTP validation result: ${isValid}`);
-      
-      // Delete OTP after use if valid
-      if (isValid) {
-        // Delete all entries with this OTP to clean up storage completely
-        const keysToDelete: (string | number)[] = [];
-        
-        this.passwordResetOTPs.forEach((value, key) => {
-          if (value.otp === otp) {
-            console.log(`Will delete OTP entry with key: ${key}`);
-            keysToDelete.push(key);
-          }
-        });
-        
-        // Actually delete all the keys
-        keysToDelete.forEach(key => {
-          this.passwordResetOTPs.delete(key);
-        });
-        
-        // Also delete the specific keys we know about
-        this.passwordResetOTPs.delete(userId);
-        this.passwordResetOTPs.delete(userIdStr);
-        if (typeof userId === 'string' && !isNaN(Number(userId))) {
-          this.passwordResetOTPs.delete(Number(userId));
-        }
-        
-        console.log(`Deleted ${keysToDelete.length} OTP entries after successful verification`);
-      }
-      
-      return isValid;
+      // Check if OTP matches
+      const otpValid = resetData.otp === otp;
+      console.log(`OTP valid? ${otpValid}`);
+      return otpValid;
     } catch (error) {
       console.error("Error in verifyPasswordResetOTP:", error);
       return false;
     }
   }
-  
+
+  async incrementOTPAttempts(email: string): Promise<PasswordResetOTP | undefined> {
+    try {
+      const resetData = this.passwordResetOTPs.get(email);
+      if (!resetData) return undefined;
+      
+      // In memory implementation, we don't actually track attempts
+      // In a real DB implementation, this would increment the attempts field
+      console.log(`Incrementing OTP attempts for email: ${email}`);
+      
+      return {
+        id: Math.floor(Math.random() * 1000000),
+        email,
+        otp: resetData.otp,
+        expiresAt: resetData.expiresAt,
+        attempts: 1, // Just return 1 for demo purposes
+        used: false,
+        createdAt: new Date(resetData.expiresAt.getTime() - 5 * 60 * 1000)
+      };
+    } catch (error) {
+      console.error("Error in incrementOTPAttempts:", error);
+      return undefined;
+    }
+  }
+
+  async markOTPAsUsed(email: string): Promise<PasswordResetOTP | undefined> {
+    try {
+      const resetData = this.passwordResetOTPs.get(email);
+      if (!resetData) return undefined;
+      
+      // In memory implementation, we just remove the OTP to prevent reuse
+      this.passwordResetOTPs.delete(email);
+      
+      console.log(`Marked OTP as used for email: ${email}`);
+      
+      return {
+        id: Math.floor(Math.random() * 1000000),
+        email,
+        otp: resetData.otp,
+        expiresAt: resetData.expiresAt,
+        attempts: 0,
+        used: true,
+        createdAt: new Date(resetData.expiresAt.getTime() - 5 * 60 * 1000)
+      };
+    } catch (error) {
+      console.error("Error in markOTPAsUsed:", error);
+      return undefined;
+    }
+  }
+
+  async updateUserPassword(userId: number, newPassword: string): Promise<User | undefined> {
+    try {
+      const user = await this.getUser(userId);
+      if (!user) {
+        console.log(`No user found with ID: ${userId}`);
+        return undefined;
+      }
+      
+      const updatedUser = { ...user, password: newPassword };
+      this.users.set(userId, updatedUser);
+      
+      console.log(`Updated password for user ID: ${userId}`);
+      return updatedUser;
+    } catch (error) {
+      console.error("Error in updateUserPassword:", error);
+      return undefined;
+    }
+  }
   // For debugging purposes - returns all OTPs in the system
   getAllPasswordResetOTPs(): Record<string, { otp: string, expiresAt: Date }> {
     try {
@@ -508,94 +526,6 @@ export class MemStorage implements IStorage {
       return result;
     } catch (error) {
       console.error("Error getting all OTPs:", error);
-      return {};
-    }
-  }
-
-  async saveResetToken(userId: number | string, token: string): Promise<void> {
-    // Save token with both numeric and string keys for consistency
-    if (typeof userId === 'number') {
-      this.passwordResetTokens.set(userId, token);
-      this.passwordResetTokens.set(userId.toString(), token);
-    } else {
-      this.passwordResetTokens.set(userId, token);
-      if (!isNaN(Number(userId))) {
-        this.passwordResetTokens.set(Number(userId), token);
-      }
-    }
-    console.log(`Reset token saved for user ID: ${userId}`);
-  }
-
-  async verifyResetToken(userId: number | string, token: string): Promise<boolean> {
-    try {
-      // Convert userId to string for logging
-      const userIdStr = String(userId);
-      console.log(`Verifying reset token for user ID: ${userIdStr}`);
-      
-      // First try with the ID as provided
-      let savedToken = this.passwordResetTokens.get(userId);
-      
-      // If not found and userId is a string that represents a number, try with the number
-      if (!savedToken && typeof userId === 'string' && !isNaN(Number(userId))) {
-        const numericId = Number(userId);
-        savedToken = this.passwordResetTokens.get(numericId);
-        console.log(`Tried numeric ID ${numericId}, found token: ${!!savedToken}`);
-      }
-      
-      // If not found and userId is a number, try with string version
-      if (!savedToken && typeof userId === 'number') {
-        savedToken = this.passwordResetTokens.get(String(userId));
-        console.log(`Tried string ID "${String(userId)}", found token: ${!!savedToken}`);
-      }
-      
-      if (!savedToken) {
-        console.log(`No reset token found for user ID: ${userIdStr}`);
-        
-        // Log all tokens for debugging
-        let allTokens = "Saved tokens: ";
-        this.passwordResetTokens.forEach((value, key) => {
-          allTokens += `${key} (${typeof key}), `;
-        });
-        console.log(allTokens);
-        
-        return false;
-      }
-      
-      console.log(`Found reset token for user ID: ${userIdStr}`);
-      const isTokenValid = savedToken === token;
-      console.log(`Token validation result: ${isTokenValid}`);
-      
-      return isTokenValid;
-    } catch (error) {
-      console.error("Error in verifyResetToken:", error);
-      return false;
-    }
-  }
-
-  async clearResetToken(userId: number | string): Promise<void> {
-    // Delete both numeric and string versions of the token
-    if (typeof userId === 'number') {
-      this.passwordResetTokens.delete(userId);
-      this.passwordResetTokens.delete(userId.toString());
-    } else {
-      this.passwordResetTokens.delete(userId);
-      if (!isNaN(Number(userId))) {
-        this.passwordResetTokens.delete(Number(userId));
-      }
-    }
-    console.log(`Reset token cleared for user ID: ${userId}`);
-  }
-  
-  // For debugging purposes - returns all reset tokens in the system
-  getAllResetTokens(): Record<string, string> {
-    try {
-      const result: Record<string, string> = {};
-      this.passwordResetTokens.forEach((value, key) => {
-        result[String(key)] = value;
-      });
-      return result;
-    } catch (error) {
-      console.error("Error getting all reset tokens:", error);
       return {};
     }
   }
@@ -1019,8 +949,135 @@ export class DatabaseStorage implements IStorage {
     }
   }
   
-  // Password reset methods - need to create tables or add to schema for production usage
-  // For now, we'll implement these in a way that will work for demonstration purposes
+  // Password reset methods
+  async createPasswordResetOTP(email: string, otp: string): Promise<PasswordResetOTP> {
+    try {
+      // First, check if there's an existing OTP and delete it
+      await db.delete(passwordResetOTP).where(eq(passwordResetOTP.email, email));
+      
+      const now = new Date();
+      // Set expiration to 5 minutes from now
+      const expiresAt = new Date(now.getTime() + 5 * 60 * 1000);
+      
+      const [otpRecord] = await db.insert(passwordResetOTP).values({
+        email,
+        otp,
+        expiresAt,
+        attempts: 0,
+        used: false
+      }).returning();
+      
+      console.log(`Created password reset OTP for email: ${email}`);
+      return otpRecord;
+    } catch (error) {
+      console.error("Database error in createPasswordResetOTP:", error);
+      throw error;
+    }
+  }
+
+  async getPasswordResetOTPByEmail(email: string): Promise<PasswordResetOTP | undefined> {
+    try {
+      const [otpRecord] = await db.select()
+        .from(passwordResetOTP)
+        .where(eq(passwordResetOTP.email, email));
+      
+      return otpRecord;
+    } catch (error) {
+      console.error("Database error in getPasswordResetOTPByEmail:", error);
+      return undefined;
+    }
+  }
+
+  async verifyPasswordResetOTP(email: string, otp: string): Promise<boolean> {
+    try {
+      const [otpRecord] = await db.select()
+        .from(passwordResetOTP)
+        .where(eq(passwordResetOTP.email, email));
+      
+      if (!otpRecord) {
+        console.log(`No OTP found for email: ${email}`);
+        return false;
+      }
+      
+      // Check if OTP is used
+      if (otpRecord.used) {
+        console.log(`OTP for email ${email} has already been used`);
+        return false;
+      }
+      
+      // Check if OTP has expired
+      const now = new Date();
+      if (now > otpRecord.expiresAt) {
+        console.log(`OTP for email ${email} has expired`);
+        return false;
+      }
+      
+      // Check if OTP matches
+      const isValid = otpRecord.otp === otp;
+      console.log(`OTP validation result for email ${email}: ${isValid}`);
+      
+      return isValid;
+    } catch (error) {
+      console.error("Database error in verifyPasswordResetOTP:", error);
+      return false;
+    }
+  }
+
+  async incrementOTPAttempts(email: string): Promise<PasswordResetOTP | undefined> {
+    try {
+      const [otpRecord] = await db.select()
+        .from(passwordResetOTP)
+        .where(eq(passwordResetOTP.email, email));
+      
+      if (!otpRecord) {
+        console.log(`No OTP record found for email: ${email}`);
+        return undefined;
+      }
+      
+      const [updatedRecord] = await db.update(passwordResetOTP)
+        .set({ attempts: otpRecord.attempts + 1 })
+        .where(eq(passwordResetOTP.email, email))
+        .returning();
+      
+      console.log(`Incremented OTP attempts for email ${email} to ${updatedRecord.attempts}`);
+      return updatedRecord;
+    } catch (error) {
+      console.error("Database error in incrementOTPAttempts:", error);
+      return undefined;
+    }
+  }
+
+  async markOTPAsUsed(email: string): Promise<PasswordResetOTP | undefined> {
+    try {
+      const [updatedRecord] = await db.update(passwordResetOTP)
+        .set({ used: true })
+        .where(eq(passwordResetOTP.email, email))
+        .returning();
+      
+      console.log(`Marked OTP as used for email: ${email}`);
+      return updatedRecord;
+    } catch (error) {
+      console.error("Database error in markOTPAsUsed:", error);
+      return undefined;
+    }
+  }
+
+  async updateUserPassword(userId: number, newPassword: string): Promise<User | undefined> {
+    try {
+      const [updatedUser] = await db.update(users)
+        .set({ password: newPassword })
+        .where(eq(users.id, userId))
+        .returning();
+      
+      console.log(`Updated password for user ID: ${userId}`);
+      return updatedUser;
+    } catch (error) {
+      console.error("Database error in updateUserPassword:", error);
+      return undefined;
+    }
+  }
+  
+  // Legacy methods - keeping for backward compatibility
   private passwordResetOTPs = new Map<string | number, { otp: string, expiresAt: Date }>();
   private passwordResetTokens = new Map<string | number, string>();
   
@@ -1035,8 +1092,11 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
-  async verifyPasswordResetOTP(userId: number | string, otp: string): Promise<boolean> {
+  // Legacy method for backward compatibility - we've now switched to email-based verification
+  async verifyPasswordResetOTPByUserId(userId: number | string, otp: string): Promise<boolean> {
     try {
+      console.warn("Using deprecated verifyPasswordResetOTPByUserId - please update to email-based verification");
+      
       // Convert userId to string for consistent lookup
       const userIdStr = String(userId);
       console.log(`Verifying OTP for user ID: ${userIdStr}`);
@@ -1086,7 +1146,7 @@ export class DatabaseStorage implements IStorage {
       
       return isValid;
     } catch (error) {
-      console.error("Error in verifyPasswordResetOTP:", error);
+      console.error("Error in verifyPasswordResetOTPByUserId:", error);
       return false;
     }
   }

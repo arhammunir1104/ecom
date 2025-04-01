@@ -97,6 +97,17 @@ export const testimonials = pgTable("testimonials", {
   featured: boolean("featured").default(false),
 });
 
+// Password Reset OTP Table
+export const passwordResetOTP = pgTable("password_reset_otp", {
+  id: serial("id").primaryKey(),
+  email: text("email").notNull(),
+  otp: text("otp").notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  attempts: integer("attempts").default(0).notNull(),
+  used: boolean("used").default(false).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 // Insert Schemas
 export const insertUserSchema = createInsertSchema(users).omit({ 
   id: true, 
@@ -112,6 +123,7 @@ export const insertReviewSchema = createInsertSchema(reviews).omit({ id: true, c
 export const insertOrderSchema = createInsertSchema(orders).omit({ id: true, createdAt: true });
 export const insertHeroBannerSchema = createInsertSchema(heroBanners).omit({ id: true });
 export const insertTestimonialSchema = createInsertSchema(testimonials).omit({ id: true });
+export const insertPasswordResetOTPSchema = createInsertSchema(passwordResetOTP).omit({ id: true, createdAt: true });
 
 // Extended Schemas with Validations
 export const userSchema = insertUserSchema.extend({
@@ -131,6 +143,27 @@ export const twoFactorVerifySchema = z.object({
   token: z.string().min(6, "Token must be at least 6 digits"),
 });
 
+// Password Reset Schemas
+export const forgotPasswordSchema = z.object({
+  email: z.string().email("Please enter a valid email"),
+  recaptchaToken: z.string().optional(),
+});
+
+export const verifyOTPSchema = z.object({
+  email: z.string().email("Please enter a valid email"),
+  otp: z.string().length(6, "OTP must be 6 digits"),
+});
+
+export const resetPasswordSchema = z.object({
+  email: z.string().email("Please enter a valid email"),
+  otp: z.string().length(6, "OTP must be 6 digits"),
+  password: z.string().min(6, "Password must be at least 6 characters"),
+  confirmPassword: z.string().min(6, "Confirm password must be at least 6 characters"),
+}).refine(data => data.password === data.confirmPassword, {
+  message: "Passwords don't match",
+  path: ["confirmPassword"],
+});
+
 export const productSchema = insertProductSchema.extend({
   name: z.string().min(3, "Product name must be at least 3 characters"),
   price: z.number().positive("Price must be a positive number"),
@@ -143,6 +176,11 @@ export type InsertUser = z.infer<typeof insertUserSchema>;
 export type UserWithValidation = z.infer<typeof userSchema>;
 export type LoginCredentials = z.infer<typeof loginSchema>;
 export type TwoFactorVerification = z.infer<typeof twoFactorVerifySchema>;
+
+// Password Reset Types
+export type ForgotPassword = z.infer<typeof forgotPasswordSchema>;
+export type VerifyOTP = z.infer<typeof verifyOTPSchema>;
+export type ResetPassword = z.infer<typeof resetPasswordSchema>;
 
 export type Category = typeof categories.$inferSelect;
 export type InsertCategory = z.infer<typeof insertCategorySchema>;
@@ -162,3 +200,6 @@ export type InsertHeroBanner = z.infer<typeof insertHeroBannerSchema>;
 
 export type Testimonial = typeof testimonials.$inferSelect;
 export type InsertTestimonial = z.infer<typeof insertTestimonialSchema>;
+
+export type PasswordResetOTP = typeof passwordResetOTP.$inferSelect;
+export type InsertPasswordResetOTP = z.infer<typeof insertPasswordResetOTPSchema>;

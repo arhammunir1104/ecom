@@ -21,8 +21,9 @@ import Orders from "./pages/orders";
 import Wishlist from "./pages/wishlist";
 import Login from "./pages/auth/login";
 import Signup from "./pages/auth/signup";
-// Password reset functionality has been removed
-// Direct authentication pages removed
+import ForgotPassword from "./pages/auth/forgot-password";
+import VerifyResetCode from "./pages/auth/verify-reset-code";
+import ResetPassword from "./pages/auth/reset-password";
 import VerifyTwoFactor from "./pages/auth/verify-2fa";
 import UserProfile from "./pages/user-profile";
 import NotFound from "@/pages/not-found";
@@ -82,7 +83,9 @@ function Router() {
       <Route path="/auth/login" component={Login} />
       <Route path="/auth/signup" component={Signup} />
       <Route path="/auth/verify-2fa" component={VerifyTwoFactor} />
-      {/* Password reset routes have been removed */}
+      <Route path="/auth/forgot-password" component={ForgotPassword} />
+      <Route path="/auth/verify-reset-code" component={VerifyResetCode} />
+      <Route path="/auth/reset-password" component={ResetPassword} />
       <Route path="/login" component={Login} />
       <Route path="/signup" component={Signup} />
 
