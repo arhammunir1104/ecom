@@ -152,7 +152,7 @@ const ProductTable = ({ products, categories }: ProductTableProps) => {
         </TableRow>
       </TableHeader>
       <TableBody>
-        {products.map((product) => (
+        {products.reverse().map((product) => (
           <TableRow key={product.id}>
             <TableCell>
               <div className="flex items-center gap-3">
