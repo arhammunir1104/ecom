@@ -2684,15 +2684,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Get user's cart items
       let cartItems = [];
       try {
-        if (user.cartItems && Array.isArray(user.cartItems)) {
-          cartItems = user.cartItems;
-        } else if (storage.getUserCart) {
-          // If there's a dedicated cart method, use it
-          const cart = await storage.getUserCart(userId);
-          if (cart && cart.items) {
-            cartItems = cart.items;
+        // First, check the database user's cart items
+        let dbCartItems = [];
+        if (user.wishlistItems && Array.isArray(user.wishlistItems)) {
+          const productPromises = user.wishlistItems.map(async (itemId) => {
+            if (!itemId) return null;
+            try {
+              const product = await storage.getProduct(Number(itemId));
+              return product ? { ...product, quantity: 1 } : null;
+            } catch (err) {
+              console.error(`Error fetching cart product ${itemId} from DB:`, err);
+              return null;
+            }
+          });
+          const resolvedProducts = await Promise.all(productPromises);
+          dbCartItems = resolvedProducts.filter(product => product !== null);
+        }
+        
+        // Next, try to get cart items from Firebase using our new utility function
+        let firebaseCartItems = [];
+        if (user.firebaseUid) {
+          try {
+            const { getUserCart } = require('./utils/firebase');
+            firebaseCartItems = await getUserCart(user.firebaseUid);
+            console.log(`Retrieved ${firebaseCartItems.length} cart items from Firebase for user ${user.firebaseUid}`);
+          } catch (firebaseErr) {
+            console.error(`Error fetching cart from Firebase for user ${user.firebaseUid}:`, firebaseErr);
           }
         }
+        
+        // Combine the results, removing duplicates
+        const seenProductIds = new Set();
+        cartItems = [...dbCartItems];
+        
+        for (const item of firebaseCartItems) {
+          if (!seenProductIds.has(item.id)) {
+            cartItems.push(item);
+            seenProductIds.add(item.id);
+          }
+        }
+        
+        console.log(`Total cart items after combining sources: ${cartItems.length}`);
       } catch (cartError) {
         console.error("Error fetching cart:", cartError);
       }
@@ -2700,15 +2732,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Get wishlist items
       let wishlistItems = [];
       try {
+        // First, check the database user's wishlist items
+        let dbWishlistItems = [];
         if (user.wishlistItems && Array.isArray(user.wishlistItems)) {
-          wishlistItems = user.wishlistItems;
-        } else if (storage.getUserWishlist) {
-          // If there's a dedicated wishlist method, use it
-          const wishlist = await storage.getUserWishlist(userId);
-          if (wishlist && wishlist.items) {
-            wishlistItems = wishlist.items;
+          const productPromises = user.wishlistItems.map(async (itemId) => {
+            if (!itemId) return null;
+            try {
+              return await storage.getProduct(Number(itemId));
+            } catch (err) {
+              console.error(`Error fetching wishlist product ${itemId} from DB:`, err);
+              return null;
+            }
+          });
+          const resolvedProducts = await Promise.all(productPromises);
+          dbWishlistItems = resolvedProducts.filter(product => product !== null);
+        }
+        
+        // Next, try to get wishlist items from Firebase using our new utility function
+        let firebaseWishlistItems = [];
+        if (user.firebaseUid) {
+          try {
+            const { getUserWishlist } = require('./utils/firebase');
+            firebaseWishlistItems = await getUserWishlist(user.firebaseUid);
+            console.log(`Retrieved ${firebaseWishlistItems.length} wishlist items from Firebase for user ${user.firebaseUid}`);
+          } catch (firebaseErr) {
+            console.error(`Error fetching wishlist from Firebase for user ${user.firebaseUid}:`, firebaseErr);
           }
         }
+        
+        // Combine the results, removing duplicates
+        const seenProductIds = new Set();
+        wishlistItems = [...dbWishlistItems];
+        
+        for (const item of firebaseWishlistItems) {
+          if (!seenProductIds.has(item.id)) {
+            wishlistItems.push(item);
+            seenProductIds.add(item.id);
+          }
+        }
+        
+        console.log(`Total wishlist items after combining sources: ${wishlistItems.length}`);
       } catch (wishlistError) {
         console.error("Error fetching wishlist:", wishlistError);
       }
@@ -2796,9 +2859,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let firebaseUserData = null;
       if (user.firebaseUid) {
         try {
-          // Try to get Firebase user data, this is optional and won't fail if unavailable
+          // Try to get Firebase user data with properly typed return value
           const { getFirestoreUser } = require('./utils/firebase');
+          // This now returns FirebaseUser | null with proper typings
           firebaseUserData = await getFirestoreUser(user.firebaseUid);
+          
+          if (firebaseUserData) {
+            // Log that we successfully got Firebase user data
+            console.log(`Successfully retrieved Firebase user data for ${user.firebaseUid} with ${firebaseUserData.cartItems?.length || 0} cart items and ${firebaseUserData.wishlistItems?.length || 0} wishlist items`);
+          }
         } catch (firebaseError) {
           console.error("Error fetching Firebase user data:", firebaseError);
         }

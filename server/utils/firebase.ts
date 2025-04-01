@@ -234,9 +234,73 @@ export const queryDocuments = async (collection: string, field: string, operator
 // Constants for collections
 export const PRODUCTS_COLLECTION = "products";
 export const CATEGORIES_COLLECTION = "categories";
+export const USERS_COLLECTION = "users";
+export const CARTS_COLLECTION = "carts";
+export const WISHLIST_COLLECTION = "wishlists";
+
+// Define a common Firebase document interface for type safety
+export interface FirebaseDocument {
+  id: string;
+  [key: string]: any;
+}
+
+// Define more specific interfaces
+export interface FirebaseProduct extends FirebaseDocument {
+  name: string;
+  description: string;
+  price: number;
+  discountPrice?: number;
+  categoryId?: string | number;
+  images: string[];
+  colors: string[];
+  sizes: string[];
+  stock: number;
+  featured: boolean;
+  trending: boolean;
+  createdAt: Date | string;
+  updatedAt?: Date | string;
+}
+
+export interface FirebaseCartItem extends FirebaseDocument {
+  productId: string;
+  quantity: number;
+  price?: number;
+  name?: string;
+}
+
+export interface FirebaseWishlistItem extends FirebaseDocument {
+  productId: string;
+}
+
+export interface FirebaseCart extends FirebaseDocument {
+  userId: string;
+  items: Record<string, FirebaseCartItem> | FirebaseCartItem[];
+  createdAt?: Date | string;
+  updatedAt?: Date | string;
+}
+
+export interface FirebaseWishlist extends FirebaseDocument {
+  userId: string;
+  items: string[] | FirebaseWishlistItem[];
+  createdAt?: Date | string;
+  updatedAt?: Date | string;
+}
+
+export interface FirebaseUser extends FirebaseDocument {
+  email?: string;
+  displayName?: string;
+  photoURL?: string;
+  role?: string;
+  phoneNumber?: string;
+  emailVerified?: boolean;
+  createdAt?: string | Date;
+  lastSignInTime?: string | Date;
+  cartItems?: any[];
+  wishlistItems?: any[];
+}
 
 // Product functions
-export const createProduct = async (productData: any) => {
+export const createProduct = async (productData: Partial<FirebaseProduct>) => {
   try {
     console.log("Creating new product in Firestore (server-side)");
     
@@ -274,6 +338,38 @@ export const createProduct = async (productData: any) => {
 
 export const getProductById = async (id: number | string) => {
   return getDocument(PRODUCTS_COLLECTION, id.toString());
+};
+
+export const getProductFromFirestore = async (id: number | string): Promise<FirebaseProduct | null> => {
+  try {
+    console.log(`Fetching Firestore product with ID: ${id}`);
+    const product = await getDocument(PRODUCTS_COLLECTION, id.toString()) as FirebaseDocument;
+    
+    if (!product) {
+      console.log(`No product found with ID: ${id} in Firestore`);
+      return null;
+    }
+    
+    // Normalize the product structure to match PostgreSQL format
+    return {
+      id: product.id,
+      name: product.name || "",
+      description: product.description || "",
+      price: Number(product.price) || 0,
+      discountPrice: product.discountPrice ? Number(product.discountPrice) : undefined,
+      categoryId: product.categoryId || undefined,
+      images: Array.isArray(product.images) ? product.images : [],
+      colors: Array.isArray(product.colors) ? product.colors : [],
+      sizes: Array.isArray(product.sizes) ? product.sizes : [],
+      stock: Number(product.stock) || 0,
+      featured: Boolean(product.featured),
+      trending: Boolean(product.trending),
+      createdAt: product.createdAt ? new Date(product.createdAt) : new Date()
+    };
+  } catch (error) {
+    console.error(`Error fetching product ${id} from Firestore:`, error);
+    return null;
+  }
 };
 
 export const updateProduct = async (id: number | string, productData: any) => {
@@ -434,11 +530,200 @@ export const getAllOrders = async () => {
   return getAllDocuments(ORDERS_COLLECTION);
 };
 
-// Constants for user collection
-export const USERS_COLLECTION = "users";
+// Constants for order collections already defined: USERS_COLLECTION
+
+// User cart and wishlist functions
+export const getUserCart = async (userId: string): Promise<(FirebaseProduct & { quantity: number })[]> => {
+  try {
+    console.log(`Getting cart for user: ${userId}`);
+    if (!isFirebaseInitialized) {
+      console.warn('Firebase is not initialized, initializing now');
+      initializeFirebase();
+    }
+    
+    const carts = await queryDocuments(CARTS_COLLECTION, 'userId', '==', userId) as FirebaseCart[];
+    
+    if (carts && carts.length > 0) {
+      const cart = carts[0] as FirebaseCart;
+      const itemsObj = cart.items || {};
+      
+      // Determine if items is an array or object
+      let itemsArray: { productId: string, quantity: number }[] = [];
+      
+      if (Array.isArray(itemsObj)) {
+        console.log(`Found cart for user ${userId} with ${itemsObj.length} items (array format)`);
+        itemsArray = itemsObj.map(item => ({
+          productId: typeof item === 'string' ? item : item.productId,
+          quantity: typeof item === 'string' ? 1 : (item.quantity || 1)
+        }));
+      } else {
+        console.log(`Found cart for user ${userId} with ${Object.keys(itemsObj).length} items (object format)`);
+        itemsArray = Object.entries(itemsObj).map(([productId, itemData]) => ({
+          productId,
+          quantity: typeof itemData === 'object' ? (itemData as any).quantity || 1 : 1
+        }));
+      }
+      
+      // Convert cart items to array with product details
+      const cartItems: (FirebaseProduct & { quantity: number })[] = [];
+      
+      for (const { productId, quantity } of itemsArray) {
+        try {
+          if (!productId) continue;
+          
+          // Get product details
+          const product = await getProductFromFirestore(productId);
+          
+          if (product) {
+            // Add product details to cart item
+            cartItems.push({
+              ...product,
+              quantity
+            });
+          }
+        } catch (error) {
+          console.error(`Error processing cart item ${productId}:`, error);
+        }
+      }
+      
+      return cartItems;
+    }
+    
+    console.log(`No cart found for user ${userId}`);
+    return [];
+  } catch (error) {
+    console.error(`Error getting cart for user ${userId}:`, error);
+    return [];
+  }
+};
+
+export const getUserWishlist = async (userId: string): Promise<FirebaseProduct[]> => {
+  try {
+    console.log(`Getting wishlist for user: ${userId}`);
+    if (!isFirebaseInitialized) {
+      console.warn('Firebase is not initialized, initializing now');
+      initializeFirebase();
+    }
+    
+    const wishlists = await queryDocuments(WISHLIST_COLLECTION, 'userId', '==', userId) as FirebaseWishlist[];
+    
+    if (wishlists && wishlists.length > 0) {
+      const wishlist = wishlists[0] as FirebaseWishlist;
+      const items = wishlist.items || [];
+      
+      console.log(`Found wishlist for user ${userId} with ${Array.isArray(items) ? items.length : 0} items`);
+      
+      // Get product details for each wishlist item
+      const wishlistItems: FirebaseProduct[] = [];
+      
+      // Convert items to an array of product IDs
+      const productIds: string[] = Array.isArray(items) 
+        ? items.map(item => typeof item === 'string' ? item : item.productId)
+        : [];
+      
+      for (const productId of productIds) {
+        try {
+          if (!productId) continue;
+          
+          // Get product details
+          const product = await getProductFromFirestore(productId);
+          
+          if (product) {
+            wishlistItems.push(product);
+          }
+        } catch (error) {
+          console.error(`Error processing wishlist item:`, error);
+        }
+      }
+      
+      return wishlistItems;
+    }
+    
+    console.log(`No wishlist found for user ${userId}`);
+    return [];
+  } catch (error) {
+    console.error(`Error getting wishlist for user ${userId}:`, error);
+    return [];
+  }
+};
+
+// Get a user from Firestore
+export const getFirestoreUser = async (uid: string): Promise<FirebaseUser | null> => {
+  try {
+    console.log(`Getting Firestore user data for UID: ${uid}`);
+    if (!isFirebaseInitialized) {
+      console.warn('Firebase is not initialized, initializing now');
+      initializeFirebase();
+    }
+    
+    // First try to get from Firestore
+    const userData = await getDocument(USERS_COLLECTION, uid) as FirebaseDocument;
+    
+    // If found in Firestore, return it
+    if (userData) {
+      console.log(`Found Firestore user data for UID: ${uid}`);
+      
+      // Get cart items with product details
+      const cartItems = await getUserCart(uid);
+      
+      // Get wishlist items with product details
+      const wishlistItems = await getUserWishlist(uid);
+      
+      // Create a properly typed user object
+      const user: FirebaseUser = {
+        id: userData.id,
+        email: userData.email,
+        displayName: userData.displayName,
+        photoURL: userData.photoURL,
+        phoneNumber: userData.phoneNumber,
+        emailVerified: userData.emailVerified,
+        role: userData.role,
+        createdAt: userData.createdAt,
+        lastSignInTime: userData.lastSignInTime,
+        cartItems,
+        wishlistItems
+      };
+      
+      return user;
+    }
+    
+    // If not found in Firestore, try to get from Auth
+    try {
+      if (firebaseAuth) {
+        const userRecord = await firebaseAuth.getUser(uid);
+        console.log(`Found Firebase Auth user record for UID: ${uid}`);
+        
+        // Create a minimal user object from Auth data
+        const user: FirebaseUser = {
+          id: userRecord.uid,
+          email: userRecord.email,
+          displayName: userRecord.displayName,
+          photoURL: userRecord.photoURL,
+          phoneNumber: userRecord.phoneNumber,
+          emailVerified: userRecord.emailVerified,
+          role: 'user', // Default role
+          createdAt: userRecord.metadata.creationTime,
+          lastSignInTime: userRecord.metadata.lastSignInTime,
+          cartItems: [],
+          wishlistItems: []
+        };
+        
+        return user;
+      }
+    } catch (authError) {
+      console.error(`Error retrieving user ${uid} from Firebase Auth:`, authError);
+    }
+    
+    console.log(`No Firestore or Auth data found for UID: ${uid}`);
+    return null;
+  } catch (error) {
+    console.error(`Error getting Firestore user ${uid}:`, error);
+    return null;
+  }
+};
 
 // Function to update a user's role in Firestore
-export const updateUserRole = async (firebaseUid: string, role: "admin" | "user") => {
+export const updateUserRole = async (firebaseUid: string, role: "admin" | "user"): Promise<FirebaseUser> => {
   try {
     console.log(`Updating role for user ${firebaseUid} to ${role} in Firestore`);
     
@@ -474,10 +759,34 @@ export const updateUserRole = async (firebaseUid: string, role: "admin" | "user"
       const updatedDoc = await userRef.get();
       if (updatedDoc.exists) {
         console.log('Successfully retrieved updated document');
-        return { id: updatedDoc.id, ...updatedDoc.data() };
+        const userData = { id: updatedDoc.id, ...updatedDoc.data() } as FirebaseDocument;
+        
+        // Get cart and wishlist data
+        const cartItems = await getUserCart(firebaseUid);
+        const wishlistItems = await getUserWishlist(firebaseUid);
+        
+        // Return fully formed FirebaseUser
+        return {
+          id: userData.id,
+          email: userData.email,
+          role: userData.role || role,
+          displayName: userData.displayName,
+          photoURL: userData.photoURL,
+          phoneNumber: userData.phoneNumber,
+          emailVerified: userData.emailVerified,
+          createdAt: userData.createdAt,
+          cartItems,
+          wishlistItems
+        };
       } else {
         console.log('Document still doesn\'t exist after update');
-        return { id: firebaseUid, role };
+        // Return minimal user
+        return { 
+          id: firebaseUid, 
+          role,
+          cartItems: [],
+          wishlistItems: []
+        } as FirebaseUser;
       }
     } catch (updateError) {
       console.error('Error with direct update approach:', updateError);
@@ -502,7 +811,7 @@ export const updateUserRole = async (firebaseUid: string, role: "admin" | "user"
         });
         
         // Create a promise for the request
-        const result = new Promise((resolve, reject) => {
+        const result = new Promise<unknown>((resolve, reject) => {
           const req = https.request(
             url,
             {
@@ -512,9 +821,9 @@ export const updateUserRole = async (firebaseUid: string, role: "admin" | "user"
                 'Content-Length': data.length
               }
             },
-            (res) => {
+            (res: { statusCode: number; on: (event: string, callback: (data?: any) => void) => void }) => {
               let responseData = '';
-              res.on('data', (chunk) => { responseData += chunk; });
+              res.on('data', (chunk: Buffer | string) => { responseData += chunk.toString(); });
               res.on('end', () => {
                 console.log('REST API response:', res.statusCode);
                 if (res.statusCode >= 200 && res.statusCode < 300) {
@@ -526,7 +835,7 @@ export const updateUserRole = async (firebaseUid: string, role: "admin" | "user"
             }
           );
           
-          req.on('error', (e) => {
+          req.on('error', (e: Error) => {
             console.error('REST API request error:', e);
             reject(e);
           });
@@ -537,7 +846,14 @@ export const updateUserRole = async (firebaseUid: string, role: "admin" | "user"
         
         await result;
         console.log('REST API update successful');
-        return { id: firebaseUid, role };
+        
+        // Return minimal user
+        return {
+          id: firebaseUid,
+          role,
+          cartItems: [],
+          wishlistItems: []
+        } as FirebaseUser;
       } catch (restError) {
         console.error('REST API approach also failed:', restError);
         throw restError;
