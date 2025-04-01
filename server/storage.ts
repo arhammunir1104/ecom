@@ -87,8 +87,8 @@ export class MemStorage implements IStorage {
   private testimonials: Map<number, Testimonial>;
   
   // Maps to store password reset related data
-  private passwordResetOTPs: Map<number, { otp: string, expiresAt: Date }>;
-  private passwordResetTokens: Map<number, string>;
+  private passwordResetOTPs: Map<string | number, { otp: string, expiresAt: Date }>;
+  private passwordResetTokens: Map<string | number, string>;
   
   private currentUserId: number;
   private currentCategoryId: number;
@@ -372,7 +372,10 @@ export class MemStorage implements IStorage {
 
   // Password reset methods
   async savePasswordResetOTP(userId: number, otp: string, expiresAt: Date): Promise<void> {
+    console.log(`Saving password reset OTP for user ID: ${userId}, OTP: ${otp}, expires: ${expiresAt}`);
+    // Store the OTP both as number and string key to ensure lookup works in both formats
     this.passwordResetOTPs.set(userId, { otp, expiresAt });
+    this.passwordResetOTPs.set(userId.toString(), { otp, expiresAt });
   }
 
   async verifyPasswordResetOTP(userId: number | string, otp: string): Promise<boolean> {
@@ -381,8 +384,12 @@ export class MemStorage implements IStorage {
       const userIdStr = String(userId);
       console.log(`Verifying OTP for user ID: ${userIdStr}`);
       
-      // First try with the user ID as is
-      let resetData = this.passwordResetOTPs.get(userId);
+      // Debug: Log all current OTPs in the system
+      const allOtps = this.getAllPasswordResetOTPs();
+      console.log(`Current OTPs in system: ${JSON.stringify(allOtps)}`);
+      
+      // First try with the userId as string
+      let resetData = this.passwordResetOTPs.get(userIdStr);
       
       // If not found and userId is a string that represents a number, try with the number
       if (!resetData && typeof userId === 'string' && !isNaN(Number(userId))) {
@@ -408,6 +415,7 @@ export class MemStorage implements IStorage {
       if (new Date() > resetData.expiresAt) {
         console.log(`OTP expired for user ID: ${userIdStr}`);
         this.passwordResetOTPs.delete(userId);
+        this.passwordResetOTPs.delete(userIdStr);
         return false;
       }
       
@@ -417,10 +425,8 @@ export class MemStorage implements IStorage {
       
       // Delete OTP after use
       if (isValid) {
-        if (typeof userId === 'string' && !isNaN(Number(userId))) {
-          this.passwordResetOTPs.delete(Number(userId));
-        }
         this.passwordResetOTPs.delete(userId);
+        this.passwordResetOTPs.delete(userIdStr);
         console.log(`Deleted OTP for user ID: ${userIdStr} after successful verification`);
       }
       
@@ -445,8 +451,18 @@ export class MemStorage implements IStorage {
     }
   }
 
-  async saveResetToken(userId: number, token: string): Promise<void> {
-    this.passwordResetTokens.set(userId, token);
+  async saveResetToken(userId: number | string, token: string): Promise<void> {
+    // Save token with both numeric and string keys for consistency
+    if (typeof userId === 'number') {
+      this.passwordResetTokens.set(userId, token);
+      this.passwordResetTokens.set(userId.toString(), token);
+    } else {
+      this.passwordResetTokens.set(userId, token);
+      if (!isNaN(Number(userId))) {
+        this.passwordResetTokens.set(Number(userId), token);
+      }
+    }
+    console.log(`Reset token saved for user ID: ${userId}`);
   }
 
   async verifyResetToken(userId: number | string, token: string): Promise<boolean> {
@@ -495,8 +511,18 @@ export class MemStorage implements IStorage {
     }
   }
 
-  async clearResetToken(userId: number): Promise<void> {
-    this.passwordResetTokens.delete(userId);
+  async clearResetToken(userId: number | string): Promise<void> {
+    // Delete both numeric and string versions of the token
+    if (typeof userId === 'number') {
+      this.passwordResetTokens.delete(userId);
+      this.passwordResetTokens.delete(userId.toString());
+    } else {
+      this.passwordResetTokens.delete(userId);
+      if (!isNaN(Number(userId))) {
+        this.passwordResetTokens.delete(Number(userId));
+      }
+    }
+    console.log(`Reset token cleared for user ID: ${userId}`);
   }
 
   // Category methods
@@ -920,13 +946,15 @@ export class DatabaseStorage implements IStorage {
   
   // Password reset methods - need to create tables or add to schema for production usage
   // For now, we'll implement these in a way that will work for demonstration purposes
-  private passwordResetOTPs = new Map<number, { otp: string, expiresAt: Date }>();
-  private passwordResetTokens = new Map<number, string>();
+  private passwordResetOTPs = new Map<string | number, { otp: string, expiresAt: Date }>();
+  private passwordResetTokens = new Map<string | number, string>();
   
   async savePasswordResetOTP(userId: number, otp: string, expiresAt: Date): Promise<void> {
     try {
+      console.log(`Saving password reset OTP for user ID: ${userId}, OTP: ${otp}, expires: ${expiresAt}`);
+      // Store OTP with both numeric and string keys for consistency with MemStorage
       this.passwordResetOTPs.set(userId, { otp, expiresAt });
-      // In a real implementation, we would save this to the database
+      this.passwordResetOTPs.set(userId.toString(), { otp, expiresAt });
     } catch (error) {
       console.error("Error in savePasswordResetOTP:", error);
     }
@@ -1002,10 +1030,19 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
-  async saveResetToken(userId: number, token: string): Promise<void> {
+  async saveResetToken(userId: number | string, token: string): Promise<void> {
     try {
-      this.passwordResetTokens.set(userId, token);
-      // In a real implementation, we would save this to the database
+      // Save token with both numeric and string keys for consistency
+      if (typeof userId === 'number') {
+        this.passwordResetTokens.set(userId, token);
+        this.passwordResetTokens.set(userId.toString(), token);
+      } else {
+        this.passwordResetTokens.set(userId, token);
+        if (!isNaN(Number(userId))) {
+          this.passwordResetTokens.set(Number(userId), token);
+        }
+      }
+      console.log(`Reset token saved for user ID: ${userId}`);
     } catch (error) {
       console.error("Error in saveResetToken:", error);
     }
@@ -1057,10 +1094,19 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
-  async clearResetToken(userId: number): Promise<void> {
+  async clearResetToken(userId: number | string): Promise<void> {
     try {
-      this.passwordResetTokens.delete(userId);
-      // In a real implementation, we would remove this from the database
+      // Delete both numeric and string versions of the token
+      if (typeof userId === 'number') {
+        this.passwordResetTokens.delete(userId);
+        this.passwordResetTokens.delete(userId.toString());
+      } else {
+        this.passwordResetTokens.delete(userId);
+        if (!isNaN(Number(userId))) {
+          this.passwordResetTokens.delete(Number(userId));
+        }
+      }
+      console.log(`Reset token cleared for user ID: ${userId}`);
     } catch (error) {
       console.error("Error in clearResetToken:", error);
     }
