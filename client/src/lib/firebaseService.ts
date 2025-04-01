@@ -2011,7 +2011,7 @@ interface ProductReview {
   createdAt: Timestamp;
 }
 
-interface ReviewsData {
+export interface ReviewsData {
   totalReviews: number;
   averageRating: number;
   lastUpdated: Timestamp;
@@ -2190,7 +2190,19 @@ export const updateProductReviewStats = async (
     const reviews = await getProductReviews(productId);
     
     if (!reviews.length) {
-      return null;
+      // If there are no reviews, set zeros for stats
+      const emptyStats: ReviewsData = {
+        totalReviews: 0,
+        averageRating: 0,
+        lastUpdated: serverTimestamp() as Timestamp
+      };
+      
+      // Still update the product document with empty stats
+      await updateDoc(getProductReviewStatsDocRef(productId), {
+        reviewStats: emptyStats
+      });
+      
+      return emptyStats;
     }
     
     const totalReviews = reviews.length;
@@ -2211,6 +2223,35 @@ export const updateProductReviewStats = async (
     return statsData;
   } catch (error) {
     console.error("Error updating product review stats:", error);
+    return null;
+  }
+};
+
+/**
+ * Get review statistics for a product
+ */
+export const getProductReviewStats = async (
+  productId: number | string
+): Promise<ReviewsData | null> => {
+  try {
+    const productDoc = await getDoc(getProductReviewStatsDocRef(productId));
+    
+    if (!productDoc.exists()) {
+      console.log("Product document not found for review stats");
+      return null;
+    }
+    
+    const data = productDoc.data();
+    
+    if (!data || !data.reviewStats) {
+      // If no review stats exist, generate them
+      console.log("No review stats found, generating now...");
+      return await updateProductReviewStats(productId);
+    }
+    
+    return data.reviewStats as ReviewsData;
+  } catch (error) {
+    console.error("Error getting product review stats:", error);
     return null;
   }
 };

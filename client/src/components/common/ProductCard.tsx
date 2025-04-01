@@ -4,10 +4,15 @@ import { Product } from "@shared/schema";
 import { useCart } from "@/hooks/useCart";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Heart, ShoppingBag } from "lucide-react";
+import { Heart, ShoppingBag, Star, StarHalf } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
-import { addToWishlist, isInWishlist } from "@/lib/firebaseService";
+import { 
+  addToWishlist, 
+  isInWishlist, 
+  getProductReviewStats, 
+  ReviewsData 
+} from "@/lib/firebaseService";
 
 interface ProductCardProps {
   product: Product;
@@ -17,6 +22,8 @@ const ProductCard = ({ product }: ProductCardProps) => {
   const [isHovered, setIsHovered] = useState(false);
   const [isInWishlistState, setIsInWishlistState] = useState(false);
   const [isAddingToWishlist, setIsAddingToWishlist] = useState(false);
+  const [reviewStats, setReviewStats] = useState<ReviewsData | null>(null);
+  const [isLoadingReviews, setIsLoadingReviews] = useState(true);
   const { addToCart } = useCart();
   const { toast } = useToast();
 
@@ -132,21 +139,29 @@ const ProductCard = ({ product }: ProductCardProps) => {
     }
   };
 
-  // Check if product is in wishlist on component mount
+  // Fetch reviews data and check wishlist status on component mount
   useEffect(() => {
-    const checkWishlistStatus = async () => {
+    const fetchReviewsAndWishlistStatus = async () => {
       try {
+        // Fetch reviews data
+        setIsLoadingReviews(true);
+        const stats = await getProductReviewStats(id);
+        setReviewStats(stats);
+        setIsLoadingReviews(false);
+        
+        // Check wishlist status
         const uid = window.localStorage.getItem("firebaseUid");
         if (uid) {
           const inWishlist = await isInWishlist(uid, id);
           setIsInWishlistState(inWishlist);
         }
       } catch (error) {
-        console.error("Error checking wishlist status:", error);
+        console.error("Error fetching data:", error);
+        setIsLoadingReviews(false);
       }
     };
 
-    checkWishlistStatus();
+    fetchReviewsAndWishlistStatus();
   }, [id]);
 
   return (
@@ -231,14 +246,42 @@ const ProductCard = ({ product }: ProductCardProps) => {
 
           {/* Ratings */}
           <div className="flex items-center mb-2">
-            <div className="flex text-gold">
-              <i className="fas fa-star text-xs"></i>
-              <i className="fas fa-star text-xs"></i>
-              <i className="fas fa-star text-xs"></i>
-              <i className="fas fa-star text-xs"></i>
-              <i className="fas fa-star-half-alt text-xs"></i>
-            </div>
-            <span className="text-xs text-gray-500 ml-2">(0)</span>
+            {isLoadingReviews ? (
+              <div className="flex items-center h-4">
+                <div className="w-16 h-3 bg-gray-200 rounded animate-pulse"></div>
+                <div className="w-5 h-3 bg-gray-200 rounded ml-2 animate-pulse"></div>
+              </div>
+            ) : (
+              <>
+                <div className="flex text-gold">
+                  {reviewStats && reviewStats.averageRating > 0 ? (
+                    Array.from({ length: 5 }).map((_, i) => {
+                      const rating = reviewStats.averageRating;
+                      // Full star
+                      if (i < Math.floor(rating)) {
+                        return <Star key={i} className="h-3.5 w-3.5 fill-current" />;
+                      }
+                      // Half star
+                      else if (i === Math.floor(rating) && rating % 1 > 0.3) {
+                        return <StarHalf key={i} className="h-3.5 w-3.5 fill-current" />;
+                      }
+                      // Empty star
+                      else {
+                        return <Star key={i} className="h-3.5 w-3.5 text-gray-300" />;
+                      }
+                    })
+                  ) : (
+                    // No ratings yet
+                    Array.from({ length: 5 }).map((_, i) => (
+                      <Star key={i} className="h-3.5 w-3.5 text-gray-300" />
+                    ))
+                  )}
+                </div>
+                <span className="text-xs text-gray-500 ml-2">
+                  ({reviewStats ? reviewStats.totalReviews : 0})
+                </span>
+              </>
+            )}
           </div>
         </CardContent>
         <CardFooter className="p-4 pt-0 flex items-center justify-between">

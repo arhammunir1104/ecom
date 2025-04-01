@@ -3,21 +3,21 @@ import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { 
-  Select, 
-  SelectContent, 
-  SelectItem, 
-  SelectTrigger, 
-  SelectValue 
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from "@/components/ui/select";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { AlertCircle, LockIcon, StarIcon } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { 
-  addProductReview, 
-  getProductReviews, 
+import {
+  addProductReview,
+  getProductReviews,
   getUserProductReview,
-  hasUserPurchasedProduct
+  hasUserPurchasedProduct,
 } from "@/lib/firebaseService";
 
 // Import this type to match what's returned from Firebase
@@ -48,25 +48,28 @@ const ReviewsSection = ({ productId }: ReviewsSectionProps) => {
   const [rating, setRating] = useState("5");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCheckingPurchase, setIsCheckingPurchase] = useState(false);
-  
+
   // Load reviews from Firestore and check purchase status
   useEffect(() => {
     const loadReviewsAndCheckPurchase = async () => {
       setIsLoading(true);
       setIsCheckingPurchase(true);
-      
+
       try {
         // Load reviews
         const productReviews = await getProductReviews(productId);
         setReviews(productReviews);
-        
+
         // Check if current user has already reviewed this product
         if (user?.uid) {
           const userReview = await getUserProductReview(user.uid, productId);
           setHasUserReviewed(!!userReview);
-          
+
           // Check if user has purchased this product
-          const purchaseVerified = await hasUserPurchasedProduct(user.uid, productId);
+          const purchaseVerified = await hasUserPurchasedProduct(
+            user.uid,
+            productId,
+          );
           setHasPurchased(purchaseVerified);
         }
       } catch (error) {
@@ -81,7 +84,7 @@ const ReviewsSection = ({ productId }: ReviewsSectionProps) => {
         setIsCheckingPurchase(false);
       }
     };
-    
+
     loadReviewsAndCheckPurchase();
   }, [productId, user, toast]);
 
@@ -107,7 +110,8 @@ const ReviewsSection = ({ productId }: ReviewsSectionProps) => {
     if (!hasPurchased) {
       toast({
         title: "Purchase required",
-        description: "You need to purchase this product before leaving a review",
+        description:
+          "You need to purchase this product before leaving a review",
         variant: "destructive",
       });
       return;
@@ -126,15 +130,15 @@ const ReviewsSection = ({ productId }: ReviewsSectionProps) => {
 
     try {
       // Getting proper display name for the review
-      const displayName = user.email?.split('@')[0] || "Anonymous User";
-      
+      const displayName = user.email?.split("@")[0] || "Anonymous User";
+
       // Submit review using Firebase
       await addProductReview(user.uid, productId, {
         rating: parseInt(rating),
         comment: newReview,
         username: displayName,
         userPhotoURL: undefined, // Keep as undefined since the Firebase User doesn't have photoURL
-        purchaseVerified: hasPurchased
+        purchaseVerified: hasPurchased,
       });
 
       // Reload reviews to show the new one
@@ -146,7 +150,7 @@ const ReviewsSection = ({ productId }: ReviewsSectionProps) => {
         title: "Review submitted",
         description: "Thank you for your feedback!",
       });
-      
+
       setNewReview("");
       setRating("5");
     } catch (error: any) {
@@ -162,14 +166,16 @@ const ReviewsSection = ({ productId }: ReviewsSectionProps) => {
   };
 
   // Calculate average rating
-  const avgRating = reviews.length 
-    ? (reviews.reduce((acc, review) => acc + review.rating, 0) / reviews.length).toFixed(1)
+  const avgRating = reviews.length
+    ? (
+        reviews.reduce((acc, review) => acc + review.rating, 0) / reviews.length
+      ).toFixed(1)
     : "0.0";
 
   const renderStars = (rating: number) => {
     return Array.from({ length: 5 }).map((_, index) => (
-      <StarIcon 
-        key={index} 
+      <StarIcon
+        key={index}
         className={`h-4 w-4 ${index < rating ? "text-yellow-400 fill-yellow-400" : "text-gray-300"}`}
       />
     ));
@@ -189,7 +195,7 @@ const ReviewsSection = ({ productId }: ReviewsSectionProps) => {
   return (
     <div className="space-y-8">
       <h2 className="text-2xl font-playfair font-bold">Customer Reviews</h2>
-      
+
       {/* Review summary */}
       <div className="flex items-center gap-2 mb-6">
         <div className="flex">
@@ -202,23 +208,29 @@ const ReviewsSection = ({ productId }: ReviewsSectionProps) => {
       {/* Review form */}
       <div className="bg-gray-50 p-6 rounded-lg mb-8">
         <h3 className="font-medium text-lg mb-4">Write a Review</h3>
-        
+
         {isAuthenticated && !isCheckingPurchase && !hasPurchased && (
           <Alert className="mb-4 bg-amber-50 border-amber-200">
             <AlertCircle className="h-4 w-4 text-amber-600" />
-            <AlertTitle className="text-amber-800">Purchase required</AlertTitle>
+            <AlertTitle className="text-amber-800">
+              Purchase required
+            </AlertTitle>
             <AlertDescription className="text-amber-700">
               You need to purchase this product before you can leave a review.
             </AlertDescription>
           </Alert>
         )}
-        
+
         <div className="space-y-4">
           <div>
             <label htmlFor="rating" className="block text-sm font-medium mb-1">
               Rating
             </label>
-            <Select value={rating} onValueChange={setRating} disabled={!hasPurchased}>
+            <Select
+              value={rating}
+              onValueChange={setRating}
+              disabled={!hasPurchased}
+            >
               <SelectTrigger className="w-full">
                 <SelectValue placeholder="Select your rating" />
               </SelectTrigger>
@@ -238,17 +250,21 @@ const ReviewsSection = ({ productId }: ReviewsSectionProps) => {
             <Textarea
               id="review"
               rows={4}
-              placeholder={hasPurchased ? "Share your experience with this product..." : "Purchase this product to leave a review"}
+              placeholder={
+                hasPurchased
+                  ? "Share your experience with this product..."
+                  : "Purchase this product to leave a review"
+              }
               value={newReview}
               onChange={(e) => setNewReview(e.target.value)}
               className="w-full"
               disabled={!hasPurchased}
             />
           </div>
-          <Button 
-            onClick={handleSubmitReview} 
+          <Button
+            onClick={handleSubmitReview}
             disabled={isSubmitting || !isAuthenticated || !hasPurchased}
-            className="bg-purple hover:bg-purple-dark text-white"
+            className="bg-pink-200 hover:bg-pink-300 text-white"
           >
             {isSubmitting ? "Submitting..." : "Submit Review"}
           </Button>
@@ -269,14 +285,19 @@ const ReviewsSection = ({ productId }: ReviewsSectionProps) => {
       {/* Reviews list */}
       <div className="space-y-6">
         {reviews.length === 0 ? (
-          <p className="text-gray-500 italic">No reviews yet. Be the first to review this product!</p>
+          <p className="text-gray-500 italic">
+            No reviews yet. Be the first to review this product!
+          </p>
         ) : (
           reviews.map((review) => (
             <div key={review.id} className="border-b border-gray-100 pb-6">
               <div className="flex justify-between mb-2">
                 <div className="flex items-center gap-2">
                   <Avatar className="h-8 w-8">
-                    <AvatarImage src={`https://api.dicebear.com/7.x/micah/svg?seed=${review.userId}`} alt="Avatar" />
+                    <AvatarImage
+                      src={`https://api.dicebear.com/7.x/micah/svg?seed=${review.userId}`}
+                      alt="Avatar"
+                    />
                     <AvatarFallback>
                       {review.userId.toString().charAt(0).toUpperCase()}
                     </AvatarFallback>
@@ -287,8 +308,19 @@ const ReviewsSection = ({ productId }: ReviewsSectionProps) => {
                     </span>
                     {review.purchaseVerified && (
                       <span className="inline-flex items-center ml-2 px-1.5 py-0.5 rounded text-xs bg-green-100 text-green-800">
-                        <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
+                        <svg
+                          className="w-3 h-3 mr-1"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                          xmlns="http://www.w3.org/2000/svg"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth="2"
+                            d="M5 13l4 4L19 7"
+                          ></path>
                         </svg>
                         Verified Purchase
                       </span>
@@ -296,7 +328,9 @@ const ReviewsSection = ({ productId }: ReviewsSectionProps) => {
                   </div>
                 </div>
                 <span className="text-sm text-gray-500">
-                  {review.createdAt?.toDate ? review.createdAt.toDate().toLocaleDateString() : 'Unknown date'}
+                  {review.createdAt?.toDate
+                    ? review.createdAt.toDate().toLocaleDateString()
+                    : "Unknown date"}
                 </span>
               </div>
               <div className="flex mb-2">{renderStars(review.rating)}</div>
