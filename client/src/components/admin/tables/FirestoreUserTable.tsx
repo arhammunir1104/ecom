@@ -69,12 +69,13 @@ const FirestoreUserTable = ({ users, isLoading = false, onRoleUpdate }: Firestor
           role
         });
         
+        // Parse response to check for errors
+        const data = await response.json();
+        
         if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.message || "Failed to update user role");
+          throw new Error(data.message || "Failed to update user role");
         }
         
-        const data = await response.json();
         if (!data.success) {
           throw new Error(data.message || "Failed to update user role");
         }

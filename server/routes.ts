@@ -206,12 +206,58 @@ const isAdmin = async (req: Request, res: Response, next: Function) => {
     return res.status(401).json({ message: "Unauthorized" });
   }
   
+  // First check PostgreSQL database
   const user = await storage.getUser(req.user.id);
-  if (!user || user.role !== "admin") {
-    return res.status(403).json({ message: "Forbidden" });
+  if (user && user.role === "admin") {
+    return next(); // User is admin in PostgreSQL
   }
   
-  next();
+  // If user exists but is not admin in PostgreSQL, or if user doesn't exist in PostgreSQL
+  // Check if they have a Firebase UID and check Firestore
+  if (user && user.firebaseUid) {
+    try {
+      // Check Firestore for admin role
+      const db = firebaseFirestore.getFirestore(firebaseApp);
+      const userRef = firebaseFirestore.doc(db, 'users', user.firebaseUid);
+      const userDoc = await firebaseFirestore.getDoc(userRef);
+      
+      if (userDoc.exists() && userDoc.data().role === "admin") {
+        // User is admin in Firestore but not in PostgreSQL
+        // Let's synchronize the databases in the background
+        console.log(`User ${user.id} is admin in Firestore but not in PostgreSQL. Synchronizing...`);
+        storage.updateUser(user.id, { role: "admin" })
+          .then(() => console.log(`User ${user.id} role updated to admin in PostgreSQL`))
+          .catch(err => console.error(`Failed to update user ${user.id} role in PostgreSQL:`, err));
+        
+        return next(); // Allow access since they're admin in Firestore
+      }
+    } catch (error) {
+      console.error("Error checking Firestore admin status:", error);
+      // Continue to the next check - don't fail here
+    }
+  }
+  
+  // If firebaseUid is present in headers, check Firestore directly
+  const firebaseUid = req.headers["firebase-uid"]?.toString();
+  if (firebaseUid) {
+    try {
+      // Check Firestore for admin role
+      const db = firebaseFirestore.getFirestore(firebaseApp);
+      const userRef = firebaseFirestore.doc(db, 'users', firebaseUid);
+      const userDoc = await firebaseFirestore.getDoc(userRef);
+      
+      if (userDoc.exists() && userDoc.data().role === "admin") {
+        // User is admin in Firestore
+        return next();
+      }
+    } catch (error) {
+      console.error("Error checking Firestore admin status by header:", error);
+      // Continue to the forbidden response
+    }
+  }
+  
+  // If we reach here, user is not admin in any database
+  return res.status(403).json({ message: "Forbidden - Admin access required" });
 };
 
 // Helper functions for Firebase Auth
@@ -274,27 +320,87 @@ const createFirestoreUser = async (uid: string, userData: any) => {
 
 // Helper function to sync role between Firestore and PostgreSQL
 const syncUserRole = async (firebaseUid: string, role: "admin" | "user") => {
+  let postgreSQLSuccess = false;
+  let firestoreSuccess = false;
+  
   try {
-    // 1. Update role in PostgreSQL
-    const user = await storage.getUserByFirebaseId(firebaseUid);
-    if (user) {
-      await storage.updateUser(user.id, { role });
-      console.log(`User ${user.id} role updated in PostgreSQL to ${role}`);
-    } else {
-      console.log(`No PostgreSQL user found with Firebase UID: ${firebaseUid}`);
+    // 1. Update role in PostgreSQL if user exists
+    try {
+      const user = await storage.getUserByFirebaseId(firebaseUid);
+      if (user) {
+        await storage.updateUser(user.id, { role });
+        console.log(`User ${user.id} role updated in PostgreSQL to ${role}`);
+        postgreSQLSuccess = true;
+      } else {
+        console.log(`No PostgreSQL user found with Firebase UID: ${firebaseUid}. Creating a minimal user record...`);
+        
+        // Try to get user data from Firestore to create a PostgreSQL record
+        try {
+          const db = firebaseFirestore.getFirestore(firebaseApp);
+          const userRef = firebaseFirestore.doc(db, 'users', firebaseUid);
+          const userDoc = await firebaseFirestore.getDoc(userRef);
+          
+          if (userDoc.exists()) {
+            const firestoreUserData = userDoc.data();
+            // Create a minimal user record in PostgreSQL
+            if (firestoreUserData.email) {
+              const newUser = await storage.createUser({
+                username: firestoreUserData.username || firestoreUserData.email.split('@')[0],
+                email: firestoreUserData.email,
+                password: 'firebase-auth', // Placeholder as Firebase handles auth
+                fullName: firestoreUserData.displayName || firestoreUserData.fullName || null,
+                role: role, // Set the requested role
+                firebaseUid: firebaseUid,
+                photoURL: firestoreUserData.photoURL || null
+              });
+              console.log(`Created new PostgreSQL user with ID ${newUser.id} for Firebase UID ${firebaseUid}`);
+              postgreSQLSuccess = true;
+            }
+          }
+        } catch (firestoreError) {
+          console.error(`Error getting Firestore user data for ${firebaseUid}:`, firestoreError);
+          // Continue with just updating Firestore
+        }
+      }
+    } catch (postgresError) {
+      console.error("Error updating PostgreSQL:", postgresError);
+      // Continue with Firestore update even if PostgreSQL fails
     }
 
     // 2. Update role in Firestore
-    const userRef = firebaseFirestore.doc(firebaseFirestore.collection(firebaseFirestore.getFirestore(firebaseApp), 'users'), firebaseUid);
-    await firebaseFirestore.setDoc(userRef, {
-      role,
-      updatedAt: firebaseFirestore.serverTimestamp()
-    }, { merge: true });
-    console.log(`User ${firebaseUid} role updated in Firestore to ${role}`);
+    try {
+      const db = firebaseFirestore.getFirestore(firebaseApp);
+      const userRef = firebaseFirestore.doc(db, 'users', firebaseUid);
+      
+      // Check if user document exists in Firestore
+      const userDoc = await firebaseFirestore.getDoc(userRef);
+      
+      if (userDoc.exists()) {
+        // Update existing user document
+        await firebaseFirestore.setDoc(userRef, {
+          role,
+          updatedAt: firebaseFirestore.serverTimestamp()
+        }, { merge: true });
+        console.log(`User ${firebaseUid} role updated in Firestore to ${role}`);
+        firestoreSuccess = true;
+      } else {
+        console.log(`No Firestore user document found for UID: ${firebaseUid}. Cannot update non-existent document.`);
+        // Don't try to create a document from scratch - that should be handled by the auth system
+      }
+    } catch (firestoreError) {
+      console.error("Error updating Firestore:", firestoreError);
+    }
 
-    return true;
+    // Return success if either database was updated successfully
+    if (postgreSQLSuccess || firestoreSuccess) {
+      return true;
+    }
+    
+    // If neither database was updated, return false
+    console.error(`Failed to update role for ${firebaseUid} in any database.`);
+    return false;
   } catch (error) {
-    console.error("Error syncing user role:", error);
+    console.error("Error in syncUserRole function:", error);
     return false;
   }
 };
@@ -2260,10 +2366,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       console.log(`Redirecting legacy role update call for user ID ${userId} to main endpoint`);
       
+      // Create a new request to the modern endpoint
+      const newReq = Object.create(req);
+      newReq.method = 'POST';
+      newReq.url = '/api/admin/users/role';
+      newReq.originalUrl = '/api/admin/users/role';
+      newReq.path = '/api/admin/users/role';
+      newReq.body = { userId, role };
+      
       // Forward to the main role update endpoint
-      req.body.userId = userId;
       return await new Promise((resolve) => {
-        app._router.handle(req, res, resolve);
+        app._router.handle(newReq, res, resolve);
       });
     } catch (error) {
       console.error("Update user role error:", error);
@@ -2271,7 +2384,79 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-  // Main endpoint for updating user roles - handles both database and Firebase updates
+  // Modern endpoint for PostgreSQL user role updates with Firebase synchronization
+  app.post("/api/admin/users/role", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const { userId, role } = req.body;
+      
+      if (!userId) {
+        return res.status(400).json({ 
+          success: false, 
+          message: "User ID is required" 
+        });
+      }
+      
+      if (role !== "admin" && role !== "user") {
+        return res.status(400).json({ 
+          success: false, 
+          message: "Valid role is required (admin or user)" 
+        });
+      }
+      
+      // 1. First update the PostgreSQL user
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ 
+          success: false, 
+          message: "User not found" 
+        });
+      }
+      
+      // Update the PostgreSQL user role
+      const updatedUser = await storage.updateUser(userId, { role });
+      
+      if (!updatedUser) {
+        return res.status(500).json({ 
+          success: false, 
+          message: "Failed to update user role in database" 
+        });
+      }
+      
+      // 2. If the user has a Firebase UID, sync with Firebase
+      let firebaseSuccess = false;
+      let firebaseError = null;
+      
+      if (updatedUser.firebaseUid) {
+        try {
+          // Attempt to synchronize the role with Firestore
+          firebaseSuccess = await syncUserRole(updatedUser.firebaseUid, role as any);
+        } catch (error) {
+          console.error("Error syncing user role with Firebase:", error);
+          firebaseError = error;
+        }
+      }
+      
+      // Return response with user and Firebase status
+      return res.json({
+        success: true,
+        message: firebaseSuccess 
+          ? `User role updated to ${role} in both database and Firebase` 
+          : `User role updated to ${role} in database only`,
+        user: updatedUser,
+        firebaseSuccess: firebaseSuccess,
+        firebaseError: firebaseError ? String(firebaseError) : null
+      });
+    } catch (error) {
+      console.error("Update user role error:", error);
+      return res.status(500).json({ 
+        success: false, 
+        message: "Server error", 
+        error: String(error) 
+      });
+    }
+  });
+  
+  // Main endpoint for updating user roles by Firebase UID - handles both database and Firebase updates
   // API to sync a user's role between Firestore and PostgreSQL
   app.post("/api/sync-user-role", isAuthenticated, isAdmin, async (req, res) => {
     try {
