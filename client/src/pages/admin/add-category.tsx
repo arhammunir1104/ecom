@@ -30,12 +30,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
-import { 
-  ArrowLeft, 
-  ImagePlus, 
-  Loader2, 
-  Trash2, 
-  CheckCircle 
+import {
+  ArrowLeft,
+  ImagePlus,
+  Loader2,
+  Trash2,
+  CheckCircle,
 } from "lucide-react";
 
 // Extended category schema with custom validations
@@ -52,14 +52,14 @@ export default function AdminAddCategory() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
-  
+
   // Redirect if not admin
   useEffect(() => {
     if (isAuthenticated && !isAdmin) {
       navigate("/");
     }
   }, [isAdmin, isAuthenticated, navigate]);
-  
+
   const form = useForm<CategoryFormValues>({
     resolver: zodResolver(categorySchema),
     defaultValues: {
@@ -69,35 +69,35 @@ export default function AdminAddCategory() {
       featured: false,
     },
   });
-  
+
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
       setImageFile(file);
-      
+
       // Generate preview
       const preview = URL.createObjectURL(file);
       setImagePreview(preview);
     }
   };
-  
+
   const removeImage = () => {
     setImageFile(null);
-    
+
     if (imagePreview) {
       // Revoke object URL to free memory
       URL.revokeObjectURL(imagePreview);
       setImagePreview(null);
     }
   };
-  
+
   async function onSubmit(data: CategoryFormValues) {
     setIsSubmitting(true);
-    
+
     try {
       // Instead of uploading to Cloudinary, we'll use a compressed data URL
       let imageUrl = "";
-      
+
       if (imageFile) {
         // Compress and create a data URL for the image
         imageUrl = await compressAndGetDataURL(imageFile);
@@ -105,23 +105,23 @@ export default function AdminAddCategory() {
         // Use a placeholder image URL
         imageUrl = "https://placehold.co/600x400";
       }
-      
+
       // Create category with image URL
       const categoryData = {
         ...data,
         image: imageUrl,
       };
-      
+
       await apiRequest("POST", "/api/categories", categoryData);
-      
+
       // Invalidate categories query to refresh the list
       queryClient.invalidateQueries({ queryKey: ["/api/categories"] });
-      
+
       toast({
         title: "Success",
         description: "Category created successfully",
       });
-      
+
       // Navigate to categories list
       navigate("/admin/categories");
     } catch (error: any) {
@@ -134,12 +134,12 @@ export default function AdminAddCategory() {
       setIsSubmitting(false);
     }
   }
-  
+
   return (
     <div className="space-y-6">
       <div className="flex items-center">
-        <Button 
-          variant="ghost" 
+        <Button
+          variant="ghost"
           onClick={() => navigate("/admin/categories")}
           className="mr-4"
         >
@@ -147,13 +147,15 @@ export default function AdminAddCategory() {
           Back to Categories
         </Button>
         <div>
-          <h2 className="text-3xl font-playfair font-bold tracking-tight">Add New Category</h2>
+          <h2 className="text-3xl font-playfair font-bold tracking-tight">
+            Add New Category
+          </h2>
           <p className="text-muted-foreground">
             Create a new category to organize your products
           </p>
         </div>
       </div>
-      
+
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -179,7 +181,7 @@ export default function AdminAddCategory() {
                     </FormItem>
                   )}
                 />
-                
+
                 <FormField
                   control={form.control}
                   name="description"
@@ -187,9 +189,9 @@ export default function AdminAddCategory() {
                     <FormItem>
                       <FormLabel>Description</FormLabel>
                       <FormControl>
-                        <Textarea 
-                          placeholder="Enter category description" 
-                          className="min-h-[120px]" 
+                        <Textarea
+                          placeholder="Enter category description"
+                          className="min-h-[120px]"
                           {...field}
                           value={field.value || ""}
                         />
@@ -198,7 +200,7 @@ export default function AdminAddCategory() {
                     </FormItem>
                   )}
                 />
-                
+
                 <FormField
                   control={form.control}
                   name="featured"
@@ -221,16 +223,16 @@ export default function AdminAddCategory() {
                 />
               </CardContent>
               <CardFooter className="flex justify-end gap-4">
-                <Button 
-                  type="button" 
-                  variant="outline" 
+                <Button
+                  type="button"
+                  variant="outline"
                   onClick={() => navigate("/admin/categories")}
                 >
                   Cancel
                 </Button>
-                <Button 
-                  type="submit" 
-                  className="bg-purple hover:bg-purple/90 text-white"
+                <Button
+                  type="submit"
+                  className="bg-pink-200 hover:bg-purple/90 text-white"
                   disabled={isSubmitting}
                 >
                   {isSubmitting ? (
@@ -247,7 +249,7 @@ export default function AdminAddCategory() {
                 </Button>
               </CardFooter>
             </Card>
-            
+
             {/* Right column - Media */}
             <Card>
               <CardHeader>
@@ -260,9 +262,9 @@ export default function AdminAddCategory() {
                 <div className="space-y-4">
                   {imagePreview ? (
                     <div className="relative aspect-[3/2] rounded-md overflow-hidden border">
-                      <img 
-                        src={imagePreview} 
-                        alt="Category preview" 
+                      <img
+                        src={imagePreview}
+                        alt="Category preview"
                         className="w-full h-full object-cover"
                       />
                       <Button
@@ -279,7 +281,9 @@ export default function AdminAddCategory() {
                     <div className="border border-dashed rounded-md flex items-center justify-center aspect-[3/2]">
                       <label className="cursor-pointer flex flex-col items-center p-8 w-full h-full">
                         <ImagePlus className="mb-4 h-10 w-10 text-gray-400" />
-                        <span className="text-lg font-medium mb-1">Upload Image</span>
+                        <span className="text-lg font-medium mb-1">
+                          Upload Image
+                        </span>
                         <span className="text-sm text-gray-500 text-center mb-4">
                           Drag and drop or click to browse
                         </span>
@@ -290,11 +294,13 @@ export default function AdminAddCategory() {
                           className="hidden"
                           onChange={handleImageChange}
                         />
-                        <Button 
-                          type="button" 
-                          variant="secondary" 
+                        <Button
+                          type="button"
+                          variant="secondary"
                           className="mb-2"
-                          onClick={() => document.getElementById('categoryImage')?.click()}
+                          onClick={() =>
+                            document.getElementById("categoryImage")?.click()
+                          }
                         >
                           Select Image
                         </Button>

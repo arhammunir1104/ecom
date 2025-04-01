@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { Category } from "@shared/schema";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import {
   Table,
@@ -37,59 +37,71 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
-import { 
-  PlusCircle, 
-  PencilIcon, 
-  Trash2, 
-  Search, 
-  Loader2, 
-  Check, 
-  X
+import {
+  PlusCircle,
+  PencilIcon,
+  Trash2,
+  Search,
+  Loader2,
+  Check,
+  X,
+  RefreshCw,
 } from "lucide-react";
 
 export default function AdminCategories() {
   const { isAdmin, isAuthenticated } = useAuth();
   const [, navigate] = useLocation();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState("");
   const [isDeleting, setIsDeleting] = useState<number | null>(null);
-  const [categoryToDelete, setCategoryToDelete] = useState<Category | null>(null);
-  const [isUpdatingFeatured, setIsUpdatingFeatured] = useState<number | null>(null);
-  
+  const [categoryToDelete, setCategoryToDelete] = useState<Category | null>(
+    null,
+  );
+  const [isUpdatingFeatured, setIsUpdatingFeatured] = useState<number | null>(
+    null,
+  );
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
   // Redirect if not admin
   useEffect(() => {
     if (isAuthenticated && !isAdmin) {
       navigate("/");
     }
   }, [isAdmin, isAuthenticated, navigate]);
-  
+
   // Fetch categories
   const { data: categories, isLoading } = useQuery<Category[]>({
     queryKey: ["/api/categories"],
     enabled: isAdmin && isAuthenticated,
   });
-  
+
   // Filter categories based on search
-  const filteredCategories = categories?.filter(category => 
-    category.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (category.description && category.description.toLowerCase().includes(searchQuery.toLowerCase()))
-  ) || [];
-  
+  const filteredCategories =
+    categories?.filter(
+      (category) =>
+        category.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (category.description &&
+          category.description
+            .toLowerCase()
+            .includes(searchQuery.toLowerCase())),
+    ) || [];
+
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
   };
-  
+
   const deleteCategory = async () => {
     if (!categoryToDelete) return;
-    
+
     setIsDeleting(categoryToDelete.id);
-    
+
     try {
       await apiRequest("DELETE", `/api/categories/${categoryToDelete.id}`);
-      
+
       // Invalidate queries to refresh the data
       queryClient.invalidateQueries({ queryKey: ["/api/categories"] });
-      
+
       toast({
         title: "Category Deleted",
         description: `"${categoryToDelete.name}" has been deleted successfully`,
@@ -105,19 +117,19 @@ export default function AdminCategories() {
       setCategoryToDelete(null);
     }
   };
-  
+
   const toggleFeaturedStatus = async (category: Category) => {
     setIsUpdatingFeatured(category.id);
-    
+
     try {
       await apiRequest("PUT", `/api/categories/${category.id}`, {
         ...category,
         featured: !category.featured,
       });
-      
+
       // Invalidate queries to refresh the data
       queryClient.invalidateQueries({ queryKey: ["/api/categories"] });
-      
+
       toast({
         title: "Category Updated",
         description: `"${category.name}" has been ${!category.featured ? "featured" : "unfeatured"}`,
@@ -133,24 +145,56 @@ export default function AdminCategories() {
     }
   };
   
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      // Invalidate categories queries to force a fresh reload
+      await queryClient.invalidateQueries({ queryKey: ["/api/categories"] });
+      toast({
+        title: "Data refreshed",
+        description: "Category data has been updated.",
+      });
+    } catch (error) {
+      toast({
+        title: "Refresh failed",
+        description: "An error occurred while refreshing the data.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
         <div>
-          <h2 className="text-3xl font-playfair font-bold tracking-tight">Categories</h2>
+          <h2 className="text-3xl font-playfair font-bold tracking-tight">
+            Categories
+          </h2>
           <p className="text-muted-foreground">
             Manage your product categories
           </p>
         </div>
-        <Button 
-          onClick={() => navigate("/admin/categories/add")} 
-          className="bg-purple text-white"
-        >
-          <PlusCircle className="mr-2 h-4 w-4" />
-          Add Category
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            onClick={handleRefresh}
+            variant="outline"
+            disabled={isRefreshing}
+          >
+            <RefreshCw className={`mr-2 h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+            {isRefreshing ? 'Refreshing...' : 'Refresh Data'}
+          </Button>
+          <Button
+            onClick={() => navigate("/admin/categories/add")}
+            className="bg-pink-200 text-white"
+          >
+            <PlusCircle className="mr-2 h-4 w-4" />
+            Add Category
+          </Button>
+        </div>
       </div>
-      
+
       <Card>
         <CardHeader className="pb-2">
           <CardTitle>All Categories</CardTitle>
@@ -160,7 +204,10 @@ export default function AdminCategories() {
         </CardHeader>
         <CardContent>
           <div className="flex flex-col md:flex-row justify-between gap-4 mb-6">
-            <form onSubmit={handleSearch} className="flex w-full max-w-sm space-x-2">
+            <form
+              onSubmit={handleSearch}
+              className="flex w-full max-w-sm space-x-2"
+            >
               <div className="relative flex-1">
                 <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
@@ -173,7 +220,7 @@ export default function AdminCategories() {
               <Button type="submit">Search</Button>
             </form>
           </div>
-          
+
           {isLoading ? (
             <div className="space-y-2">
               {Array.from({ length: 5 }).map((_, i) => (
@@ -204,7 +251,10 @@ export default function AdminCategories() {
                       <TableCell>
                         <div className="flex items-center gap-3">
                           <Avatar className="h-10 w-10">
-                            <AvatarImage src={category.image} alt={category.name} />
+                            <AvatarImage
+                              src={category.image}
+                              alt={category.name}
+                            />
                             <AvatarFallback className="bg-gray-100 text-gray-500">
                               {category.name.charAt(0)}
                             </AvatarFallback>
@@ -223,7 +273,9 @@ export default function AdminCategories() {
                         ) : (
                           <Switch
                             checked={category.featured}
-                            onCheckedChange={() => toggleFeaturedStatus(category)}
+                            onCheckedChange={() =>
+                              toggleFeaturedStatus(category)
+                            }
                           />
                         )}
                       </TableCell>
@@ -238,7 +290,9 @@ export default function AdminCategories() {
                           <Button
                             variant="ghost"
                             size="icon"
-                            onClick={() => navigate(`/admin/categories/edit/${category.id}`)}
+                            onClick={() =>
+                              navigate(`/admin/categories/edit/${category.id}`)
+                            }
                           >
                             <PencilIcon className="h-4 w-4" />
                           </Button>
@@ -255,9 +309,13 @@ export default function AdminCategories() {
                             </AlertDialogTrigger>
                             <AlertDialogContent>
                               <AlertDialogHeader>
-                                <AlertDialogTitle>Delete Category</AlertDialogTitle>
+                                <AlertDialogTitle>
+                                  Delete Category
+                                </AlertDialogTitle>
                                 <AlertDialogDescription>
-                                  Are you sure you want to delete "{categoryToDelete?.name}"? This action cannot be undone.
+                                  Are you sure you want to delete "
+                                  {categoryToDelete?.name}"? This action cannot
+                                  be undone.
                                 </AlertDialogDescription>
                               </AlertDialogHeader>
                               <AlertDialogFooter>

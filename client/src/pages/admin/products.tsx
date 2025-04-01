@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import ProductTable from "@/components/admin/tables/ProductTable";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useToast } from "@/hooks/use-toast";
 import {
   Select,
   SelectContent,
@@ -20,7 +21,7 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination";
-import { Loader2, PlusCircle, Search } from "lucide-react";
+import { Loader2, PlusCircle, Search, RefreshCw } from "lucide-react";
 
 // Define our interfaces
 interface Product {
@@ -54,6 +55,9 @@ export default function AdminProducts() {
   const [page, setPage] = useState(1);
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
 
   // Redirect if not admin
   useEffect(() => {
@@ -133,6 +137,29 @@ export default function AdminProducts() {
     setStatusFilter("all");
     setPage(1);
   };
+  
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      // Invalidate both products and categories queries to force a fresh reload
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["/api/products"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/categories"] })
+      ]);
+      toast({
+        title: "Data refreshed",
+        description: "Product and category data has been updated.",
+      });
+    } catch (error) {
+      toast({
+        title: "Refresh failed",
+        description: "An error occurred while refreshing the data.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -143,13 +170,23 @@ export default function AdminProducts() {
           </h2>
           <p className="text-muted-foreground">Manage your product inventory</p>
         </div>
-        <Button
-          onClick={() => navigate("/admin/products/add")}
-          className="bg-pink-300 text-white"
-        >
-          <PlusCircle className="mr-2 h-4 w-4" />
-          Add Product
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            onClick={handleRefresh}
+            variant="outline"
+            disabled={isRefreshing}
+          >
+            <RefreshCw className={`mr-2 h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+            {isRefreshing ? 'Refreshing...' : 'Refresh Data'}
+          </Button>
+          <Button
+            onClick={() => navigate("/admin/products/add")}
+            className="bg-pink-300 text-white"
+          >
+            <PlusCircle className="mr-2 h-4 w-4" />
+            Add Product
+          </Button>
+        </div>
       </div>
 
       <div className="rounded-md border">
