@@ -1590,6 +1590,7 @@ export class DatabaseStorage implements IStorage {
   }
   
   // The getAllResetTokens method is already implemented above
+  // No need for a duplicate implementation
 }
 
 // Import required operators

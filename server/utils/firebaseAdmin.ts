@@ -12,14 +12,14 @@ export const initializeFirebaseAdmin = () => {
   // If already initialized, return the existing app
   if (isInitialized) {
     console.log('Firebase Admin already initialized');
-    return admin.app();
+    return admin.apps[0];
   }
   
   // Check if any Firebase admin apps are already initialized
   if (admin.apps && admin.apps.length > 0) {
     console.log('Using existing Firebase Admin app');
     isInitialized = true;
-    return admin.app();
+    return admin.apps[0];
   }
   
   try {
@@ -27,14 +27,22 @@ export const initializeFirebaseAdmin = () => {
     // In Replit, this falls back to using the environment variables
     const app = admin.initializeApp({
       projectId: process.env.VITE_FIREBASE_PROJECT_ID,
+      credential: admin.credential.cert({
+        projectId: process.env.VITE_FIREBASE_PROJECT_ID,
+        clientEmail: process.env.FIREBASE_CLIENT_EMAIL || `firebase-adminsdk@${process.env.VITE_FIREBASE_PROJECT_ID}.iam.gserviceaccount.com`,
+        // We won't have the private key, so we'll just handle this as a graceful degradation case
+        privateKey: process.env.FIREBASE_PRIVATE_KEY || 'dummy-key',
+      }),
     });
     
-    console.log('Firebase Admin initialized successfully with project ID:', process.env.VITE_FIREBASE_PROJECT_ID);
+    console.log('Firebase Admin initialized with project ID:', process.env.VITE_FIREBASE_PROJECT_ID);
+    console.log('Note: Without proper Firebase credentials, only PostgreSQL password resets will succeed');
     isInitialized = true;
     return app;
   } catch (error) {
     console.error('Failed to initialize Firebase Admin:', error);
-    throw error;
+    // Return null instead of throwing - we'll handle the null case in the calling code
+    return null;
   }
 };
 
@@ -43,7 +51,10 @@ export const initializeFirebaseAdmin = () => {
  */
 export const getFirebaseAdminAuth = () => {
   // Initialize if not already done
-  initializeFirebaseAdmin();
+  const app = initializeFirebaseAdmin();
+  if (!app) {
+    throw new Error("Firebase Admin SDK initialization failed");
+  }
   return getAuth();
 };
 
@@ -80,15 +91,19 @@ export const resetUserPassword = async (email: string, newPassword: string): Pro
     // Also update the password in Firestore if we have access
     try {
       const app = initializeFirebaseAdmin();
-      const db = getFirestore(app);
-      
-      // We don't store raw passwords in Firestore, just mark that it was reset
-      const userRef = db.collection('users').doc(userRecord.uid);
-      await userRef.update({
-        passwordLastUpdated: new Date(),
-        updatedAt: new Date()
-      });
-      console.log('Password update timestamp added to Firestore for user:', email);
+      if (app) {
+        const db = getFirestore(app);
+        
+        // We don't store raw passwords in Firestore, just mark that it was reset
+        const userRef = db.collection('users').doc(userRecord.uid);
+        await userRef.update({
+          passwordLastUpdated: new Date(),
+          updatedAt: new Date()
+        });
+        console.log('Password update timestamp added to Firestore for user:', email);
+      } else {
+        console.warn('Skipping Firestore update - Firebase Admin SDK initialization failed');
+      }
     } catch (firestoreError) {
       console.warn('Could not update Firestore password timestamp:', firestoreError);
       // Non-critical error, continue
@@ -111,8 +126,14 @@ export const updateUserRole = async (firebaseUid: string, role: 'admin' | 'user'
     
     // Initialize Firebase Admin
     const app = initializeFirebaseAdmin();
+    if (!app) {
+      console.warn('Firebase Admin initialization failed, cannot update Firebase role');
+      return false;
+    }
+    
     const db = getFirestore(app);
-    const auth = getFirebaseAdminAuth();
+    let firestoreUpdateSuccess = false;
+    let authUpdateSuccess = false;
     
     // Update the user document in Firestore
     try {
@@ -122,6 +143,7 @@ export const updateUserRole = async (firebaseUid: string, role: 'admin' | 'user'
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
       });
       console.log(`Firestore role updated successfully for user ${firebaseUid}`);
+      firestoreUpdateSuccess = true;
     } catch (firestoreError) {
       console.error('Error updating user role in Firestore:', firestoreError);
       // Continue to try Auth update even if Firestore fails
@@ -129,15 +151,17 @@ export const updateUserRole = async (firebaseUid: string, role: 'admin' | 'user'
     
     // Also set custom claims for additional security in Auth
     try {
+      const auth = getFirebaseAdminAuth();
       await auth.setCustomUserClaims(firebaseUid, { role });
       console.log(`Auth custom claims updated successfully for user ${firebaseUid}`);
+      authUpdateSuccess = true;
     } catch (authError) {
       console.error('Error updating custom claims in Auth:', authError);
       // We'll still return true if at least Firestore update worked
     }
     
     console.log(`Firebase role update process completed for user ${firebaseUid}`);
-    return true;
+    return firestoreUpdateSuccess || authUpdateSuccess;
   } catch (error) {
     console.error('Error initializing Firebase Admin for role update:', error);
     

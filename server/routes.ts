@@ -4208,42 +4208,59 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
       
-      // Save the reset code if provided
-      if (resetCode) {
-        // Create a future expiration date (30 minutes from now)
-        const expiresAt = new Date();
-        expiresAt.setMinutes(expiresAt.getMinutes() + 30);
-        
-        // Save the OTP for verification - store with multiple IDs for robust lookups
-        await storage.savePasswordResetOTP(pgUser.id, resetCode, expiresAt);
-        console.log(`Saved reset code for user ID: ${pgUser.id}, expires at: ${expiresAt}`);
-        
-        // Also save with Firebase UID if available, for more robust lookups
-        if (pgUser.firebaseUid) {
-          try {
-            console.log(`Also saving reset code with Firebase UID: ${pgUser.firebaseUid}`);
-            // Call the savePasswordResetOTP function directly with the Firebase UID
-            await storage.savePasswordResetOTP(pgUser.firebaseUid as unknown as number, resetCode, expiresAt);
-            console.log(`Successfully saved reset code with Firebase UID`);
-          } catch (firebaseIdError) {
-            console.warn(`Error saving reset code with Firebase UID:`, firebaseIdError);
-          }
-        }
-        
-        // Also try saving with email for even more redundancy
+      // Generate or use provided reset code
+      const actualResetCode = resetCode || Math.random().toString(36).substring(2, 8).toUpperCase();
+      
+      // Create a future expiration date (30 minutes from now)
+      const expiresAt = new Date();
+      expiresAt.setMinutes(expiresAt.getMinutes() + 30);
+      
+      // Save the OTP for verification - store with multiple IDs for robust lookups
+      await storage.savePasswordResetOTP(pgUser.id, actualResetCode, expiresAt);
+      console.log(`Saved reset code for user ID: ${pgUser.id}, expires at: ${expiresAt}`);
+      
+      // Also save the reset code as a reset token for the next step
+      await storage.saveResetToken(pgUser.id, actualResetCode);
+      console.log(`Also saved the reset code as a reset token for user ID: ${pgUser.id}`);
+      
+      // Also save with Firebase UID if available, for more robust lookups
+      if (pgUser.firebaseUid) {
         try {
-          console.log(`Also saving reset code with email: ${email}`);
-          // We're passing email as if it were a number - storage implementation handles this
-          await storage.savePasswordResetOTP(email as unknown as number, resetCode, expiresAt);
-          console.log(`Successfully saved reset code with email lookup key`);
-        } catch (emailKeyError) {
-          console.warn(`Error saving reset code with email key:`, emailKeyError);
+          console.log(`Also saving reset code with Firebase UID: ${pgUser.firebaseUid}`);
+          // Save as OTP
+          await storage.savePasswordResetOTP(pgUser.firebaseUid as unknown as number, actualResetCode, expiresAt);
+          // Also save as token
+          await storage.saveResetToken(pgUser.firebaseUid, actualResetCode);
+          console.log(`Successfully saved reset code/token with Firebase UID`);
+        } catch (firebaseIdError) {
+          console.warn(`Error saving reset code with Firebase UID:`, firebaseIdError);
         }
+      }
+      
+      // Also try saving with email for even more redundancy
+      try {
+        console.log(`Also saving reset code with email: ${email}`);
+        // Save as OTP
+        await storage.savePasswordResetOTP(email as unknown as number, actualResetCode, expiresAt);
+        // Also save as token
+        await storage.saveResetToken(email, actualResetCode);
+        console.log(`Successfully saved reset code/token with email lookup key`);
+      } catch (emailKeyError) {
+        console.warn(`Error saving reset code with email key:`, emailKeyError);
+      }
+      
+      // Log available OTPs and tokens for debugging
+      try {
+        const allOTPs = storage.getAllPasswordResetOTPs();
+        console.log("All saved OTPs:", allOTPs);
+      } catch (error) {
+        console.warn("Error logging all OTPs:", error);
       }
       
       return res.status(200).json({
         success: true,
-        message: "Password reset has been initiated. Please follow the instructions to complete the process."
+        message: "Password reset has been initiated. Please follow the instructions to complete the process.",
+        resetCode: actualResetCode // ONLY for testing - remove in production!
       });
     } catch (error) {
       console.error("Error in request-password-reset:", error);

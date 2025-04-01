@@ -1,0 +1,43 @@
+Verifying reset code with server for email: naseem9876khanpbk@gmail.com
+client:536 WebSocket connection to 'wss://7bac6be5-9b7b-4305-999c-2514d3697fff-00-3r35yc6lackla.picard.replit.dev/?token=e6ht2cLCw-tp' failed: 
+client:536 Uncaught (in promise) SyntaxError: Failed to construct 'WebSocket': The URL 'wss://localhost:undefined/?token=e6ht2cLCw-tp' is invalid.
+    at setupWebSocket (client:536:19)
+    at fallback (client:509:16)
+    at WebSocket.<anonymous> (client:555:7)
+verify-reset-code.tsx:189 
+ POST https://7bac6be5-9b7b-4305-999c-2514d3697fff-00-3r35yc6lackla.picard.replit.dev/api/auth/verify-reset-code 400 (Bad Request)
+verify-reset-code.tsx:210 Server verification failed: Invalid or expired verification code
+reset-password.tsx:136 Processing direct password reset for email: naseem9876khanpbk@gmail.com
+reset-password.tsx:157 Verified reset document found, using it for password reset
+reset-password.tsx:166 Using reset token: VERIFIED for password reset
+reset-password.tsx:169 
+ POST https://7bac6be5-9b7b-4305-999c-2514d3697fff-00-3r35yc6lackla.picard.replit.dev/api/auth/reset-password 400 (Bad Request)
+reset-password.tsx:200 Error in password reset: 
+AxiosError {message: 'Request failed with status code 400', name: 'AxiosError', code: 'ERR_BAD_REQUEST', config: {…}, request: XMLHttpRequest, …}
+code
+: 
+"ERR_BAD_REQUEST"
+config
+: 
+{transitional: {…}, adapter: Array(3), transformRequest: Array(1), transformResponse: Array(1), timeout: 0, …}
+message
+: 
+"Request failed with status code 400"
+name
+: 
+"AxiosError"
+request
+: 
+XMLHttpRequest {onreadystatechange: null, readyState: 4, timeout: 0, withCredentials: false, upload: XMLHttpRequestUpload, …}
+response
+: 
+{data: {…}, status: 400, statusText: 'Bad Request', headers: AxiosHeaders, config: {…}, …}
+status
+: 
+400
+stack
+: 
+"AxiosError: Request failed with status code 400\n    at settle (https://7bac6be5-9b7b-4305-999c-2514d3697fff-00-3r35yc6lackla.picard.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/axios.js?v=f4c67f8d:1218:12)\n    at XMLHttpRequest.onloadend (https://7bac6be5-9b7b-4305-999c-2514d3697fff-00-3r35yc6lackla.picard.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/axios.js?v=f4c67f8d:1550:7)\n    at Axios.request (https://7bac6be5-9b7b-4305-999c-2514d3697fff-00-3r35yc6lackla.picard.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/axios.js?v=f4c67f8d:2108:41)\n    at async onSubmit (https://7bac6be5-9b7b-4305-999c-2514d3697fff-00-3r35yc6lackla.picard.replit.dev/src/pages/auth/reset-password.tsx:145:24)\n    at async https://7bac6be5-9b7b-4305-999c-2514d3697fff-00-3r35yc6lackla.picard.replit.dev/@fs/home/runner/workspace/node_modules/.vite/deps/chunk-YABUFNLM.js?v=f4c67f8d:1675:9"
+[[Prototype]]
+: 
+Error

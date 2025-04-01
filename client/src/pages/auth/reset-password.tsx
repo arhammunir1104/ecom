@@ -138,29 +138,16 @@ export default function ResetPassword() {
       // Get the resetToken from session storage or from the reset verification
       let resetToken = sessionStorage.getItem("resetToken");
       
-      // If no reset token in session, try to get it from the Firebase document
+      // If no reset token in session, we need to go back to verification
       if (!resetToken) {
-        try {
-          const resetDocRef = doc(db, "passwordResets", resetDocId);
-          const resetDoc = await getDoc(resetDocRef);
-          
-          if (!resetDoc.exists() || !resetDoc.data().verified) {
-            toast({
-              title: "Verification Required",
-              description: "You must verify your identity first",
-              variant: "destructive",
-            });
-            setLocation("/auth/verify-reset-code");
-            return;
-          }
-          
-          console.log("Verified reset document found, using it for password reset");
-          resetToken = resetDoc.data().otp || resetDocId;
-        } catch (docError) {
-          console.error("Error getting reset document:", docError);
-          // We'll continue with resetDocId as a fallback
-          resetToken = resetDocId;
-        }
+        // We should not proceed without a valid reset token from the server
+        toast({
+          title: "Verification Required",
+          description: "You must verify your identity first",
+          variant: "destructive",
+        });
+        setLocation("/auth/verify-reset-code");
+        return;
       }
       
       console.log(`Using reset token: ${resetToken} for password reset`);
