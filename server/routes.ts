@@ -4194,9 +4194,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       console.log(`Password sync requested for email: ${email} (forceSyncAll: ${forceSyncAll ? 'true' : 'false'})`);
       
-      // Check if user exists in PostgreSQL
-      const pgUser = await storage.getUserByEmail(email);
-      
       // Track our operations for detailed reporting
       const operations = {
         postgresUpdated: false,
@@ -4204,12 +4201,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
         firestoreUpdated: false
       };
       
+      // Check if user exists in PostgreSQL
+      let pgUser = await storage.getUserByEmail(email);
+      
+      // If no user found by email, try by Firebase UID if provided
+      if (!pgUser && uid) {
+        console.log(`No user found by email, trying Firebase UID: ${uid}`);
+        pgUser = await storage.getUserByFirebaseId(uid);
+      }
+      
       // First handle PostgreSQL update if user exists
       if (pgUser) {
+        console.log(`Found PostgreSQL user with ID: ${pgUser.id}`);
+        
         // Prepare update data
-        const updateData: any = {
-          firebaseUid: uid || pgUser.firebaseUid
-        };
+        const updateData: any = {};
+        
+        // Add Firebase UID if provided and user doesn't have one
+        if (uid && (!pgUser.firebaseUid || pgUser.firebaseUid !== uid)) {
+          updateData.firebaseUid = uid;
+          console.log(`Updating Firebase UID to: ${uid}`);
+        }
         
         // If a specific password was provided, hash it and store it
         if (password) {
@@ -4220,6 +4232,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             console.log(`Hashing password for user ID: ${pgUser.id}`);
             const hashedPassword = await hashPassword(password);
             updateData.password = hashedPassword;
+            console.log(`Password successfully hashed for user ID: ${pgUser.id}`);
           } catch (hashError) {
             console.error(`Error hashing password for user ID: ${pgUser.id}`, hashError);
             return res.status(500).json({
@@ -4230,6 +4243,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         } else if (!forceSyncAll) {
           // Only set a placeholder when not doing a force sync (normal sync operations)
           updateData.password = 'firebase-auth-' + Date.now();
+          console.log(`Using placeholder password for user ID: ${pgUser.id}`);
         } else {
           // When forceSyncAll is true but no password provided, return an error
           return res.status(400).json({
@@ -4238,13 +4252,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
         }
         
-        // Update the user in PostgreSQL
-        await storage.updateUser(pgUser.id, updateData);
-        operations.postgresUpdated = true;
-        
-        console.log(`Password ${password ? 'updated' : 'placeholder created'} in PostgreSQL for user ID: ${pgUser.id}`);
+        // Only perform update if we have values to update
+        if (Object.keys(updateData).length > 0) {
+          // Update the user in PostgreSQL
+          const updatedUser = await storage.updateUser(pgUser.id, updateData);
+          
+          if (updatedUser) {
+            operations.postgresUpdated = true;
+            console.log(`User with ID ${pgUser.id} successfully updated in PostgreSQL`);
+            
+            // Verify the password was actually updated
+            if (password && updatedUser.password !== pgUser.password) {
+              console.log(`Password verification: Password successfully changed in PostgreSQL`);
+            } else if (password) {
+              console.warn(`Password verification: Password may not have been updated properly in PostgreSQL`);
+            }
+          } else {
+            console.error(`Failed to update user with ID: ${pgUser.id} in PostgreSQL`);
+            return res.status(500).json({
+              success: false,
+              message: "Failed to update user in PostgreSQL"
+            });
+          }
+        } else {
+          console.log(`No fields to update for user ID: ${pgUser.id}`);
+        }
       } else {
-        console.log(`No PostgreSQL user found with email: ${email}`);
+        console.log(`No PostgreSQL user found with email: ${email} or uid: ${uid || 'not provided'}`);
       }
       
       // Now handle Firebase Auth update if requested
