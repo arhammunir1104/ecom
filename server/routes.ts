@@ -2709,8 +2709,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         let firebaseCartItems = [];
         if (user.firebaseUid) {
           try {
-            const { getUserCart } = require('./utils/firebase');
-            firebaseCartItems = await getUserCart(user.firebaseUid);
+            // Use the imported Firebase admin functions
+            firebaseCartItems = await firebaseAdmin.getUserCart(user.firebaseUid);
             console.log(`Retrieved ${firebaseCartItems.length} cart items from Firebase for user ${user.firebaseUid}`);
           } catch (firebaseErr) {
             console.error(`Error fetching cart from Firebase for user ${user.firebaseUid}:`, firebaseErr);
@@ -2756,8 +2756,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         let firebaseWishlistItems = [];
         if (user.firebaseUid) {
           try {
-            const { getUserWishlist } = require('./utils/firebase');
-            firebaseWishlistItems = await getUserWishlist(user.firebaseUid);
+            // Use the imported Firebase admin functions
+            firebaseWishlistItems = await firebaseAdmin.getUserWishlist(user.firebaseUid);
             console.log(`Retrieved ${firebaseWishlistItems.length} wishlist items from Firebase for user ${user.firebaseUid}`);
           } catch (firebaseErr) {
             console.error(`Error fetching wishlist from Firebase for user ${user.firebaseUid}:`, firebaseErr);
@@ -2864,9 +2864,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (user.firebaseUid) {
         try {
           // Try to get Firebase user data with properly typed return value
-          const { getFirestoreUser } = require('./utils/firebase');
+          // Use the imported Firebase admin functions
           // This now returns FirebaseUser | null with proper typings
-          firebaseUserData = await getFirestoreUser(user.firebaseUid);
+          firebaseUserData = await firebaseAdmin.getFirestoreUser(user.firebaseUid);
           
           if (firebaseUserData) {
             // Log that we successfully got Firebase user data
