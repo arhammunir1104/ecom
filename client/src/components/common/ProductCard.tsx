@@ -7,11 +7,13 @@ import { Badge } from "@/components/ui/badge";
 import { Heart, ShoppingBag, Star, StarHalf } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
-import { 
-  addToWishlist, 
-  isInWishlist, 
-  getProductReviewStats, 
-  ReviewsData 
+import {
+  addToWishlist,
+  isInWishlist,
+  getProductReviewStats,
+  getProductReviews,
+  updateProductReviewStats,
+  ReviewsData,
 } from "@/lib/firebaseService";
 
 interface ProductCardProps {
@@ -145,10 +147,10 @@ const ProductCard = ({ product }: ProductCardProps) => {
       try {
         // Fetch reviews data
         setIsLoadingReviews(true);
-        
+
         // First try to get product reviews directly to ensure accurate count
         const reviews = await getProductReviews(id);
-        
+
         // If reviews exist but review stats don't, update them to ensure consistency
         if (reviews.length > 0) {
           // Force update the review stats based on actual reviews
@@ -163,9 +165,9 @@ const ProductCard = ({ product }: ProductCardProps) => {
           const stats = await getProductReviewStats(id);
           setReviewStats(stats);
         }
-        
+
         setIsLoadingReviews(false);
-        
+
         // Check wishlist status
         const uid = window.localStorage.getItem("firebaseUid");
         if (uid) {

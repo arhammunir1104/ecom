@@ -18,10 +18,13 @@ const FeaturedProducts = ({ products, isLoading }: FeaturedProductsProps) => {
             <Skeleton className="h-8 w-60" />
             <Skeleton className="h-6 w-24" />
           </div>
-          
+
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {Array.from({ length: 4 }).map((_, index) => (
-              <div key={index} className="bg-white rounded-lg overflow-hidden shadow-sm">
+              <div
+                key={index}
+                className="bg-white rounded-lg overflow-hidden shadow-sm"
+              >
                 <Skeleton className="h-60 sm:h-64 md:h-72 lg:h-80 w-full" />
                 <div className="p-4 space-y-3">
                   <Skeleton className="h-4 w-20" />
@@ -49,18 +52,23 @@ const FeaturedProducts = ({ products, isLoading }: FeaturedProductsProps) => {
     <section className="py-16 bg-pink-lighter/30 bg-[url('https://images.unsplash.com/photo-1577386398259-52088466ec02?ixlib=rb-1.2.1&auto=format&fit=crop&w=100&q=80')] bg-repeat bg-blend-overlay bg-opacity-10">
       <div className="container mx-auto px-4">
         <div className="flex justify-between items-center mb-12">
-          <h2 className="font-playfair text-3xl font-bold">Featured Products</h2>
-          <Link 
-            href="/shop" 
+          <h2 className="font-playfair text-3xl font-bold">
+            Featured Products
+          </h2>
+          <Link
+            href="/shop"
             className="text-purple hover:underline flex items-center transition-colors"
           >
             View All <ArrowRight className="ml-2 h-4 w-4" />
           </Link>
         </div>
-        
+
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {products.slice(0, 4).map(product => (
-            <ProductCard key={product.id} product={product} />
+          {products.slice(0, 4).map((product) => (
+            <>
+              {console.log(product)}
+              <ProductCard key={product.id} product={product} />
+            </>
           ))}
         </div>
       </div>
