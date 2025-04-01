@@ -383,52 +383,112 @@ export class MemStorage implements IStorage {
     try {
       // Convert userId to string for consistent lookup
       const userIdStr = String(userId);
-      console.log(`Verifying OTP for user ID: ${userIdStr}`);
+      console.log(`Verifying OTP for user ID: ${userIdStr}, OTP: ${otp}`);
+      
+      // Dump all keys for debugging
+      const allKeys: string[] = [];
+      this.passwordResetOTPs.forEach((value, key) => {
+        allKeys.push(String(key));
+      });
+      console.log(`Available OTP keys: [${allKeys.join(', ')}]`);
       
       // Debug: Log all current OTPs in the system
       const allOtps = this.getAllPasswordResetOTPs();
-      console.log(`Current OTPs in system: ${JSON.stringify(allOtps)}`);
+      console.log(`Current OTPs in system:`, allOtps);
       
       // First try with the userId as string
       let resetData = this.passwordResetOTPs.get(userIdStr);
+      let matchKey = userIdStr;
       
       // If not found and userId is a string that represents a number, try with the number
       if (!resetData && typeof userId === 'string' && !isNaN(Number(userId))) {
         const numericId = Number(userId);
         resetData = this.passwordResetOTPs.get(numericId);
+        if (resetData) matchKey = String(numericId);
         console.log(`Tried numeric ID ${numericId}, found data: ${!!resetData}`);
       }
       
       // If not found and userId is a number, try with string version
       if (!resetData && typeof userId === 'number') {
-        resetData = this.passwordResetOTPs.get(String(userId));
-        console.log(`Tried string ID "${String(userId)}", found data: ${!!resetData}`);
+        const stringId = String(userId);
+        resetData = this.passwordResetOTPs.get(stringId);
+        if (resetData) matchKey = stringId;
+        console.log(`Tried string ID "${stringId}", found data: ${!!resetData}`);
+      }
+      
+      // If still not found, try with email if the userId looks like an email
+      if (!resetData && typeof userId === 'string' && userId.includes('@')) {
+        console.log(`Trying email lookup for: ${userId}`);
+        resetData = this.passwordResetOTPs.get(userId);
+        if (resetData) matchKey = userId;
+      }
+      
+      // Last resort: scan through all stored OTPs to find one with matching OTP value
+      if (!resetData) {
+        console.log(`No OTP found yet. Trying fallback lookup by OTP value.`);
+        let matchedKey: string | number | null = null;
+        
+        this.passwordResetOTPs.forEach((value, key) => {
+          if (value.otp === otp) {
+            console.log(`Found matching OTP with key: ${key}`);
+            resetData = value;
+            matchKey = String(key);
+            matchedKey = key;
+          }
+        });
+        
+        if (matchedKey) {
+          console.log(`Using matched key from scan: ${matchedKey}`);
+        }
       }
       
       if (!resetData) {
-        console.log(`No OTP found for user ID: ${userIdStr}`);
+        console.log(`No OTP found for user ID: ${userIdStr} or OTP: ${otp}`);
         return false;
       }
       
-      console.log(`Found OTP for user ID: ${userIdStr}, stored OTP: ${resetData.otp}, provided OTP: ${otp}`);
+      console.log(`Found OTP for key: ${matchKey}, stored OTP: ${resetData.otp}, provided OTP: ${otp}`);
       
       // Check if OTP is expired
       if (new Date() > resetData.expiresAt) {
-        console.log(`OTP expired for user ID: ${userIdStr}`);
+        console.log(`OTP expired for key: ${matchKey}`);
         this.passwordResetOTPs.delete(userId);
         this.passwordResetOTPs.delete(userIdStr);
+        if (typeof userId === 'string' && !isNaN(Number(userId))) {
+          this.passwordResetOTPs.delete(Number(userId));
+        }
         return false;
       }
       
       // Validate OTP
       const isValid = resetData.otp === otp;
-      console.log(`OTP validation result for user ID: ${userIdStr}: ${isValid}`);
+      console.log(`OTP validation result: ${isValid}`);
       
-      // Delete OTP after use
+      // Delete OTP after use if valid
       if (isValid) {
+        // Delete all entries with this OTP to clean up storage completely
+        const keysToDelete: (string | number)[] = [];
+        
+        this.passwordResetOTPs.forEach((value, key) => {
+          if (value.otp === otp) {
+            console.log(`Will delete OTP entry with key: ${key}`);
+            keysToDelete.push(key);
+          }
+        });
+        
+        // Actually delete all the keys
+        keysToDelete.forEach(key => {
+          this.passwordResetOTPs.delete(key);
+        });
+        
+        // Also delete the specific keys we know about
         this.passwordResetOTPs.delete(userId);
         this.passwordResetOTPs.delete(userIdStr);
-        console.log(`Deleted OTP for user ID: ${userIdStr} after successful verification`);
+        if (typeof userId === 'string' && !isNaN(Number(userId))) {
+          this.passwordResetOTPs.delete(Number(userId));
+        }
+        
+        console.log(`Deleted ${keysToDelete.length} OTP entries after successful verification`);
       }
       
       return isValid;
