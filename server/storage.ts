@@ -24,10 +24,11 @@ export interface IStorage {
   
   // Password reset methods
   savePasswordResetOTP(userId: number, otp: string, expiresAt: Date): Promise<void>;
-  verifyPasswordResetOTP(userId: number, otp: string): Promise<boolean>;
-  saveResetToken(userId: number, token: string): Promise<void>;
-  verifyResetToken(userId: number, token: string): Promise<boolean>;
-  clearResetToken(userId: number): Promise<void>;
+  verifyPasswordResetOTP(userId: number | string, otp: string): Promise<boolean>;
+  getAllPasswordResetOTPs(): Record<string, { otp: string, expiresAt: Date }>;
+  saveResetToken(userId: number | string, token: string): Promise<void>;
+  verifyResetToken(userId: number | string, token: string): Promise<boolean>;
+  clearResetToken(userId: number | string): Promise<void>;
 
   // Category methods
   getCategory(id: number): Promise<Category | undefined>;
@@ -374,36 +375,124 @@ export class MemStorage implements IStorage {
     this.passwordResetOTPs.set(userId, { otp, expiresAt });
   }
 
-  async verifyPasswordResetOTP(userId: number, otp: string): Promise<boolean> {
-    const resetData = this.passwordResetOTPs.get(userId);
-    if (!resetData) return false;
-    
-    // Check if OTP is expired
-    if (new Date() > resetData.expiresAt) {
-      this.passwordResetOTPs.delete(userId);
+  async verifyPasswordResetOTP(userId: number | string, otp: string): Promise<boolean> {
+    try {
+      // Convert userId to string for consistent lookup
+      const userIdStr = String(userId);
+      console.log(`Verifying OTP for user ID: ${userIdStr}`);
+      
+      // First try with the user ID as is
+      let resetData = this.passwordResetOTPs.get(userId);
+      
+      // If not found and userId is a string that represents a number, try with the number
+      if (!resetData && typeof userId === 'string' && !isNaN(Number(userId))) {
+        const numericId = Number(userId);
+        resetData = this.passwordResetOTPs.get(numericId);
+        console.log(`Tried numeric ID ${numericId}, found data: ${!!resetData}`);
+      }
+      
+      // If not found and userId is a number, try with string version
+      if (!resetData && typeof userId === 'number') {
+        resetData = this.passwordResetOTPs.get(String(userId));
+        console.log(`Tried string ID "${String(userId)}", found data: ${!!resetData}`);
+      }
+      
+      if (!resetData) {
+        console.log(`No OTP found for user ID: ${userIdStr}`);
+        return false;
+      }
+      
+      console.log(`Found OTP for user ID: ${userIdStr}, stored OTP: ${resetData.otp}, provided OTP: ${otp}`);
+      
+      // Check if OTP is expired
+      if (new Date() > resetData.expiresAt) {
+        console.log(`OTP expired for user ID: ${userIdStr}`);
+        this.passwordResetOTPs.delete(userId);
+        return false;
+      }
+      
+      // Validate OTP
+      const isValid = resetData.otp === otp;
+      console.log(`OTP validation result for user ID: ${userIdStr}: ${isValid}`);
+      
+      // Delete OTP after use
+      if (isValid) {
+        if (typeof userId === 'string' && !isNaN(Number(userId))) {
+          this.passwordResetOTPs.delete(Number(userId));
+        }
+        this.passwordResetOTPs.delete(userId);
+        console.log(`Deleted OTP for user ID: ${userIdStr} after successful verification`);
+      }
+      
+      return isValid;
+    } catch (error) {
+      console.error("Error in verifyPasswordResetOTP:", error);
       return false;
     }
-    
-    // Validate OTP
-    const isValid = resetData.otp === otp;
-    
-    // Delete OTP after use
-    if (isValid) {
-      this.passwordResetOTPs.delete(userId);
+  }
+  
+  // For debugging purposes - returns all OTPs in the system
+  getAllPasswordResetOTPs(): Record<string, { otp: string, expiresAt: Date }> {
+    try {
+      const result: Record<string, { otp: string, expiresAt: Date }> = {};
+      this.passwordResetOTPs.forEach((value, key) => {
+        result[String(key)] = value;
+      });
+      return result;
+    } catch (error) {
+      console.error("Error getting all OTPs:", error);
+      return {};
     }
-    
-    return isValid;
   }
 
   async saveResetToken(userId: number, token: string): Promise<void> {
     this.passwordResetTokens.set(userId, token);
   }
 
-  async verifyResetToken(userId: number, token: string): Promise<boolean> {
-    const savedToken = this.passwordResetTokens.get(userId);
-    if (!savedToken) return false;
-    
-    return savedToken === token;
+  async verifyResetToken(userId: number | string, token: string): Promise<boolean> {
+    try {
+      // Convert userId to string for logging
+      const userIdStr = String(userId);
+      console.log(`Verifying reset token for user ID: ${userIdStr}`);
+      
+      // First try with the ID as provided
+      let savedToken = this.passwordResetTokens.get(userId);
+      
+      // If not found and userId is a string that represents a number, try with the number
+      if (!savedToken && typeof userId === 'string' && !isNaN(Number(userId))) {
+        const numericId = Number(userId);
+        savedToken = this.passwordResetTokens.get(numericId);
+        console.log(`Tried numeric ID ${numericId}, found token: ${!!savedToken}`);
+      }
+      
+      // If not found and userId is a number, try with string version
+      if (!savedToken && typeof userId === 'number') {
+        savedToken = this.passwordResetTokens.get(String(userId));
+        console.log(`Tried string ID "${String(userId)}", found token: ${!!savedToken}`);
+      }
+      
+      if (!savedToken) {
+        console.log(`No reset token found for user ID: ${userIdStr}`);
+        
+        // Log all tokens for debugging
+        let allTokens = "Saved tokens: ";
+        this.passwordResetTokens.forEach((value, key) => {
+          allTokens += `${key} (${typeof key}), `;
+        });
+        console.log(allTokens);
+        
+        return false;
+      }
+      
+      console.log(`Found reset token for user ID: ${userIdStr}`);
+      const isTokenValid = savedToken === token;
+      console.log(`Token validation result: ${isTokenValid}`);
+      
+      return isTokenValid;
+    } catch (error) {
+      console.error("Error in verifyResetToken:", error);
+      return false;
+    }
   }
 
   async clearResetToken(userId: number): Promise<void> {
@@ -843,29 +932,73 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
-  async verifyPasswordResetOTP(userId: number, otp: string): Promise<boolean> {
+  async verifyPasswordResetOTP(userId: number | string, otp: string): Promise<boolean> {
     try {
-      const resetData = this.passwordResetOTPs.get(userId);
-      if (!resetData) return false;
+      // Convert userId to string for consistent lookup
+      const userIdStr = String(userId);
+      console.log(`Verifying OTP for user ID: ${userIdStr}`);
+      
+      // First try with the user ID as is
+      let resetData = this.passwordResetOTPs.get(userId);
+      
+      // If not found and userId is a string that represents a number, try with the number
+      if (!resetData && typeof userId === 'string' && !isNaN(Number(userId))) {
+        const numericId = Number(userId);
+        resetData = this.passwordResetOTPs.get(numericId);
+        console.log(`Tried numeric ID ${numericId}, found data: ${!!resetData}`);
+      }
+      
+      // If not found and userId is a number, try with string version
+      if (!resetData && typeof userId === 'number') {
+        resetData = this.passwordResetOTPs.get(String(userId));
+        console.log(`Tried string ID "${String(userId)}", found data: ${!!resetData}`);
+      }
+      
+      if (!resetData) {
+        console.log(`No OTP found for user ID: ${userIdStr}`);
+        return false;
+      }
+      
+      console.log(`Found OTP for user ID: ${userIdStr}, stored OTP: ${resetData.otp}, provided OTP: ${otp}`);
       
       // Check if OTP is expired
       if (new Date() > resetData.expiresAt) {
+        console.log(`OTP expired for user ID: ${userIdStr}`);
         this.passwordResetOTPs.delete(userId);
         return false;
       }
       
       // Validate OTP
       const isValid = resetData.otp === otp;
+      console.log(`OTP validation result for user ID: ${userIdStr}: ${isValid}`);
       
       // Delete OTP after use
       if (isValid) {
+        if (typeof userId === 'string' && !isNaN(Number(userId))) {
+          this.passwordResetOTPs.delete(Number(userId));
+        }
         this.passwordResetOTPs.delete(userId);
+        console.log(`Deleted OTP for user ID: ${userIdStr} after successful verification`);
       }
       
       return isValid;
     } catch (error) {
       console.error("Error in verifyPasswordResetOTP:", error);
       return false;
+    }
+  }
+  
+  // For debugging purposes - returns all OTPs in the system
+  getAllPasswordResetOTPs(): Record<string, { otp: string, expiresAt: Date }> {
+    try {
+      const result: Record<string, { otp: string, expiresAt: Date }> = {};
+      this.passwordResetOTPs.forEach((value, key) => {
+        result[String(key)] = value;
+      });
+      return result;
+    } catch (error) {
+      console.error("Error getting all OTPs:", error);
+      return {};
     }
   }
 
@@ -878,12 +1011,46 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
-  async verifyResetToken(userId: number, token: string): Promise<boolean> {
+  async verifyResetToken(userId: number | string, token: string): Promise<boolean> {
     try {
-      const savedToken = this.passwordResetTokens.get(userId);
-      if (!savedToken) return false;
+      // Convert userId to string for logging
+      const userIdStr = String(userId);
+      console.log(`Verifying reset token for user ID: ${userIdStr}`);
       
-      return savedToken === token;
+      // First try with the ID as provided
+      let savedToken = this.passwordResetTokens.get(userId);
+      
+      // If not found and userId is a string that represents a number, try with the number
+      if (!savedToken && typeof userId === 'string' && !isNaN(Number(userId))) {
+        const numericId = Number(userId);
+        savedToken = this.passwordResetTokens.get(numericId);
+        console.log(`Tried numeric ID ${numericId}, found token: ${!!savedToken}`);
+      }
+      
+      // If not found and userId is a number, try with string version
+      if (!savedToken && typeof userId === 'number') {
+        savedToken = this.passwordResetTokens.get(String(userId));
+        console.log(`Tried string ID "${String(userId)}", found token: ${!!savedToken}`);
+      }
+      
+      if (!savedToken) {
+        console.log(`No reset token found for user ID: ${userIdStr}`);
+        
+        // Log all tokens for debugging
+        let allTokens = "Saved tokens: ";
+        this.passwordResetTokens.forEach((value, key) => {
+          allTokens += `${key} (${typeof key}), `;
+        });
+        console.log(allTokens);
+        
+        return false;
+      }
+      
+      console.log(`Found reset token for user ID: ${userIdStr}`);
+      const isTokenValid = savedToken === token;
+      console.log(`Token validation result: ${isTokenValid}`);
+      
+      return isTokenValid;
     } catch (error) {
       console.error("Error in verifyResetToken:", error);
       return false;

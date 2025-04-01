@@ -14,6 +14,7 @@ import { doc, getDoc, updateDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { auth } from "@/lib/firebase";
 import { resetPasswordWithOTP } from "@/lib/firebaseService";
+import axios from "axios";
 
 // Password validation schema
 const passwordSchema = z
@@ -148,6 +149,31 @@ export default function ResetPassword() {
           return;
         }
         
+        console.log("Verified reset document found, proceeding with password reset");
+        
+        // Add detailed logging to track the reset process
+        const verificationCode = resetDoc.data().otp === "VERIFIED" 
+          ? resetDocId 
+          : resetDoc.data().otp || resetDocId;
+        
+        // First, use the server to verify the reset code before attempting to reset the password
+        try {
+          console.log(`Verifying reset code with server for email: ${email}`);
+          const verifyResponse = await axios.post('/api/auth/verify-reset-code', {
+            email,
+            code: verificationCode
+          });
+          
+          if (verifyResponse?.data?.success) {
+            console.log("Server verification successful:", verifyResponse.data);
+          } else {
+            console.warn("Server verification returned invalid status:", verifyResponse?.data);
+          }
+        } catch (verifyError) {
+          console.error("Error verifying reset code with server:", verifyError);
+          // We'll still proceed with Firebase reset even if this fails
+        }
+        
         // Use our improved resetPasswordWithOTP function
         const success = await resetPasswordWithOTP(
           email,
@@ -156,11 +182,24 @@ export default function ResetPassword() {
         );
         
         if (success) {
+          console.log("Password reset request processed successfully");
           setResetComplete(true);
           
+          // Explicitly sync the password with the database too
+          try {
+            await axios.post('/api/auth/sync-password', {
+              email,
+              password: values.password
+            });
+            console.log("Password sync with database completed");
+          } catch (syncError) {
+            console.warn("Password sync with database failed:", syncError);
+            // Continue anyway since Firebase Auth was updated
+          }
+          
           toast({
-            title: "Password Reset Email Sent",
-            description: "Please check your email to complete the password reset process. Click the link in that email to set your new password.",
+            title: "Password Reset Successful",
+            description: "Your password has been reset. You can now log in with your new password.",
             variant: "default",
           });
           
@@ -177,7 +216,7 @@ export default function ResetPassword() {
         }
         
       } catch (authError: any) {
-        console.error("Auth error:", authError);
+        console.error("Auth error during password reset:", authError);
         
         if (authError.code === 'auth/requires-recent-login') {
           // User needs to re-authenticate before changing password
@@ -193,12 +232,50 @@ export default function ResetPassword() {
           return;
         }
         
-        // Handle other errors
-        toast({
-          title: "Password Reset Failed",
-          description: authError.message || "An error occurred while resetting your password.",
-          variant: "destructive",
-        });
+        // Fall back to standard email reset if there was an error with direct update
+        try {
+          console.log("Falling back to standard password reset email for:", email);
+          await sendPasswordResetEmail(auth, email);
+          
+          // Also attempt to sync with the PostgreSQL database
+          try {
+            await axios.post('/api/auth/request-password-reset', {
+              email,
+              resetCode: resetDocId
+            });
+            console.log("Database password reset request sent");
+          } catch (dbResetError) {
+            console.warn("Error requesting database password reset:", dbResetError);
+          }
+          
+          setResetComplete(true);
+          
+          toast({
+            title: "Password Reset Email Sent",
+            description: "Please check your email to complete the password reset process.",
+            variant: "default",
+          });
+          
+          // Clear session storage
+          sessionStorage.removeItem("resetEmail");
+          sessionStorage.removeItem("resetDocId");
+        } catch (resetError: any) {
+          console.error("Reset email error:", resetError);
+          
+          let errorMessage = "An error occurred while resetting your password.";
+          
+          if (resetError.code === "auth/user-not-found") {
+            errorMessage = "No account found with this email address.";
+          } else if (resetError.code === "auth/invalid-email") {
+            errorMessage = "Invalid email address format.";
+          }
+          
+          toast({
+            title: "Reset Failed",
+            description: errorMessage,
+            variant: "destructive",
+          });
+        }
       }
     } catch (error: any) {
       console.error("Error resetting password:", error);

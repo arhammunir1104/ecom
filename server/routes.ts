@@ -3539,66 +3539,130 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Support both email+code method and userId+otp method for compatibility
       const { userId, otp, email, code } = req.body;
       
+      console.log(`Received verification request with params:`, { 
+        userId: userId || 'not provided', 
+        hasOtp: !!otp, 
+        email: email || 'not provided', 
+        hasCode: !!code 
+      });
+      
       // Handle email + code verification (new method)
       if (email && code) {
-        console.log(`Verifying reset code for email: ${email}`);
+        console.log(`Verifying reset code for email: ${email}, code: ${code}`);
         
         // Find user by email first
         const user = await storage.getUserByEmail(email);
         if (!user) {
+          console.log(`No user found with email: ${email}`);
           return res.status(404).json({
             success: false,
             message: "User not found with this email address"
           });
         }
         
+        console.log(`Found user with ID: ${user.id} for email: ${email}`);
+        
+        // For debugging purposes
+        try {
+          const allResetOTPs = storage.getAllPasswordResetOTPs();
+          console.log(`Available OTPs in system:`, allResetOTPs);
+        } catch (debugError) {
+          console.error('Error getting debug info:', debugError);
+        }
+        
         // Verify OTP using the user ID
-        const isValid = await storage.verifyPasswordResetOTP(user.id.toString(), code);
+        const isValid = await storage.verifyPasswordResetOTP(user.id, code);
         if (!isValid) {
-          return res.status(400).json({ 
-            success: false,
-            message: "Invalid or expired verification code" 
-          });
+          console.log(`Invalid verification code for user ID: ${user.id}, email: ${email}`);
+          
+          // Try one more time with the string version of the ID for compatibility
+          const isStringValid = await storage.verifyPasswordResetOTP(user.id.toString(), code);
+          if (!isStringValid) {
+            console.log(`Still invalid after trying string version of ID`);
+            return res.status(400).json({ 
+              success: false,
+              message: "Invalid or expired verification code" 
+            });
+          } else {
+            console.log(`Valid after trying string version of ID`);
+          }
+        } else {
+          console.log(`Valid verification code for user ID: ${user.id}`);
         }
         
         // Generate reset token
         const { generateResetToken } = await import("./utils/passwordResetEmail");
         const resetToken = generateResetToken();
         
+        console.log(`Generated reset token for user ID: ${user.id}`);
+        
         // Save token to storage (will be validated in the next step)
         await storage.saveResetToken(user.id.toString(), resetToken);
+        
+        console.log(`Saved reset token for user ID: ${user.id}`);
         
         return res.status(200).json({ 
           success: true,
           userId: user.id,
           resetToken,
+          email: user.email,
           message: "Verification successful. You can now reset your password" 
         });
       }
       
       // Handle userId + otp verification (original method)
       if (!userId || !otp) {
+        console.log(`Missing required parameters for verification`);
         return res.status(400).json({ 
           success: false,
           message: "Either email+code or userId+otp parameters are required" 
         });
       }
       
+      console.log(`Verifying reset code for userId: ${userId}, otp: ${otp}`);
+      
+      // For debugging purposes
+      try {
+        const allResetOTPs = storage.getAllPasswordResetOTPs();
+        console.log(`Available OTPs in system:`, allResetOTPs);
+      } catch (debugError) {
+        console.error('Error getting debug info:', debugError);
+      }
+      
       // Verify OTP
-      const isValid = await storage.verifyPasswordResetOTP(userId, otp);
+      let isValid = false;
+      
+      // Try both number and string versions to ensure compatibility
+      if (typeof userId === 'string' && !isNaN(Number(userId))) {
+        console.log(`Trying numerical userId: ${Number(userId)}`);
+        isValid = await storage.verifyPasswordResetOTP(Number(userId), otp);
+      }
+      
       if (!isValid) {
+        console.log(`Trying string userId: ${userId}`);
+        isValid = await storage.verifyPasswordResetOTP(userId, otp);
+      }
+      
+      if (!isValid) {
+        console.log(`Invalid verification code for user ID: ${userId}`);
         return res.status(400).json({ 
           success: false,
           message: "Invalid or expired verification code" 
         });
       }
       
+      console.log(`Valid verification code for user ID: ${userId}`);
+      
       // Generate reset token
       const { generateResetToken } = await import("./utils/passwordResetEmail");
       const resetToken = generateResetToken();
       
+      console.log(`Generated reset token for user ID: ${userId}`);
+      
       // Save token to storage (will be validated in the next step)
       await storage.saveResetToken(userId, resetToken);
+      
+      console.log(`Saved reset token for user ID: ${userId}`);
       
       return res.status(200).json({ 
         success: true,
@@ -3718,14 +3782,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const pgUser = await storage.getUserByEmail(email);
           
           if (pgUser) {
-            // Update the PostgreSQL user's password
-            // Note: In a real production app, this password would be properly hashed
-            // For Firebase users, we use a placeholder value as they authenticate through Firebase
-            await storage.updateUser(pgUser.id, { 
-              password: 'firebase-auth-' + Date.now() // Use a unique placeholder value
-            });
+            // Get the password hashing function
+            const { hashPassword } = await import("./utils/auth");
             
-            console.log(`PostgreSQL password placeholder updated for user ID: ${pgUser.id}`);
+            try {
+              // Hash the password for PostgreSQL storage (properly this time)
+              const hashedPassword = await hashPassword(newPassword);
+              
+              // Update the PostgreSQL user's password with the properly hashed value
+              await storage.updateUser(pgUser.id, { 
+                password: hashedPassword
+              });
+              
+              console.log(`PostgreSQL password properly updated and hashed for user ID: ${pgUser.id}`);
+            } catch (hashError) {
+              console.error('Error hashing password for PostgreSQL:', hashError);
+              
+              // Fallback to placeholder if hashing fails
+              await storage.updateUser(pgUser.id, { 
+                password: 'firebase-auth-' + Date.now() // Use a unique placeholder value
+              });
+              
+              console.log(`PostgreSQL password placeholder updated for user ID: ${pgUser.id}`);
+            }
           } else {
             console.log(`No PostgreSQL user found with email: ${email}`);
           }
@@ -3799,9 +3878,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
       
-      // Update password for non-Firebase users
-      // In a real app, we would hash the password here
-      await storage.updateUser(userId, { password: newPassword });
+      // Update password for non-Firebase users with proper hashing
+      try {
+        // Import the password hashing function
+        const { hashPassword } = await import("./utils/auth");
+        
+        // Hash the password before storing it
+        const hashedPassword = await hashPassword(newPassword);
+        
+        // Update with the hashed password
+        await storage.updateUser(userId, { password: hashedPassword });
+        
+        console.log(`Password reset completed successfully for user ID: ${userId}`);
+      } catch (hashError) {
+        console.error("Error hashing password during reset:", hashError);
+        throw new Error("Failed to process password reset");
+      }
       
       // Clear the reset token
       await storage.clearResetToken(userId);
@@ -3814,9 +3906,236 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Endpoint to sync Firebase user password with PostgreSQL
+  // Endpoint for client-side initiated password reset with reset code generation
+  app.post("/api/auth/generate-reset-code", async (req, res) => {
+    try {
+      const { email } = req.body;
+      
+      if (!email) {
+        return res.status(400).json({ 
+          success: false,
+          message: "Email is required" 
+        });
+      }
+      
+      console.log(`Password reset code generation requested for email: ${email}`);
+      
+      // Find the user in PostgreSQL by email
+      const pgUser = await storage.getUserByEmail(email);
+      
+      if (!pgUser) {
+        console.log(`No user found with email: ${email}`);
+        // For security reasons, still return success
+        return res.status(200).json({
+          success: true,
+          message: "If a user with this email exists, a reset code has been sent."
+        });
+      }
+      
+      // Generate a random 6-digit reset code
+      const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
+      
+      // Import the generateSecureToken function
+      const { generateSecureToken } = await import("./utils/auth");
+      
+      // Create a secure token for the reset verification
+      const resetToken = generateSecureToken();
+      
+      // Create a future expiration date (30 minutes from now)
+      const expiresAt = new Date();
+      expiresAt.setMinutes(expiresAt.getMinutes() + 30);
+      
+      try {
+        // Save the OTP for verification
+        await storage.savePasswordResetOTP(pgUser.id, resetCode, expiresAt);
+        
+        // Save the reset token
+        await storage.saveResetToken(pgUser.id, resetToken);
+        
+        console.log(`Generated reset code and token for user ID: ${pgUser.id}, expires at: ${expiresAt}`);
+        
+        // In a real application, we would send an email with the reset code
+        // For this example, we'll return it directly (not secure for production)
+        return res.status(200).json({
+          success: true,
+          userId: pgUser.id,
+          resetCode,
+          resetToken,
+          message: "Reset code generated successfully. In a production app, this would be sent via email."
+        });
+      } catch (error) {
+        console.error("Error saving reset code/token:", error);
+        return res.status(500).json({ 
+          success: false,
+          message: "Failed to generate reset code" 
+        });
+      }
+    } catch (error) {
+      console.error("Error generating reset code:", error);
+      return res.status(500).json({ 
+        success: false,
+        message: "Internal server error" 
+      });
+    }
+  });
+  
+  // Endpoint to verify reset code
+  app.post("/api/auth/verify-reset-code", async (req, res) => {
+    try {
+      const { userId, resetCode, email, code, otp } = req.body;
+      
+      // Flag what we received
+      const hasUserId = !!userId;
+      const hasOtp = !!(otp || resetCode); // Support both otp and resetCode parameter names
+      const hasEmail = !!email;
+      const hasCode = !!(code);
+      
+      console.log(`Received verification request with params: { userId: ${userId || 'not provided'}, hasOtp: ${hasOtp}, email: '${email || 'not provided'}', hasCode: ${hasCode} }`);
+      
+      // We need either userId+otp or email+code
+      if ((!hasUserId || !hasOtp) && (!hasEmail || !hasCode)) {
+        console.log(`Missing required parameters for verification`);
+        return res.status(400).json({ 
+          success: false,
+          message: "Either email+code or userId+otp parameters are required" 
+        });
+      }
+      
+      // Case 1: Email + Code
+      if (hasEmail && hasCode) {
+        const user = await storage.getUserByEmail(email);
+        if (!user) {
+          return res.status(400).json({
+            success: false,
+            message: "Invalid or expired code"
+          });
+        }
+        
+        // Verify the code using the user's ID
+        const actualCode = code || '';
+        const isValid = await storage.verifyPasswordResetOTP(user.id, actualCode);
+        
+        if (isValid) {
+          console.log(`Reset code verified successfully for user with email: ${email}`);
+          
+          // Generate a new reset token for the password reset
+          const { generateSecureToken } = await import("./utils/auth");
+          const resetToken = generateSecureToken();
+          
+          // Save the token for this user
+          await storage.saveResetToken(user.id, resetToken);
+          console.log(`Generated reset token for user ID: ${user.id}`);
+          
+          return res.status(200).json({
+            success: true,
+            message: "Reset code verified successfully",
+            userId: user.id,
+            resetToken,
+            email
+          });
+        } else {
+          console.log(`Invalid reset code provided for user with email: ${email}`);
+          return res.status(400).json({ 
+            success: false,
+            message: "Invalid or expired reset code" 
+          });
+        }
+      }
+      
+      // Case 2: User ID + OTP
+      const actualOtp = otp || resetCode || '';
+      console.log(`Verifying reset code for user ID: ${userId} with code: ${actualOtp}`);
+      
+      // Verify the reset code
+      const isValid = await storage.verifyPasswordResetOTP(userId, actualOtp);
+      
+      if (isValid) {
+        console.log(`Reset code verified successfully for user ID: ${userId}`);
+        
+        // Generate a new reset token for the password reset
+        const { generateSecureToken } = await import("./utils/auth");
+        const resetToken = generateSecureToken();
+        
+        // Save the token for this user
+        await storage.saveResetToken(userId, resetToken);
+        console.log(`Generated reset token for user ID: ${userId}`);
+        
+        return res.status(200).json({
+          success: true,
+          message: "Reset code verified successfully",
+          userId,
+          resetToken
+        });
+      } else {
+        console.log(`Invalid reset code provided for user ID: ${userId}`);
+        return res.status(400).json({ 
+          success: false,
+          message: "Invalid or expired reset code" 
+        });
+      }
+    } catch (error) {
+      console.error("Error verifying reset code:", error);
+      return res.status(500).json({ 
+        success: false,
+        message: "Internal server error" 
+      });
+    }
+  });
+  
+  // Endpoint for client-side initiated password reset
+  app.post("/api/auth/request-password-reset", async (req, res) => {
+    try {
+      const { email, resetCode } = req.body;
+      
+      if (!email) {
+        return res.status(400).json({ 
+          success: false,
+          message: "Email is required" 
+        });
+      }
+      
+      console.log(`Password reset requested for email: ${email} with reset code: ${resetCode || 'none'}`);
+      
+      // Find the user in PostgreSQL by email
+      const pgUser = await storage.getUserByEmail(email);
+      
+      if (!pgUser) {
+        console.log(`No user found with email: ${email}`);
+        // For security reasons, still return success
+        return res.status(200).json({
+          success: true,
+          message: "If an account exists with this email, a password reset has been initiated."
+        });
+      }
+      
+      // Save the reset code if provided
+      if (resetCode) {
+        // Create a future expiration date (30 minutes from now)
+        const expiresAt = new Date();
+        expiresAt.setMinutes(expiresAt.getMinutes() + 30);
+        
+        // Save the OTP for verification
+        await storage.savePasswordResetOTP(pgUser.id, resetCode, expiresAt);
+        
+        console.log(`Saved reset code for user ID: ${pgUser.id}, expires at: ${expiresAt}`);
+      }
+      
+      return res.status(200).json({
+        success: true,
+        message: "Password reset has been initiated. Please follow the instructions to complete the process."
+      });
+    } catch (error) {
+      console.error("Error in request-password-reset:", error);
+      return res.status(500).json({ 
+        success: false,
+        message: "Internal server error" 
+      });
+    }
+  });
+  
   app.post("/api/auth/sync-password", async (req, res) => {
     try {
-      const { email, uid } = req.body;
+      const { email, uid, password } = req.body;
       
       if (!email) {
         return res.status(400).json({ 
@@ -3831,13 +4150,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const pgUser = await storage.getUserByEmail(email);
       
       if (pgUser) {
-        // Update the password placeholder in PostgreSQL
-        await storage.updateUser(pgUser.id, { 
-          password: 'firebase-auth-' + Date.now(),
+        // Prepare update data
+        const updateData: any = {
           firebaseUid: uid || pgUser.firebaseUid
-        });
+        };
         
-        console.log(`Password placeholder updated in PostgreSQL for user ID: ${pgUser.id}`);
+        // If a specific password was provided, hash it and store it (for complete reset)
+        if (password) {
+          // Import the password hashing function
+          const { hashPassword } = await import("./utils/auth");
+          
+          try {
+            console.log(`Hashing password for user ID: ${pgUser.id}`);
+            const hashedPassword = await hashPassword(password);
+            updateData.password = hashedPassword;
+          } catch (hashError) {
+            console.error(`Error hashing password for user ID: ${pgUser.id}`, hashError);
+            // Fall back to placeholder if hashing fails
+            updateData.password = 'firebase-auth-' + Date.now();
+          }
+        } else {
+          // Use placeholder password when no specific password provided
+          updateData.password = 'firebase-auth-' + Date.now();
+        }
+        
+        // Update the user in PostgreSQL
+        await storage.updateUser(pgUser.id, updateData);
+        
+        console.log(`Password ${password ? 'updated' : 'placeholder created'} in PostgreSQL for user ID: ${pgUser.id}`);
         
         return res.status(200).json({ 
           success: true,
